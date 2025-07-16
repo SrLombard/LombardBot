@@ -12,7 +12,7 @@ sheetJornadas = None
 sheetCalendarioResultados = None
 sheetLesiones = None
 
-#TODO hacer esto un singleton y no variables globales raras
+#hacer esto un singleton y no variables globales raras
 async def ActualizarExcels():
     global sheetIds
     global sheetPartidosJugados
