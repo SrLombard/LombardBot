@@ -1151,27 +1151,7 @@ async def crear_image_resultado(ctx, idPartido: int):
 async def crear_imagen_clasificacion(ctx, grupo: int, jornada: int):
 
     try:
-        conn = mysql.connector.connect(
-            host="localhost",
-            user=os.getenv('UsuBD'),
-            password= os.getenv('PassBD'),
-            database="ButterCup"
-        )
-        cursor = conn.cursor()
-
-        
-        cursor.callproc('clasificacionGeneral', [jornada, grupo])
-
-        clasificacion = []
-        for result in cursor.stored_results():
-            clasificacion.extend(result.fetchall())
-
-        Session = sessionmaker(bind=GestorSQL.conexionEngine())
-        session = Session()
-
-        # Reordenar clasificación basada en enfrentamientos directos en caso de empate
-        clasificacion = desempatar(session, clasificacion, jornada, grupo)
-        session.close()
+        clasificacion = obtener_clasificacion(jornada, grupo)
     
         entrenadores = {}
         pj = {}
@@ -1227,26 +1207,7 @@ async def enviar_imagen_clasificacion(ctx, jornada: int, canal_id: int):
     imagenes = []
     for grupo in range(1, 16):
         try:
-            conn = mysql.connector.connect(
-                host="localhost",
-                user=os.getenv('UsuBD'),
-                password=os.getenv('PassBD'),
-                database="ButterCup"
-            )
-            cursor = conn.cursor()
-
-            cursor.callproc('clasificacionGeneral', [jornada, grupo])
-
-            clasificacion = []
-            for result in cursor.stored_results():
-                clasificacion.extend(result.fetchall())
-
-            Session = sessionmaker(bind=GestorSQL.conexionEngine())
-            session = Session()
-
-            # Reordenar clasificación basada en enfrentamientos directos en caso de empate
-            clasificacion = desempatar(session, clasificacion, jornada, grupo)
-            session.close()
+            clasificacion = obtener_clasificacion(jornada, grupo)
 
             entrenadores = {}
             pj = {}
@@ -1283,10 +1244,6 @@ async def enviar_imagen_clasificacion(ctx, jornada: int, canal_id: int):
             ruta_imagen = Imagenes.crear_imagen("clasificacion", grupo, entrenadores=entrenadores, pj=pj, pg=pg, pe=pe, pp=pp, dtd=dtd, pts=pts, lesiones=lesiones, muertos=muertos)
 
             imagenes.append(ruta_imagen)
-
-            # Conexión y cursor cerrados
-            cursor.close()
-            conn.close()
         except Exception as e:
             await ctx.send(f"Ocurrió un error al crear la imagen del grupo {grupo}: {str(e)}")
 
@@ -1522,6 +1479,39 @@ def resolver_empates(session, entrenadores, jornada, grupo):
     return entrenadores
 
 
+def obtener_clasificacion(jornada, grupo, session=None):
+    """Obtiene la clasificación de un grupo para una jornada aplicando el
+    desempate por enfrentamientos directos."""
+    conn = mysql.connector.connect(
+        host="localhost",
+        user=os.getenv('UsuBD'),
+        password=os.getenv('PassBD'),
+        database="ButterCup"
+    )
+    cursor = conn.cursor()
+    cursor.callproc('clasificacionGeneral', [jornada, grupo])
+
+    clasificacion = []
+    for result in cursor.stored_results():
+        clasificacion.extend(result.fetchall())
+
+    cursor.close()
+    conn.close()
+
+    close_session = False
+    if session is None:
+        Session = sessionmaker(bind=GestorSQL.conexionEngine())
+        session = Session()
+        close_session = True
+
+    clasificacion = desempatar(session, clasificacion, jornada, grupo)
+
+    if close_session:
+        session.close()
+
+    return clasificacion
+
+
 @bot.command(name='actconfig')
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
 async def actualizar_configuracion(ctx):
@@ -1690,23 +1680,7 @@ async def informarResultados(ctx,usuario_id: int = None):
             await asyncio.sleep(1)
 
 def consultaResultados(session, usuario, jornada, grupo, grupo_nombre):
-    # Recuperar la clasificación general para la jornada y el grupo dados
-    clasificacion = []
-    conn = mysql.connector.connect(
-        host="localhost",
-        user=os.getenv('UsuBD'),
-        password=os.getenv('PassBD'),
-        database="ButterCup"
-    )
-    cursor = conn.cursor()
-    cursor.callproc('clasificacionGeneral', [jornada, grupo])
-    for result in cursor.stored_results():
-        clasificacion.extend(result.fetchall())
-    cursor.close()
-    conn.close()
-
-    # Reordenar clasificación basada en enfrentamientos directos en caso de empate
-    clasificacion = desempatar(session, clasificacion, jornada, grupo)
+    clasificacion = obtener_clasificacion(jornada, grupo, session)
 
     # Encontrar el puesto del usuario y calcular el dinero
     puesto = 1
@@ -2157,53 +2131,39 @@ async def consulta_clasificacion(interaction: discord.Interaction, jornada: int,
     await interaction.response.send_message("```" + respuesta + "```")
 
 def clasificacion_liga(jornada, grupo):
-    try:
-        # Establece la conexión directamente
-        conn = mysql.connector.connect(
-            host="localhost",
-            user=os.getenv('UsuBD'),
-            password=os.getenv('PassBD'),
-            database="ButterCup"
-        )
-        cursor = conn.cursor()
+    resultados = obtener_clasificacion(jornada, grupo)
 
-        # Llama al procedimiento almacenado
-        cursor.callproc('clasificacion', [jornada, grupo])
+    datos_filtrados = []
+    for fila in resultados:
+        datos_filtrados.append([
+            fila[0],
+            fila[1],
+            fila[2],
+            fila[3],
+            fila[4],
+            fila[5],
+            fila[6],
+            f"{fila[7]}/{fila[8]}",
+            f"{fila[9]}/{fila[10]}"
+        ])
 
-        # Recupera los resultados
-        for result in cursor.stored_results():
-            resultados = result.fetchall()
-            
-        # Nombres de las columnas
-        columnas = ['nombre', 'Puntos', 'PJ', 'td', 'tdc', 'DDT', 'Lesiones', 'Muertes']
-        
-        # Encuentra el ancho máximo para cada columna
-        anchos = []
-        for i, columna in enumerate(columnas):
-            max_len = max(len(str(row[i])) for row in resultados)
-            if len(columna) > max_len:
-                anchos.append(len(columna))
-            else:
-                anchos.append(max_len)
-        
-        # Crea la cabecera de la tabla
-        cabecera = ' | '.join(columna.ljust(anchos[i]) for i, columna in enumerate(columnas))
-        linea = '-+-'.join('-' * anchos[i] for i, columna in enumerate(columnas))
-        
-        # Crea las filas de la tabla
-        filas = []
-        for row in resultados:
-            fila = ' | '.join(str(row[i]).ljust(anchos[i]) for i in range(len(row)))
-            filas.append(fila)
-        
-        # Junta la tabla
-        tabla = f"{cabecera}\n{linea}\n" + "\n".join(filas)
-        
-    finally:
-        # Cierra el cursor y la conexión
-        cursor.close()
-        conn.close()
+    columnas = ['Nombre', 'PJ', 'PG', 'PE', 'PP', 'DDT', 'PTS', 'Lesiones', 'Muertes']
 
+    anchos = [len(col) for col in columnas]
+    for fila in datos_filtrados:
+        for i, celda in enumerate(fila):
+            if len(str(celda)) > anchos[i]:
+                anchos[i] = len(str(celda))
+
+    cabecera = ' | '.join(columnas[i].ljust(anchos[i]) for i in range(len(columnas)))
+    linea = '-+-'.join('-' * anchos[i] for i in range(len(columnas)))
+
+    filas = []
+    for fila in datos_filtrados:
+        fila_str = ' | '.join(str(fila[i]).ljust(anchos[i]) for i in range(len(columnas)))
+        filas.append(fila_str)
+
+    tabla = f"{cabecera}\n{linea}\n" + "\n".join(filas)
     return tabla
 @bot.tree.command(name='consulta_jugador', description='Consulta los partidos de un jugador')
 async def consulta_jugador(interaction: discord.Interaction, nombre: str):
