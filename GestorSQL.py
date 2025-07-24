@@ -1,7 +1,7 @@
 import mysql.connector
 from dotenv import load_dotenv
 import os
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, BigInteger, Text, Numeric
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, BigInteger, Text, Numeric, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -122,7 +122,7 @@ class Spin(Base):
 
 
 def insertar_spin( usuario, fecha, tipo):
-    # Esta es la función que inserta un nuevo Spin en la base de datos
+    # Esta es la funciÃ³n que inserta un nuevo Spin en la base de datos
     new_spin = Spin(user=usuario, fecha=fecha, tipo=tipo)
     Session = sessionmaker(bind=conexionEngine())
     session = Session()
@@ -238,6 +238,7 @@ class RegistroPartidos(Base):
     ganados = Column(Integer, nullable=False, default=0)
     empatados = Column(Integer, nullable=False, default=0)
     perdidos = Column(Integer, nullable=False, default=0)
+    usado = Column(Boolean, nullable=False, default=False)
 
     equipo_reformado = relationship("equiposReformados", back_populates="registro_partidos")
 
@@ -249,11 +250,11 @@ class Recompensas(Base):
     sesion               = Column(Integer, nullable=False)
     recompensa           = Column(Numeric(10,2), nullable=False)
 
-    # Relación con equiposReformados
+    # RelaciÃ³n con equiposReformados
     equipo_reformado     = relationship("equiposReformados", back_populates="recompensas")
 
 def conexionEngine():
-    # Conectarse a la base de datos y crear una sesión
+    # Conectarse a la base de datos y crear una sesiÃ³n
     load_dotenv()
     user = os.getenv('UsuBD')
     password = os.getenv('PassBD')

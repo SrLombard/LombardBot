@@ -35,7 +35,8 @@ def calcular_dinero_reforma(session, equipo_id):
 
     # Traer todos los registros de partidos de este equipo
     partidos = session.query(GestorSQL.RegistroPartidos).filter(
-        GestorSQL.RegistroPartidos.idEquiposReformados == equipo_id
+        GestorSQL.RegistroPartidos.idEquiposReformados == equipo_id,
+        GestorSQL.RegistroPartidos.usado == False
     ).all()
 
     for partido in partidos:
@@ -82,6 +83,7 @@ async def lanzar_reformas(bot):
             GestorSQL.equiposReformados.id_usuario
         )
         .join(GestorSQL.equiposReformados, GestorSQL.RegistroPartidos.idEquiposReformados == GestorSQL.equiposReformados.id)
+        .filter(GestorSQL.RegistroPartidos.usado == False)
         .group_by(
             GestorSQL.RegistroPartidos.idEquiposReformados,
             GestorSQL.equiposReformados.nombre_equipo,
@@ -150,7 +152,8 @@ async def iniciar_reforma(interaction: discord.Interaction, api_token: str):
     equipo_reformar = None
     for eq in equipos:
         cnt = session.query(func.count(GestorSQL.RegistroPartidos.id)).filter(
-            GestorSQL.RegistroPartidos.idEquiposReformados == eq.id
+            GestorSQL.RegistroPartidos.idEquiposReformados == eq.id,
+            GestorSQL.RegistroPartidos.usado == False
         ).scalar()
         if cnt == 2:
             equipo_reformar = eq

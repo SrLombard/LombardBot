@@ -2945,7 +2945,8 @@ async def actualiza_ediciones(ctx, edicion: int):
                     Edicion=edicion,
                     ganados=ganados,
                     empatados=empatados,
-                    perdidos=perdidos
+                    perdidos=perdidos,
+                    usado=False
                 )
                 session.add(registro)
                 session.commit()
@@ -3271,7 +3272,39 @@ async def vincular_equipos_reformados(ctx):
         session.rollback()
         await ctx.send(f"🚨 Error durante la vinculación: {e}")
     finally:
-        session.close()        
+        session.close()
+
+@bot.command(name='reformado')
+@commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
+async def marcar_reformado(ctx, nombre_equipo: str, edicion: int):
+    """Marca como usados los registros de un equipo hasta la edición indicada."""
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        equipo = session.query(GestorSQL.equiposReformados).filter(
+            func.lower(GestorSQL.equiposReformados.nombre_equipo) == nombre_equipo.lower()
+        ).first()
+        if not equipo:
+            await ctx.send("Equipo no encontrado.")
+            return
+
+        registros = session.query(GestorSQL.RegistroPartidos).filter(
+            GestorSQL.RegistroPartidos.idEquiposReformados == equipo.id,
+            GestorSQL.RegistroPartidos.Edicion <= edicion
+        ).all()
+
+        if not registros:
+            await ctx.send("No hay registros a actualizar.")
+        else:
+            for r in registros:
+                r.usado = True
+            session.commit()
+            await ctx.send(f"Registros de {nombre_equipo} hasta la edición {edicion} marcados como usados.")
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"Error al marcar reformado: {e}")
+    finally:
+        session.close()
 
 @bot.tree.command(name="reforma", description="Inicia el proceso de reforma de tu equipo")
 async def Reforma(interaction: discord.Interaction):
