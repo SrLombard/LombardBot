@@ -2067,20 +2067,49 @@ async def func_proximos_eventos(bot, usuario, canal_destino_id=None, respuesta_p
         GestorSQL.Calendario.fecha
     ).all()
 
+    UsuarioCoach1_T = aliased(GestorSQL.Usuario)
+    UsuarioCoach2_T = aliased(GestorSQL.Usuario)
+    eventos_ticket = session.query(
+        GestorSQL.Ticket,
+        UsuarioCoach1_T.nombre_discord.label("nombre_discord1"),
+        UsuarioCoach1_T.raza.label("raza1"),
+        UsuarioCoach1_T.id_discord.label("id_discord1"),
+        UsuarioCoach2_T.nombre_discord.label("nombre_discord2"),
+        UsuarioCoach2_T.id_discord.label("id_discord2"),
+        UsuarioCoach2_T.raza.label("raza2"),
+    ).join(
+        UsuarioCoach1_T, GestorSQL.Ticket.coach1 == UsuarioCoach1_T.idUsuarios
+    ).join(
+        UsuarioCoach2_T, GestorSQL.Ticket.coach2 == UsuarioCoach2_T.idUsuarios
+    ).filter(
+        GestorSQL.Ticket.fecha >= ahora,
+        GestorSQL.Ticket.fecha <= fin
+    ).order_by(
+        GestorSQL.Ticket.fecha
+    ).all()
+
     # Construir mensaje
+    hay_eventos = bool(eventos or eventos_ticket)
     mensaje = (
         "<@&1217130802572296315>, si os apetece un poco de Blood Bowl estos son los "
-        if eventos else "No hay eventos programados en el intervalo dado."
+        if hay_eventos else "No hay eventos programados en el intervalo dado."
     )
-    if eventos:
+
+    if hay_eventos:
         mensaje += "próximos partidos:\n\n"
-        for evento in eventos:
-            calendario, nombre_discord1, raza1, id_discord1, nombre_discord2, id_discord2, raza2 = evento
-            mensaje += f"**{nombre_discord1}** ({raza1}) VS **{nombre_discord2}** ({raza2}), <t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
-        ids_discord = [
-            f"<@{id_discord}>" for evento in eventos for id_discord in [evento.id_discord1, evento.id_discord2]
-        ]
-        mensaje += "\n\n" + mensaje_gracioso(list(set(ids_discord)))
+        ids_discord = []
+        if eventos:
+            for evento in eventos:
+                calendario, nd1, raza1, id1, nd2, id2, raza2 = evento
+                mensaje += f"**{nd1}** ({raza1}) VS **{nd2}** ({raza2}), <t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
+                ids_discord.extend([id1, id2])
+        if eventos_ticket:
+            mensaje += "🎟Ticket🎟\n"
+            for evento in eventos_ticket:
+                calendario, nd1, raza1, id1, nd2, id2, raza2 = evento
+                mensaje += f"**{nd1}** ({raza1}) VS **{nd2}** ({raza2}), <t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
+                ids_discord.extend([id1, id2])
+        mensaje += "\n\n" + mensaje_gracioso(list(set(f"<@{i}>" for i in ids_discord)))
 
     # Enviar el mensaje
     try:
@@ -2676,45 +2705,54 @@ async def proximos_partidos_playoff(interaction: discord.Interaction, canal_dest
         await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
         return
 
-    # Determinar canal de destino
-    if canal_destino_id:
-        try:
-            canal_destino = bot.get_channel(int(canal_destino_id))
-            if not canal_destino:
-                raise ValueError
-        except Exception:
-            await interaction.response.send_message(
-                "El ID del canal proporcionado no es válido o no se encontró el canal.",
-                ephemeral=True
-            )
-            return
-    else:
-        canal_destino = interaction.channel
+    await func_proximos_partidos_playoff(
+        bot,
+        interaction.user,
+        canal_destino_id if canal_destino_id else interaction.channel_id,
+        False
+    )
+    await interaction.response.send_message("Mensaje enviado.", ephemeral=True)
 
-    # Preparar sesión y aliases
+
+async def func_proximos_partidos_playoff(bot, usuario, canal_destino_id=None, respuesta_privada=True):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
+
+    ahora = datetime.now()
+    fin = (ahora + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
+
+    canal_destino = bot.get_channel(int(canal_destino_id)) if canal_destino_id else None
+
+    if respuesta_privada:
+        try:
+            canal_destino = await usuario.create_dm()
+        except Exception as e:
+            print(f"No se pudo crear un DM con el usuario: {e}")
+            return
+    else:
+        if not canal_destino:
+            if hasattr(usuario, 'channel'):
+                canal_destino = usuario.channel
+            else:
+                print("No se encontró un canal válido para enviar el mensaje.")
+                return
+
     UsuarioCoach1 = aliased(GestorSQL.Usuario)
     UsuarioCoach2 = aliased(GestorSQL.Usuario)
 
-    # Bases de datos de playoffs
     bases_playoff = {
         "PlayOffs Oro": GestorSQL.PlayOffsOro,
         "PlayOffs Plata": GestorSQL.PlayOffsPlata,
         "PlayOffs Bronce": GestorSQL.PlayOffsBronce,
     }
 
-    ahora = datetime.now()
-    fin = (ahora + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
-
     mensaje = (
         "<:Butter_Cup:1184459079368843324> **Hoy juegan los mejores de entre los mejores, ¡ven a animar a tus favoritos y a abuchear a tus enemigos!** "
         "<:Butter_Cup:1184459079368843324>\n\n"
     )
     eventos_existentes = False
-    all_eventos = []  # Lista para acumular todos los eventos
+    all_eventos = []
 
-    # Recorrer cada categoría y acumular eventos
     for nombre_playoff, tabla_playoff in bases_playoff.items():
         eventos = (
             session.query(
@@ -2743,33 +2781,24 @@ async def proximos_partidos_playoff(interaction: discord.Interaction, canal_dest
                 )
             all_eventos.extend(eventos)
 
-    # Si no hubo ningún evento, notificar y salir
     if not eventos_existentes:
-        await interaction.response.send_message(
-            "No hay partidos programados en los playoffs durante el intervalo dado.",
-            ephemeral=True
-        )
-        session.close()
+        mensaje = "No hay partidos programados en los playoffs durante el intervalo dado."
+        try:
+            await canal_destino.send(mensaje)
+        finally:
+            session.close()
         return
 
-    # Construir lista de menciones única a partir de todos los eventos
     ids_discord = [
-        f"<@{ev[i]}>"
-        for ev in all_eventos
-        for i in (3, 5)  # índices de id_discord1 e id_discord2
+        f"<@{ev[i]}>" for ev in all_eventos for i in (3, 5)
     ]
-    unique_ids = list(set(ids_discord))
+    mensaje += "\n\n" + mensaje_gracioso(list(set(ids_discord)))
 
-    # Añadir mensaje gracioso usando la nueva lista acumulada
-    mensaje += "\n\n" + mensaje_gracioso(unique_ids)
-
-    # Enviar mensaje al canal destino
     try:
         await canal_destino.send(mensaje)
     except Exception as e:
         print(f"No se pudo enviar el mensaje: {e}")
 
-    await interaction.response.send_message("Mensaje enviado.", ephemeral=True)
     session.close()
 
     
@@ -3261,7 +3290,7 @@ tareas_programadas = {
     "Monday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3274,7 +3303,7 @@ tareas_programadas = {
     "Tuesday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3287,7 +3316,7 @@ tareas_programadas = {
     "Wednesday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3309,7 +3338,7 @@ tareas_programadas = {
     "Thursday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3322,7 +3351,7 @@ tareas_programadas = {
     "Friday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3335,7 +3364,7 @@ tareas_programadas = {
     "Saturday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3348,7 +3377,7 @@ tareas_programadas = {
     "Sunday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
