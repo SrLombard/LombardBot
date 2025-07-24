@@ -1854,7 +1854,7 @@ async def fecha(interaction: discord.Interaction, dia: int, mes: int, hora: int,
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     with Session() as session:
         registro = session.query(GestorSQL.Calendario).filter(GestorSQL.Calendario.canalAsociado == id_canal).first()
-        
+
         if registro is None:
             registro = session.query(GestorSQL.PlayOffsBronce).filter(GestorSQL.PlayOffsBronce.canalAsociado == id_canal).first()
             if registro is None:
@@ -1862,8 +1862,10 @@ async def fecha(interaction: discord.Interaction, dia: int, mes: int, hora: int,
                 if registro is None:
                     registro = session.query(GestorSQL.PlayOffsOro).filter(GestorSQL.PlayOffsOro.canalAsociado == id_canal).first()
                     if registro is None:
-                        await interaction.response.send_message("Este no es un canal de quedadas 😡", ephemeral=True)
-                        return
+                        registro = session.query(GestorSQL.Ticket).filter(GestorSQL.Ticket.canalAsociado == id_canal).first()
+                        if registro is None:
+                            await interaction.response.send_message("Este no es un canal de quedadas 😡", ephemeral=True)
+                            return
 
         try:
             punto = ""
