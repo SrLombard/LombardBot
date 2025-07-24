@@ -104,7 +104,7 @@ async def lanzar_reformas(bot):
 
         mensaje = (
             f"👋 ¡Hola **{nombre_usuario}**!\n\n"
-            f"📰 Tu equipo **{nombre_equipo}** debe ser reformado.\n\n"
+            f"📰 Tu equipo **{nombre_equipo}** debe ser reformado.Pero 👉🏻OJO👈🏻 Los playoff regulares se juegan con el equipo SIN reformar, mientras que para los playoff de ticket, si es que los juegas con este equipo, SI debes reformarlo. \n\n"
             f"💰 Tienes **{dinero} monedas** para gastar.\n\n"
             "📝 **Reglas para la reforma:**\n"
             "• ⚽ **Equipo mínimo**: al menos 11 jugadores y respetar las reglas estándar.\n"

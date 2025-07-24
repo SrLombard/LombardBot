@@ -852,7 +852,11 @@ async def CreaCanalesTicket(ctx, jornada):
 
 
 
-            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs que pueden llevaros a conseguir un 🎟**TICKET**🎟.RECORDAD inscribir una copia de vuestros equipos en la competición Ticket ButterCup contraseña TicketButtercup2024 \n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
+            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs que pueden llevaros a conseguir un 🎟**TICKET**🎟. El primero se llevará un Ticket directo para el mundial y el segundo un Ticket de play-in.
+            
+Ahora debéis elegir uno de los equipos con los que habéis jugado la ButterCup para inscribirlo en la competición Ticket ButterCup contraseña TicketButtercup2025.
+Si el equipo está actualmente jugando los playoffs de la Cuarta Edición de la Butter Cup debéis hacer una copia del equipo. Contáis con la ayuda de los comisarios para ello.
+Si el equipo lleva 20 partidos sin hacer reforma deberéis hacerla ANTES de empezar vuestro pirmer partido.\n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
 Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España.{fecha}
             
         -------------------------------------------
@@ -872,8 +876,10 @@ Si hubiera cualquier problema mencionad a los comisarios.
             mention2 = coach2.mention if coach2 else ""
             mensaje_formateado = mensaje.format(mention1=mention1, mention2=mention2,raza1=calendario.usuario_coach1.raza,raza2=calendario.usuario_coach2.raza,fecha=fecha)
 
+            categoria_id_nuevo = 1396596687879016499
+
             try:
-                idNuevoCanal = await UtilesDiscord.gestionar_canal_discord(ctx, "crear", nombre_canal, calendario.usuario_coach1.id_discord, calendario.usuario_coach2.id_discord,mensaje=mensaje_formateado)
+                idNuevoCanal = await UtilesDiscord.gestionar_canal_discord(ctx, "crear", nombre_canal, calendario.usuario_coach1.id_discord, calendario.usuario_coach2.id_discord,mensaje=mensaje_formateado,categoria_id=categoria_id_nuevo)
                 if idNuevoCanal:
                     calendario.canalAsociado = idNuevoCanal
                 else:
@@ -1652,20 +1658,15 @@ async def informarResultados(ctx,usuario_id: int = None):
             resultado = consultaResultados(session, nombre_para_resultados, 10, grupo_id, grupo_nombre)
             puesto, grupo, dinero = resultado  
             # print(f"puesto:{puesto} grupo:{grupo} dinero:{dinero}")
-            if puesto in [1, 2]:
+            if puesto in [1, 2,3, 4]:
                 mensaje = f"Felicidades {usuario.nombre_discord}, ¡has quedado {puesto}º en el grupo {grupo}! Eres uno de los mejores.\n\n-----------------------------------------\n" \
                           "Has clasificado para los play-off de grupo. Las reglas son las siguientes: \n"+reglasPLayOffGrupo()
-                # +"\n-----------------------------------------\n" \
-                          # "Además, clasificaste para el play off Ticket: \n"+reglasPLayOffTicket()+""
-            elif puesto in [3, 4]:
-                mensaje = f"Buen trabajo {usuario.nombre_discord}, has quedado {puesto}º en tu grupo. ¡Bien hecho!\n\n-----------------------------------------\n" \
-                          "Has clasificado para los play-off de grupo. Las reglas son las siguientes: \n"+reglasPLayOffGrupo()+""
             elif puesto in [5, 6]:               
                 mensaje = f"{usuario.nombre_discord}, has quedado {puesto}º en tu grupo. Es momento de curar de las heridas y volver más fuerte la próxima temporada. Recuerda sacrificar unos snotling a Nuffle ^^."
                 if grupo == "Oro":
-                    mensaje += " Descenderás a la liga de Plata. Recuerda que la próxima edición comienza el 5/5/2025 ^^"
+                    mensaje += " Descenderás a la liga de Plata. Recuerda que la próxima edición comienza el 15/9/2025 ^^"
                 elif grupo == "Plata":
-                    mensaje += " Descenderás a la liga de Bronce. Recuerda que la próxima edición comienza el 5/5/2025 ^^"
+                    mensaje += " Descenderás a la liga de Bronce. Recuerda que la próxima edición comienza el 15/9/2025 ^^"
                 
             try:
                 user = await bot.fetch_user(usuario.id_discord)
@@ -1704,9 +1705,9 @@ def consultaResultados(session, usuario, jornada, grupo, grupo_nombre):
 def reglasPLayOffGrupo():
    reglas = "1- Puedes modificar el equipo según las reglas del juego hasta el día anterior a la fecha del primer partido.\n"\
    "2- Una vez realizados los cambios el equipo permanecerá inmutable durante el periodo de play-off.\n"\
-   "3- Se debe avisar a Pikoleto para que guarde una instantanea del estado del equipo final.\n"\
+   "3- Se debe avisar a Pikoleto mandandole una imagen del estado del equipo final, además si tienes algún MNG avísale para que lo cure.\n"\
    "4- Se podrá consultar el calendario y los emparejamientos en el discord.\n"\
-   "5- El bot se encargará de crear canales cada vez que las jornadas terminen, las quedadas se harán de la misma forma que en la liga regular"
+   "5- El bot se encargará de crear canales cada vez que las jornadas terminen, las quedadas se harán de la misma forma que en la liga regular."
    return reglas
 
 def reglasPLayOffTicket():
@@ -2626,7 +2627,11 @@ async def CreaCanalesPlayoff(ctx, jornada, tipo):
 
 
 
-            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs porque sois lo mejor de lo mejor. RECORDAD inscribir vuestros equipos en la competición PlayOffs3 contraseña PlayOffs3. Los playoff se juegan en formato resurreción, por ello no podréis modificar vuestro equipo después del primer partido. Recordad también que debéis que enviar un pantallazo de como queda vuestro equipo a Pikoleto. \n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
+            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs porque sois lo mejor de lo mejor. 
+            
+            Aquí os jugáis el ascenso de categoría, puntos extra para la próxima reforma y preferencia a la hora de elegir un equipo Reformado/nuevo la próxima temporada.
+            
+            RECORDAD inscribir vuestros equipos en la competición PlayOffs4 contraseña PlayOffs4. Los playoff se juegan en formato resurreción, por ello no podréis modificar vuestro equipo después del primer partido. Recordad también que debéis que enviar un pantallazo de como queda vuestro equipo a Pikoleto. \n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
 Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España.{fecha}
             
 -------------------------------------------

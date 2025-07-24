@@ -1,41 +1,41 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "C:\\Proyectos\\LombardBot\\LombardBot\\",
+  "WorkspaceRootPath": "C:\\github\\LombardBot\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\Proyectos\\LombardBot\\LombardBot\\LombardBot.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:LombardBot.py||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\Proyectos\\LombardBot\\LombardBot\\UtilesDiscord.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:UtilesDiscord.py||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\Proyectos\\LombardBot\\LombardBot\\APIBbowl.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:APIBbowl.py||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\Proyectos\\LombardBot\\LombardBot\\GestorSQL.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:GestorSQL.py||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\Proyectos\\LombardBot\\LombardBot\\Imagenes.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:Imagenes.py||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\Proyectos\\LombardBot\\LombardBot\\Inscripcion.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:Inscripcion.py||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\Proyectos\\LombardBot\\LombardBot\\Reformas.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\github\\LombardBot\\Reformas.py||{8B382828-6202-11D1-8870-0000F87579D2}",
       "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:Reformas.py||{8B382828-6202-11D1-8870-0000F87579D2}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\Proyectos\\LombardBot\\LombardBot\\Encuesta.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\github\\LombardBot\\LombardBot.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:LombardBot.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\github\\LombardBot\\GestorSQL.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:GestorSQL.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\github\\LombardBot\\UtilesDiscord.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:UtilesDiscord.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\github\\LombardBot\\APIBbowl.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:APIBbowl.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\github\\LombardBot\\Imagenes.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:Imagenes.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\github\\LombardBot\\Inscripcion.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:Inscripcion.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\github\\LombardBot\\Encuesta.py||{8B382828-6202-11D1-8870-0000F87579D2}",
       "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:Encuesta.py||{8B382828-6202-11D1-8870-0000F87579D2}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\Proyectos\\LombardBot\\LombardBot\\GestionExcel.py||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "AbsoluteMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|C:\\github\\LombardBot\\GestionExcel.py||{8B382828-6202-11D1-8870-0000F87579D2}",
       "RelativeMoniker": "D:0:0:{2097DE72-F730-42A7-A51A-75FBB64DE1D8}|LombardBot.pyproj|solutionrelative:GestionExcel.py||{8B382828-6202-11D1-8870-0000F87579D2}"
     }
   ],
@@ -46,7 +46,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 10,
+          "SelectedChildIndex": 5,
           "Children": [
             {
               "$type": "Bookmark",
@@ -57,12 +57,16 @@
               "Name": "ST:0:0:{004be353-6879-467c-9d1e-9ac23cdf6d49}"
             },
             {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{6324226f-61b6-4f28-92ee-18d4b5fe1e48}"
+            },
+            {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 5,
               "Title": "Imagenes.py",
-              "DocumentMoniker": "C:\\Proyectos\\LombardBot\\LombardBot\\Imagenes.py",
+              "DocumentMoniker": "C:\\github\\LombardBot\\Imagenes.py",
               "RelativeDocumentMoniker": "Imagenes.py",
-              "ToolTip": "C:\\Proyectos\\LombardBot\\LombardBot\\Imagenes.py",
+              "ToolTip": "C:\\github\\LombardBot\\Imagenes.py",
               "RelativeToolTip": "Imagenes.py",
               "ViewState": "AQIAAH8AAAAAAAAAAAAkwI0AAAAlAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
@@ -70,11 +74,11 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 3,
               "Title": "UtilesDiscord.py",
-              "DocumentMoniker": "C:\\Proyectos\\LombardBot\\LombardBot\\UtilesDiscord.py",
+              "DocumentMoniker": "C:\\github\\LombardBot\\UtilesDiscord.py",
               "RelativeDocumentMoniker": "UtilesDiscord.py",
-              "ToolTip": "C:\\Proyectos\\LombardBot\\LombardBot\\UtilesDiscord.py",
+              "ToolTip": "C:\\github\\LombardBot\\UtilesDiscord.py",
               "RelativeToolTip": "UtilesDiscord.py",
               "ViewState": "AQIAALEAAAAAAAAAAAAAAJ4AAAAzAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
@@ -82,23 +86,24 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 0,
               "Title": "Reformas.py",
-              "DocumentMoniker": "C:\\Proyectos\\LombardBot\\LombardBot\\Reformas.py",
+              "DocumentMoniker": "C:\\github\\LombardBot\\Reformas.py",
               "RelativeDocumentMoniker": "Reformas.py",
-              "ToolTip": "C:\\Proyectos\\LombardBot\\LombardBot\\Reformas.py",
+              "ToolTip": "C:\\github\\LombardBot\\Reformas.py",
               "RelativeToolTip": "Reformas.py",
-              "ViewState": "AQIAAGAAAAAAAAAAAAAAAHUAAAAAAAAA",
+              "ViewState": "AQIAAD8AAAAAAAAAAAAAAEkAAAAZAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2025-05-07T17:58:07.873Z"
+              "WhenOpened": "2025-05-07T17:58:07.873Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 4,
               "Title": "APIBbowl.py",
-              "DocumentMoniker": "C:\\Proyectos\\LombardBot\\LombardBot\\APIBbowl.py",
+              "DocumentMoniker": "C:\\github\\LombardBot\\APIBbowl.py",
               "RelativeDocumentMoniker": "APIBbowl.py",
-              "ToolTip": "C:\\Proyectos\\LombardBot\\LombardBot\\APIBbowl.py",
+              "ToolTip": "C:\\github\\LombardBot\\APIBbowl.py",
               "RelativeToolTip": "APIBbowl.py",
               "ViewState": "AQIAAAQAAAAAAAAAAAAkwBQAAABIAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
@@ -106,11 +111,11 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 6,
               "Title": "Inscripcion.py",
-              "DocumentMoniker": "C:\\Proyectos\\LombardBot\\LombardBot\\Inscripcion.py",
+              "DocumentMoniker": "C:\\github\\LombardBot\\Inscripcion.py",
               "RelativeDocumentMoniker": "Inscripcion.py",
-              "ToolTip": "C:\\Proyectos\\LombardBot\\LombardBot\\Inscripcion.py",
+              "ToolTip": "C:\\github\\LombardBot\\Inscripcion.py",
               "RelativeToolTip": "Inscripcion.py",
               "ViewState": "AQIAAAYAAAAAAAAAAAAnwBUAAAAqAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
@@ -118,23 +123,24 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 2,
               "Title": "GestorSQL.py",
-              "DocumentMoniker": "C:\\Proyectos\\LombardBot\\LombardBot\\GestorSQL.py",
+              "DocumentMoniker": "C:\\github\\LombardBot\\GestorSQL.py",
               "RelativeDocumentMoniker": "GestorSQL.py",
-              "ToolTip": "C:\\Proyectos\\LombardBot\\LombardBot\\GestorSQL.py",
+              "ToolTip": "C:\\github\\LombardBot\\GestorSQL.py",
               "RelativeToolTip": "GestorSQL.py",
-              "ViewState": "AQIAAAkAAAAAAAAAAAAAABYAAAAJAAAA",
+              "ViewState": "AQIAAOAAAAAAAAAAAAD4v+cAAAAWAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2024-11-16T13:17:37.915Z"
+              "WhenOpened": "2024-11-16T13:17:37.915Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 7,
               "Title": "Encuesta.py",
-              "DocumentMoniker": "C:\\Proyectos\\LombardBot\\LombardBot\\Encuesta.py",
+              "DocumentMoniker": "C:\\github\\LombardBot\\Encuesta.py",
               "RelativeDocumentMoniker": "Encuesta.py",
-              "ToolTip": "C:\\Proyectos\\LombardBot\\LombardBot\\Encuesta.py",
+              "ToolTip": "C:\\github\\LombardBot\\Encuesta.py",
               "RelativeToolTip": "Encuesta.py",
               "ViewState": "AQIAAGMAAAAAAAAAAAAAALEAAAB2AAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
@@ -144,9 +150,9 @@
               "$type": "Document",
               "DocumentIndex": 8,
               "Title": "GestionExcel.py",
-              "DocumentMoniker": "C:\\Proyectos\\LombardBot\\LombardBot\\GestionExcel.py",
+              "DocumentMoniker": "C:\\github\\LombardBot\\GestionExcel.py",
               "RelativeDocumentMoniker": "GestionExcel.py",
-              "ToolTip": "C:\\Proyectos\\LombardBot\\LombardBot\\GestionExcel.py",
+              "ToolTip": "C:\\github\\LombardBot\\GestionExcel.py",
               "RelativeToolTip": "GestionExcel.py",
               "ViewState": "AQIAAAAAAAAAAAAAAAAAAAsAAAAWAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
@@ -154,13 +160,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "LombardBot.py",
-              "DocumentMoniker": "C:\\Proyectos\\LombardBot\\LombardBot\\LombardBot.py",
+              "DocumentMoniker": "C:\\github\\LombardBot\\LombardBot.py",
               "RelativeDocumentMoniker": "LombardBot.py",
-              "ToolTip": "C:\\Proyectos\\LombardBot\\LombardBot\\LombardBot.py",
+              "ToolTip": "C:\\github\\LombardBot\\LombardBot.py",
               "RelativeToolTip": "LombardBot.py",
-              "ViewState": "AQIAAFYFAAAAAAAAAAD4v2QFAAAyAAAA",
+              "ViewState": "AQIAABsLAAAAAAAAAAAAACsLAAA3AAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
               "WhenOpened": "2024-01-16T17:17:53.25Z",
               "EditorCaption": ""
