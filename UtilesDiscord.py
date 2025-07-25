@@ -306,8 +306,8 @@ class SpinButtonsView(discord.ui.View):
                 GestorSQL.Calendario.coach2 == usuario_db.idUsuarios
             ),
             GestorSQL.Calendario.canalAsociado != None,
-            GestorSQL.Calendario.partidos_idPartidos == None 
-        ).order_by(GestorSQL.Calendario.idCalendario).first()
+            GestorSQL.Calendario.partidos_idPartidos == None
+        ).order_by(GestorSQL.Calendario.fecha).first()
         
         partidos_playoffs_oro = session.query(GestorSQL.PlayOffsOro).filter(
             or_(
@@ -316,7 +316,7 @@ class SpinButtonsView(discord.ui.View):
             ),
             GestorSQL.PlayOffsOro.canalAsociado != None,
             GestorSQL.PlayOffsOro.partidos_idPartidos == None
-        ).order_by(GestorSQL.PlayOffsOro.idCalendario).first()
+        ).order_by(GestorSQL.PlayOffsOro.fecha).first()
         
         partidos_playoffs_plata = session.query(GestorSQL.PlayOffsPlata).filter(
             or_(
@@ -325,7 +325,7 @@ class SpinButtonsView(discord.ui.View):
             ),
             GestorSQL.PlayOffsPlata.canalAsociado != None,
             GestorSQL.PlayOffsPlata.partidos_idPartidos == None
-        ).order_by(GestorSQL.PlayOffsPlata.idCalendario).first()
+        ).order_by(GestorSQL.PlayOffsPlata.fecha).first()
         
         partidos_playoffs_bronce = session.query(GestorSQL.PlayOffsBronce).filter(
             or_(
@@ -334,9 +334,17 @@ class SpinButtonsView(discord.ui.View):
             ),
             GestorSQL.PlayOffsBronce.canalAsociado != None,
             GestorSQL.PlayOffsBronce.partidos_idPartidos == None
-        ).order_by(GestorSQL.PlayOffsBronce.idCalendario).first()
+        ).order_by(GestorSQL.PlayOffsBronce.fecha).first()
 
-        partidos = [partidos_calendario, partidos_playoffs_oro, partidos_playoffs_plata, partidos_playoffs_bronce]
+        partidos_ticket = session.query(GestorSQL.Ticket).filter(
+            or_(
+                GestorSQL.Ticket.coach1 == usuario_db.idUsuarios,
+                GestorSQL.Ticket.coach2 == usuario_db.idUsuarios
+            ),
+            GestorSQL.Ticket.canalAsociado != None,
+            GestorSQL.Ticket.partidos_idPartidos == None
+        ).order_by(GestorSQL.Ticket.fecha).first()
+        partidos = [partidos_calendario, partidos_playoffs_oro, partidos_playoffs_plata, partidos_playoffs_bronce, partidos_ticket]
         partidos = [p for p in partidos if p is not None]
 
         if not partidos:
@@ -344,7 +352,14 @@ class SpinButtonsView(discord.ui.View):
             await interaction.followup.send("No tienes ningún partido. No puedes spinear.", ephemeral=True)
             return
 
-        partido = partidos[0]  
+        now_time = datetime.now()
+
+        def proximidad(p):
+            if getattr(p, 'fecha', None):
+                return abs((p.fecha - now_time).total_seconds())
+            return float('inf')
+
+        partido = min(partidos, key=proximidad)
         
         self.canal_partido = interaction.guild.get_channel(partido.canalAsociado)
         if self.canal_partido:
