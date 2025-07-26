@@ -657,7 +657,7 @@ async def actualiza_Ticket(ctx, todos: int = 0):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
 
-    canal_id = 1251534986348073091
+    canal_id = 1223765590146158653
 
     mensaje = await actualizar_ticket(
         ctx,

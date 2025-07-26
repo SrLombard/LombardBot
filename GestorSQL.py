@@ -101,6 +101,8 @@ class Ticket(Base):
     coach2 = Column('coach2', Integer, ForeignKey('usuarios.idUsuarios'))
     fecha = Column('fecha', DateTime)
     fechaFinal = Column('fechaFinal', DateTime)
+    PuestoCoach1 = Column(Text)
+    PuestoCoach2 = Column(Text)
     partidos_idPartidos = Column('Partidos_idPartidos', Integer, ForeignKey('partidos.idPartidos'))
     partido = relationship("Partidos", foreign_keys=[partidos_idPartidos])
     usuario_coach1 = relationship("Usuario", foreign_keys=[coach1])
