@@ -657,12 +657,19 @@ async def actualiza_Ticket(ctx, todos: int = 0):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
 
-    canal_id=1251534986348073091
+    canal_id = 1251534986348073091
 
-    mensaje = await actualizar_clasificacion(ctx,session, lambda: APIBbowl.obtener_partido_PlayOfTicket(bbowl_API_token), GestorSQL.Ticket, canal_id, todos)
+    mensaje = await actualizar_ticket(
+        ctx,
+        session,
+        lambda: APIBbowl.obtener_partido_PlayOfTicket(bbowl_API_token),
+        canal_id,
+        GestorSQL.Ticket,
+        todos,
+    )
     await ctx.send(mensaje)
 
-    session.close() 
+    session.close()
     
 @bot.command()
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
@@ -2595,6 +2602,243 @@ Si hubiera cualquier problema mencionad a los comisarios.
                 session.commit()
             else:
                 await UtilesDiscord.mensaje_administradores(f"No se pudo crear el canal para el partido {nombre_canal}")
+
+    return "Actualización completada."
+
+
+async def actualizar_ticket(ctx, session, obtener_partidos_func, categoria_id, tabla_ticket, todos=0):
+    matches = obtener_partidos_func()
+    if not matches:
+        return "No se encontraron partidos."
+
+    for match in matches:
+        partido_existente = session.query(GestorSQL.Partidos).filter_by(idPartidoBbowl=match['uuid']).first()
+        if partido_existente:
+            if todos == 0:
+                break
+            else:
+                partido_existente = None
+                continue
+
+        coach_ids = [match['coaches'][0]['idcoach'], match['coaches'][1]['idcoach']]
+        usuarios = session.query(GestorSQL.Usuario).filter(GestorSQL.Usuario.id_bloodbowl.in_(coach_ids)).all()
+
+        if len(usuarios) != 2:
+            await UtilesDiscord.mensaje_administradores(
+                f"No se encontraron ambos usuarios en la base de datos para los coaches: {match['coaches'][0]['name']} y {match['coaches'][1]['name']}. Posiblemente el partido pertenezca a otra liga."
+            )
+            continue
+
+        calendario_registro = session.query(tabla_ticket).filter(
+            and_(
+                tabla_ticket.coach1.in_([usuarios[0].idUsuarios, usuarios[1].idUsuarios]),
+                tabla_ticket.coach2.in_([usuarios[0].idUsuarios, usuarios[1].idUsuarios]),
+            ),
+            tabla_ticket.partidos_idPartidos == None
+        ).order_by(tabla_ticket.jornada).first()
+
+        if not calendario_registro:
+            await UtilesDiscord.mensaje_administradores(
+                f"No se encontró un registro para actualizar para los coaches: {usuarios[0].nombre_discord} y {usuarios[1].nombre_discord}. Posiblemente el partido pertenezca a otra liga."
+            )
+            continue
+
+        local_index = 0 if calendario_registro.usuario_coach1.id_bloodbowl == match['coaches'][0]['idcoach'] else 1
+        visitante_index = 1 - local_index
+
+        total_muertes_coach1 = match['teams'][local_index]['sustaineddead']
+        total_lesiones_coach1 = match['teams'][visitante_index]['inflictedcasualties']
+        total_lesiones_coach1 -= total_muertes_coach1
+
+        total_muertes_coach2 = match['teams'][visitante_index]['sustaineddead']
+        total_lesiones_coach2 = match['teams'][local_index]['inflictedcasualties']
+        total_lesiones_coach2 -= total_muertes_coach2
+
+        nuevo_partido = GestorSQL.Partidos(
+            resultado1=match['teams'][local_index]['score'],
+            resultado2=match['teams'][visitante_index]['score'],
+            lesiones1=total_lesiones_coach1,
+            lesiones2=total_lesiones_coach2,
+            muertes1=total_muertes_coach1,
+            muertes2=total_muertes_coach2,
+            idPartidoBbowl=match['uuid'],
+            pases1=match['teams'][local_index]['inflictedpasses'],
+            pases2=match['teams'][visitante_index]['inflictedpasses'],
+            catches1=match['teams'][local_index]['inflictedcatches'],
+            catches2=match['teams'][visitante_index]['inflictedcatches'],
+            interceptions1=match['teams'][local_index]['inflictedinterceptions'],
+            interceptions2=match['teams'][visitante_index]['inflictedinterceptions'],
+            ko1=match['teams'][local_index]['inflictedko'],
+            ko2=match['teams'][visitante_index]['inflictedko'],
+            push1=match['teams'][local_index]['inflictedpushouts'],
+            push2=match['teams'][visitante_index]['inflictedpushouts'],
+            mRun1=match['teams'][local_index]['inflictedmetersrunning'],
+            mRun2=match['teams'][visitante_index]['inflictedmetersrunning'],
+            mPass1=match['teams'][local_index]['inflictedmetersrunning'],
+            mPass2=match['teams'][visitante_index]['inflictedmetersrunning'],
+            logo1=match['teams'][local_index]['teamlogo'],
+            logo2=match['teams'][visitante_index]['teamlogo'],
+            nombreEquipo1=match['teams'][local_index]['teamname'],
+            nombreEquipo2=match['teams'][visitante_index]['teamname']
+        )
+
+        session.add(nuevo_partido)
+        session.commit()
+
+        calendario_registro.partidos_idPartidos = nuevo_partido.idPartidos
+        session.commit()
+
+        session.refresh(nuevo_partido)
+
+        await UtilesDiscord.publicar(
+            ctx,
+            'Jornada Ticket  ' + str(calendario_registro.jornada) + '!',
+            id_foro=categoria_id,
+            idPartido=nuevo_partido.idPartidos,
+        )
+
+        try:
+            await UtilesDiscord.gestionar_canal_discord(ctx, 'eliminar', canal_id=calendario_registro.canalAsociado)
+        except Exception:
+            await UtilesDiscord.mensaje_administradores(
+                f"No se pudo borrar el canal con id {calendario_registro.canalAsociado}"
+            )
+
+        if nuevo_partido.resultado1 > nuevo_partido.resultado2:
+            ganador_coach = calendario_registro.usuario_coach1
+            perdedor_coach = calendario_registro.usuario_coach2
+        else:
+            ganador_coach = calendario_registro.usuario_coach2
+            perdedor_coach = calendario_registro.usuario_coach1
+
+        partido_id = calendario_registro.idTicket
+        futuros_partidos = session.query(tabla_ticket).filter(
+            or_(
+                tabla_ticket.PuestoCoach1 == f'Ganador{partido_id}',
+                tabla_ticket.PuestoCoach2 == f'Ganador{partido_id}',
+                tabla_ticket.PuestoCoach1 == f'Perdedor{partido_id}',
+                tabla_ticket.PuestoCoach2 == f'Perdedor{partido_id}'
+            )
+        ).all()
+
+        ganador_asignado = False
+        perdedor_asignado = False
+
+        for futuro in futuros_partidos:
+            if futuro.PuestoCoach1 == f'Ganador{partido_id}':
+                futuro.coach1 = ganador_coach.idUsuarios
+                ganador_asignado = True
+                await UtilesDiscord.mensaje_administradores(
+                    f"El usuario {ganador_coach.nombre_discord} como ganador del partido se ha insertado en el partido id {futuro.idTicket}"
+                )
+            elif futuro.PuestoCoach2 == f'Ganador{partido_id}':
+                futuro.coach2 = ganador_coach.idUsuarios
+                ganador_asignado = True
+                await UtilesDiscord.mensaje_administradores(
+                    f"El usuario {ganador_coach.nombre_discord} como ganador del partido se ha insertado en el partido id {futuro.idTicket}"
+                )
+            if futuro.PuestoCoach1 == f'Perdedor{partido_id}':
+                futuro.coach1 = perdedor_coach.idUsuarios
+                perdedor_asignado = True
+                await UtilesDiscord.mensaje_administradores(
+                    f"El usuario {perdedor_coach.nombre_discord} como perdedor del partido se ha insertado en el partido id {futuro.idTicket}"
+                )
+            elif futuro.PuestoCoach2 == f'Perdedor{partido_id}':
+                futuro.coach2 = perdedor_coach.idUsuarios
+                perdedor_asignado = True
+                await UtilesDiscord.mensaje_administradores(
+                    f"El usuario {perdedor_coach.nombre_discord} como perdedor del partido se ha insertado en el partido id {futuro.idTicket}"
+                )
+
+        if not ganador_asignado:
+            await UtilesDiscord.mensaje_administradores(
+                f"El usuario {ganador_coach.nombre_discord} como ganador del partido {partido_id} no tiene futuros encuentros asignados."
+            )
+        if not perdedor_asignado:
+            await UtilesDiscord.mensaje_administradores(
+                f"El usuario {perdedor_coach.nombre_discord} como perdedor del partido {partido_id} no tiene futuros encuentros asignados."
+            )
+
+        session.commit()
+
+    partidos_sin_canal = session.query(tabla_ticket).filter(
+        tabla_ticket.canalAsociado == None,
+        tabla_ticket.coach1 != None,
+        tabla_ticket.coach2 != None
+    ).all()
+
+    for partido in partidos_sin_canal:
+        coach1 = session.query(GestorSQL.Usuario).filter_by(idUsuarios=partido.coach1).first()
+        coach2 = session.query(GestorSQL.Usuario).filter_by(idUsuarios=partido.coach2).first()
+
+        if coach1 and coach2:
+            preferencias_coach1 = session.query(GestorSQL.PreferenciasFecha).filter_by(idUsuarios=coach1.idUsuarios).first()
+            preferencias_coach2 = session.query(GestorSQL.PreferenciasFecha).filter_by(idUsuarios=coach2.idUsuarios).first()
+
+            preferencias1 = [coach1.id_discord, preferencias_coach1.preferencia if preferencias_coach1 else ""]
+            preferencias2 = [coach2.id_discord, preferencias_coach2.preferencia if preferencias_coach2 else ""]
+
+            mensajePreferencias1 = ''
+            if preferencias1[0] and preferencias1[1]:
+                mensajePreferencias1 = f"\n<@{preferencias1[0]}> suele poder jugar {preferencias1[1]}"
+
+            mensajePreferencias2 = ''
+            if preferencias2[0] and preferencias2[1]:
+                mensajePreferencias2 = f"\n<@{preferencias2[0]}> suele poder jugar {preferencias2[1]}"
+
+            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs que pueden llevaros a conseguir un 🎟**TICKET**🎟. El primero se llevará un Ticket directo para el mundial y el segundo un Ticket de play-in.
+
+Ahora debéis elegir uno de los equipos con los que habéis jugado la ButterCup para inscribirlo en la competición Ticket ButterCup contraseña TicketButtercup2025.
+Si el equipo está actualmente jugando los playoffs de la Cuarta Edición de la Butter Cup debéis hacer una copia del equipo. Contáis con la ayuda de los comisarios para ello.
+Si el equipo lleva 20 partidos sin hacer reforma deberéis hacerla ANTES de empezar vuestro pirmer partido.\n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
+Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España.{fecha}
+
+        -------------------------------------------
+
+Antes de jugar tendréis que **USAR EL CANAL** #spin y **LIBERADLO** al encontrar partido.
+
+Si hubiera cualquier problema mencionad a los comisarios.
+                """
+
+            fecha = f"\n\nLa Fecha límite para jugar el partido es el <t:{int(partido.fechaFinal.timestamp())}:f>"
+            guild = ctx.guild
+            coach1_member = guild.get_member(coach1.id_discord)
+            coach2_member = guild.get_member(coach2.id_discord)
+
+            mention1 = coach1_member.mention if coach1_member else ""
+            mention2 = coach2_member.mention if coach2_member else ""
+            mensaje_formateado = mensaje.format(
+                mention1=mention1,
+                mention2=mention2,
+                raza1=coach1.raza,
+                raza2=coach2.raza,
+                fecha=fecha,
+            )
+
+            nombre_canal = f"🎟{coach1.nombre_discord}vs{coach2.nombre_discord}"
+            categoria_id_nuevo = 1396596687879016499
+            idNuevoCanal = await UtilesDiscord.gestionar_canal_discord(
+                ctx,
+                'crear',
+                nombre_canal,
+                coach1.id_discord,
+                coach2.id_discord,
+                raza1=coach1.raza,
+                raza2=coach2.raza,
+                fechalimite=int(partido.fechaFinal.timestamp()),
+                preferencias1=preferencias1,
+                preferencias2=preferencias2,
+                categoria_id=categoria_id_nuevo,
+                mensaje=mensaje_formateado,
+            )
+
+            if idNuevoCanal:
+                partido.canalAsociado = idNuevoCanal
+                session.commit()
+            else:
+                await UtilesDiscord.mensaje_administradores(
+                    f"No se pudo crear el canal para el partido {nombre_canal}"
+                )
 
     return "Actualización completada."
 
