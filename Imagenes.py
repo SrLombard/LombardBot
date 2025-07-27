@@ -268,6 +268,9 @@ async def imagenResultado(idPartido):
             or session.query(GestorSQL.PlayOffsBronce)
             .filter(GestorSQL.PlayOffsBronce.partidos_idPartidos == idPartido)
             .first()
+            or session.query(GestorSQL.Ticket)
+            .filter(GestorSQL.Ticket.partidos_idPartidos == idPartido)
+            .first()
         )
 
         if not registro:
