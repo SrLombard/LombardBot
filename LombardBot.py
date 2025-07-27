@@ -2998,6 +2998,25 @@ async def func_proximos_partidos_playoff(bot, usuario, canal_destino_id=None, re
     eventos_existentes = False
     all_eventos = []
 
+    UsuarioCoach1_T = aliased(GestorSQL.Usuario)
+    UsuarioCoach2_T = aliased(GestorSQL.Usuario)
+    eventos_ticket = (
+        session.query(
+            GestorSQL.Ticket,
+            UsuarioCoach1_T.nombre_discord.label("nombre_discord1"),
+            UsuarioCoach1_T.raza.label("raza1"),
+            UsuarioCoach1_T.id_discord.label("id_discord1"),
+            UsuarioCoach2_T.nombre_discord.label("nombre_discord2"),
+            UsuarioCoach2_T.id_discord.label("id_discord2"),
+            UsuarioCoach2_T.raza.label("raza2"),
+        )
+        .join(UsuarioCoach1_T, GestorSQL.Ticket.coach1 == UsuarioCoach1_T.idUsuarios)
+        .join(UsuarioCoach2_T, GestorSQL.Ticket.coach2 == UsuarioCoach2_T.idUsuarios)
+        .filter(GestorSQL.Ticket.fecha >= ahora, GestorSQL.Ticket.fecha <= fin)
+        .order_by(GestorSQL.Ticket.fecha)
+        .all()
+    )
+
     for nombre_playoff, tabla_playoff in bases_playoff.items():
         eventos = (
             session.query(
@@ -3026,13 +3045,23 @@ async def func_proximos_partidos_playoff(bot, usuario, canal_destino_id=None, re
                 )
             all_eventos.extend(eventos)
 
-    if not eventos_existentes:
+    hay_eventos = eventos_existentes or eventos_ticket
+    if not hay_eventos:
         mensaje = "No hay partidos programados en los playoffs durante el intervalo dado."
         try:
             await canal_destino.send(mensaje)
         finally:
             session.close()
         return
+
+    if eventos_ticket:
+        mensaje += "🎟Ticket🎟\n"
+        for calendario, nd1, raza1, id1, nd2, id2, raza2 in eventos_ticket:
+            mensaje += (
+                f"**{nd1}** ({raza1}) VS **{nd2}** ({raza2}), "
+                f"<t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
+            )
+        all_eventos.extend(eventos_ticket)
 
     ids_discord = [
         f"<@{ev[i]}>" for ev in all_eventos for i in (3, 5)
