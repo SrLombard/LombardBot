@@ -798,6 +798,7 @@ async def CreaCanalesJornada(ctx, jornada, *, mensaje=""):
                     ctx, "crear", nombre_canal,
                     coach2.id_discord, coach1.id_discord,
                     raza1=coach2.raza, raza2=coach1.raza,
+                    bbname1=coach2.nombre_bloodbowl, bbname2=coach1.nombre_bloodbowl,
                     fechalimite=int(calendario.fechaFinal.timestamp()),
                     preferencias1=preferenciasRival, preferencias2=preferenciasUsuario,
                     categoria_id=categoria_id
