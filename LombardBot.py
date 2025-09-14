@@ -1990,28 +1990,53 @@ async def crear_grupos(ctx):
             if len(usuarios) != 6:
                 await ctx.send(f"El grupo {grupo.id_grupo} no tiene 6 usuarios, tiene {len(usuarios)}.")
                 return
-            
-           # Suponiendo que 'usuarios' es una lista de los 6 usuarios de un grupo
-            usuarios = session.query(GestorSQL.Usuario).filter(GestorSQL.Usuario.grupo == grupo.id_grupo).all()
 
-            # Verifica que cada grupo tenga 6 usuarios
-            if len(usuarios) != 6:
-                await ctx.send(f"El grupo {grupo.id_grupo} no tiene 6 usuarios.")
-            else:
-                partidos = [(0, 1), (2, 3), (4, 5)],[(0,2),(1,5),(3,4)],[(0,3),(1,4),(2,5)],[(0,4),(1,2),(3,5)],[(0,5),(1,3),(2,4)],[(1,0), (3,2), (5,4)],[(2,0),(5,1),(4,3)],[(3,0),(4,1),(5,2)],[(4,0),(2,1),(5,3)],[(5,0),(3,1),(4,2)]
-                for i in range(0, 10):
-                    # Crea los partidos en la base de datos
-                    for partido in partidos[i]:
-                        fecha_final = datetime(2025, 5, 18,23,59) + timedelta(weeks=(i))
-                        nuevo_partido = GestorSQL.Calendario(
-                            jornada=i+1,
-                            canalAsociado=0,  # Asume un valor por defecto o ajusta según necesidad
-                            coach1=usuarios[partido[0]].idUsuarios,
-                            coach2=usuarios[partido[1]].idUsuarios,
-                            fechaFinal=fecha_final
-                        )
-                        session.add(nuevo_partido)
-                    session.commit()
+            random.shuffle(usuarios)
+
+            def generar_partidos(n):
+                equipos = list(range(n))
+                if n % 2:
+                    equipos.append(None)
+                jornadas = []
+                m = len(equipos)
+                for _ in range(m - 1):
+                    ronda = []
+                    for j in range(m // 2):
+                        a = equipos[j]
+                        b = equipos[m - 1 - j]
+                        if a is not None and b is not None:
+                            ronda.append((a, b))
+                    equipos.insert(1, equipos.pop())
+                    jornadas.append(ronda)
+                return jornadas
+
+            jornadas_ida = generar_partidos(len(usuarios))
+            random.shuffle(jornadas_ida)
+            jornadas_vuelta = [[(b, a) for (a, b) in jornada] for jornada in jornadas_ida]
+            jornadas = jornadas_ida + jornadas_vuelta
+
+            enfrentamientos = {}
+            for jornada in jornadas:
+                for a, b in jornada:
+                    par = tuple(sorted((usuarios[a].idUsuarios, usuarios[b].idUsuarios)))
+                    enfrentamientos[par] = enfrentamientos.get(par, 0) + 1
+            if any(contador != 2 for contador in enfrentamientos.values()):
+                await ctx.send(f"Error al generar el calendario del grupo {grupo.id_grupo}")
+                session.rollback()
+                continue
+
+            for i, jornada in enumerate(jornadas):
+                for partido in jornada:
+                    fecha_final = datetime(2025, 5, 18, 23, 59) + timedelta(weeks=i)
+                    nuevo_partido = GestorSQL.Calendario(
+                        jornada=i+1,
+                        canalAsociado=0,  # Asume un valor por defecto o ajusta según necesidad
+                        coach1=usuarios[partido[0]].idUsuarios,
+                        coach2=usuarios[partido[1]].idUsuarios,
+                        fechaFinal=fecha_final
+                    )
+                    session.add(nuevo_partido)
+                session.commit()
             
         await ctx.send("Grupos y partidos creados correctamente.")
     except Exception as e:
