@@ -135,7 +135,7 @@ async def mensaje_administradores(mensaje):
     await channel.send(mensaje)
 
 
-async def gestionar_canal_discord(ctx, accion, nombre_canal=None, coach1_id_discord=None, coach2_id_discord=None, categoria_id=1325620233104527463, mensaje="", quedada=False, canal_id=None,raza1='',raza2='',fechalimite=0,preferencias1=['',''],preferencias2=['','']):
+async def gestionar_canal_discord(ctx, accion, nombre_canal=None, coach1_id_discord=None, coach2_id_discord=None, categoria_id=1325620233104527463, mensaje="", quedada=False, canal_id=None,raza1='',raza2='',fechalimite=0,preferencias1=['',''],preferencias2=['',''],bbname1='',bbname2=''):
     guild = ctx.guild
     categoria = discord.utils.get(guild.categories, id=int(categoria_id))
     fecha = ''
@@ -152,16 +152,28 @@ async def gestionar_canal_discord(ctx, accion, nombre_canal=None, coach1_id_disc
 
 
     if mensaje == "":
-        mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Por favor, acuerden una fecha para jugar el primer partido. ¡Y recordad que antes de jugar hay que usar el canal de spin!""" + mensajePreferencias1 + mensajePreferencias2 +"""
-        
+        if bbname1 and bbname2:
+            mensaje = """Bienvenidos, {mention1}({raza1}) [{bbname1}] y {mention2}({raza2}) [{bbname2}]! Por favor, acuerden una fecha para jugar el primer partido. ¡Y recordad que antes de jugar hay que usar el canal de spin!""" + mensajePreferencias1 + mensajePreferencias2 +"""
+
 Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España. Esto es OBLIGATORIO y para al administración será clave a la hora de tomar decisiones en caso de que alguien no se presente. {fecha}
-        
+
 Justo antes de jugar el partido tendréis que **USAD EL CANAL**  <#1224128423929315468> y **LIBERADLO** al encontrar partido.De esta manera no os emparejará con otra persona.
-        
+
 Otro comando del bot que os puede ser útil es **/preferenciashorario**. Ahí podréis poner que horarios os vienen bien generalmente, me encargaré de decirselo a vuestros próximos rivales para que las quedadas sean más ágiles.
-      
+
 Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
-        """
+            """
+        else:
+            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Por favor, acuerden una fecha para jugar el primer partido. ¡Y recordad que antes de jugar hay que usar el canal de spin!""" + mensajePreferencias1 + mensajePreferencias2 +"""
+
+Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España. Esto es OBLIGATORIO y para al administración será clave a la hora de tomar decisiones en caso de que alguien no se presente. {fecha}
+
+Justo antes de jugar el partido tendréis que **USAD EL CANAL**  <#1224128423929315468> y **LIBERADLO** al encontrar partido.De esta manera no os emparejará con otra persona.
+
+Otro comando del bot que os puede ser útil es **/preferenciashorario**. Ahí podréis poner que horarios os vienen bien generalmente, me encargaré de decirselo a vuestros próximos rivales para que las quedadas sean más ágiles.
+
+Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
+            """
 
     if quedada:
         mensaje += ""
@@ -193,7 +205,7 @@ Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
             # Preparar y enviar mensaje de bienvenida
             mention1 = coach1.mention if coach1 else ""
             mention2 = coach2.mention if coach2 else ""
-            mensaje_formateado = mensaje.format(mention1=mention1, mention2=mention2,raza1=raza1,raza2=raza2,fecha=fecha)
+            mensaje_formateado = mensaje.format(mention1=mention1, mention2=mention2,raza1=raza1,raza2=raza2,fecha=fecha,bbname1=bbname1,bbname2=bbname2)
             await canal.send(mensaje_formateado)
                 
             return canal.id
