@@ -12,16 +12,16 @@ import UtilesDiscord
 import asyncio
 
 racesConEmojiIniciales = [
-    "👴🏻Alianza del viejo mundo👴🏻","🏹Amazonas🏹", "🐐Caos Elegido🐐", "⛏Enanos⛏", "🩸Elfos oscuros🩸",
+    "👴🏻Alianza del viejo mundo👴🏻","🏹Amazonas🏹", "🐐Caos Elegido🐐", "⛏Enanos⛏", "🔮Elfos oscuros🔮",
     "🌲Elfos silvanos🌲", "🦎Hombres lagarto🦎", "🐺Horror nigromántico🐺", "🙎🏻‍Humanos🙎🏻‍",
-    "🤢Inframundo🤢", "💀No muertos💀", "👲🏻Nobleza Imperial👲🏻","❄Nordicos❄", "🤮Nurgle🤮",
-    "🐸Orcos🐸", "👹Orcos negros👹", "👨‍👧‍👦Renegados👨‍👨‍👧", "🐀Skaven🐀", "🤾🏻‍Unión elfica🤾","🧚🏻‍♂️Stunty🌜"
+    "🤢Inframundo🤢","🩸Khrone🩸", "💀No muertos💀", "👲🏻Nobleza Imperial👲🏻","❄Nordicos❄", "🤮Nurgle🤮",
+    "🐸Orcos🐸", "👹Orcos negros👹", "👨‍👧‍👦Renegados👨‍👨‍👧", "🐀Skaven🐀", "🤾🏻‍Unión elfica🤾","🧚🏻‍♂️Stunty🌜","🎲Nueva raza🎲"
 ]
 racesIniciales = [
     "Alianza del viejo mundo","Amazonas,", "Caos Elegido", "Enanos", "Elfos oscuros",
     "Elfos silvanos", "Hombres lagarto", "Horror nigromántico", "Humanos",
-    "Inframundo", "No muertos", "Nobleza Imperial", "Nordicos","Nurgle",
-    "Orcos", "Orcos negros", "Renegados", "Skaven", "Unión elfica","Stunty"
+    "Inframundo","Khorne", "No muertos", "Nobleza Imperial", "Nordicos","Nurgle",
+    "Orcos", "Orcos negros", "Renegados", "Skaven", "Unión elfica","Stunty","Nueva raza"
 ]
 
 # tipoPreferenciaOptions = [
@@ -41,7 +41,7 @@ async def handle_registration(user):
             nueva_inscripcion = GestorSQL.Inscripcion(id_usuario_discord=user.id, nombre_bloodbowl=usuario.nombre_bloodbowl)
             session.add(nueva_inscripcion)
             session.commit()
-            await user.send(f"Gracias por inscribirte en la Cuarta edición de la Butter Cup, {usuario.nombre_bloodbowl}!")
+            await user.send(f"Gracias por inscribirte en la Quinta edición de la Butter Cup, {usuario.nombre_bloodbowl}!")
             # Temporada 25/26: todos los equipos deben ser nuevos
             await registroEquipoNuevo(user)
         else:
@@ -50,7 +50,7 @@ async def handle_registration(user):
             await registroEquipoNuevo(user)
     else:
         view = WelcomeView(user.id)
-        await user.send("""Bienvenido a la cuarta edición de la BUTTER CUP.
+        await user.send("""Bienvenido a la quinta edición de la BUTTER CUP.
                         
 Estamos emocionados por contar contigo. Vamos a empezar tu inscripción.
 
@@ -101,7 +101,7 @@ Primero necesitamos saber tu nombre EXACTO en blood bowl, pulsa EMPEZAR y escrib
 async def registroEquipoNuevo(user):
     await user.send("""Para crear un nuevo equipo en la Butter Cup primero te tenemos que adjudicar una raza por __**sorteo**__.
                     
- El sorteo se realizará en directo aproximadamente el <t:1746990000:F> en canal de twitch de SrLombard.
+ El sorteo se realizará en directo aproximadamente el <t:1757790000:F> en canal de twitch de SrLombard.
                     
 Para que te podamos asignar una raza deberás elegir __4 favoritas__ y __banear otras 4__.
 Intentaremos asignarte una de tus razas favoritas, pero hay un número limitado de plazas por raza. Si no se pudiera se te asignaría cualquier otra raza pero nunca una de las baneadas asi que... ¡elige sabiamente!""")
@@ -243,9 +243,9 @@ class RazasView(discord.ui.View):
                 mensaje = f"Sus bans son: {', '.join(self.seleccionados)}"
                 guardar_preferencias_bans(self.usuario_id,self.preferencias,self.seleccionados)
                 await interaction.followup.send(mensaje)
-                await interaction.followup.send("Ha terminado la inscripción para la cuarta edición de la Butter Cup. ¡Nos vemos el 12 de Mayo!. Te avisaré de todo por mp 😉")
+                await interaction.followup.send("Ha terminado la inscripción para la quinta edición de la Butter Cup. ¡Nos vemos el 13 de septiembre!. Te avisaré de todo por mp 😉")
                 await asyncio.sleep(60)
-                await interaction.followup.send("¡Se me olvidaba! La Butter Cup tiene premios y sorteos alucinantes, lamentablemente el Lombard es un vago y aún no ha hecho el sorteo anterior. ¡Pásate por el canal 💰premios💰 para echarles un ojo! ¡Te avisaremos cuando se abran los de esta edición!")
+                await interaction.followup.send("¡Se me olvidaba! La Butter Cup tiene premios y sorteos alucinantes, lamentablemente el Lombard es un vago y aún no ha hecho el sorteo anterior. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo! ¡Te avisaremos cuando se abran los de esta edición!")
         
 def guardar_preferencias_bans(usuario_id, preferencias, bans):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())

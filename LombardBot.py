@@ -3142,7 +3142,7 @@ async def Penaltis(ctx, user1:  discord.Member, user2: discord.Member):
     else:
         winner, loser = user2, user1
 
-    await ctx.send(f"<:Butter_Cup:1184459079368843324> **{user1.mention} gana la tanda de goles de campo contra {user2.mention}!** ¡Enhorabuena! 🎉")
+    await ctx.send(f"<:Butter_Cup:1184459079368843324> **{winner.mention} gana la tanda de goles de campo contra {loser.mention}!** ¡Enhorabuena! 🎉")
 
 @bot.command(name="actualiza_ediciones")
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
@@ -3380,13 +3380,24 @@ async def recordar_inscripciones(ctx):
     for member in no_inscritos_con_rol:
         try:
             await member.send(
-                """Las esperadísimas **inscripciones** para la cuarta temporada de la BUTTER CUPacaban mañana **11 de mayo**. Corre a <#1280102673059680316>  🏃‍♀️💨 y asegura tu plaza 🌟.
+"""🚨🚨 **ÚLTIMO AVISO** 🚨🚨
 
-Si solo tienes el rol para estar atento de la copa no hace falta que hagas nada.
+🏆 **BUTTER CUP V (quinta edición)**  
+Arranca el recorrido hacia los **tickets del Mundial 2026**: serán **3 ediciones** (invierno 2025, primavera 2026 y verano 2026) y todo culmina en un **playoff veraniego**.
 
-Si no quieres recibir más notificaciones mías, escribe a SrLombard para no molestarte más.
+⚙️ **Formato**  
+• **3 divisiones**: Oro, Plata y Bronce.  
+• Los mejores **ascienden de división** cada edición.  
+• Los grupos se crean en **packs de 6**.
 
-¡Te esperamos!"""
+📅 **Cierre de inscripciones: mañana, sábado 13 de septiembre**  
+No te quedes sin plaza: apúntate en <#1280102673059680316>, **consulta las reglas** y pregunta lo que necesites.
+
+Si solo tienes el rol para estar atento de la copa, no necesitas hacer nada.
+
+Si no quieres recibir más notificaciones mías, escribe a **SrLombard** para que no te moleste más.
+
+¡Te esperamos en la **BUTTER CUP V**! 🏉✨"""
             )
             await ctx.send(f"Recordatorio enviado a {member.name}")
         except discord.Forbidden:
