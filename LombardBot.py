@@ -1607,9 +1607,9 @@ async def enviarInvitacion(ctx):
                 u for u in usuarios 
                 if u.grupo == usuario.grupo and u.idUsuarios != usuario.idUsuarios
             ]
-            # Construir lista de "nombre_discord (raza)"
+            # Construir lista de "nombre_discord (nombre_bbowl, raza)"
             lista_compañeros = [
-                f"{c.nombre_discord} ({c.raza or 'raza no asignada'})"
+                f"{c.nombre_discord} ({c.nombre_bloodbowl or 'BBowl no asignado'}, {c.raza or 'raza no asignada'})"
                 for c in compañeros
             ]
             # Formatear con comas y 'y'
