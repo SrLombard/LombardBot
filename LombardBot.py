@@ -1747,21 +1747,24 @@ def finalFraseRaza(raza):
         "Hombres Lagarto": "los ágiles y fuertes **Hombres Lagarto**, no tienes nada que temer ya que el Gran Plan te guia.",
         "Horror Nigromántico":"los **Horrores nigrománticos** directamente desde una pelicula de miedo de los 80, aúlla a la luna con tus lobos mientras tus golems paran a un equipo entero.",
         "Humanos": "lo versátiles **Humanos**, adapta tu estrategia a cualquier rival y muestra la habilidad de jugar en cualquier posición.",
-        "Inframundo": "el temible equipo del **Inframundo**, usa tus trucos y mutaciones para que no quede nadie.",
+        "Inframundo": "el temible equipo del **Inframundo**, usa tus trucos y mutaciones para que no quede nadie Irikum.",
         "Nobleza Imperial": "la distinguida **Nobleza Imperial**, utiliza tu elegancia y tácticas refinadas para ganar tus partidos.",
         "No muerto": "los terroríficos **No Muertos**, haz que tus rivales teman enfrentarse a ti tanto en vida como en muerte.",
         "Nurgle": "los repugnantes seguidores de **Nurgle**, usa tu resistencia y habilidades únicas para soportar cualquier cosa mientras pudres a tus oponentes.",
-        "Nordicos": "los furiosos **Nórdicos**. Haz que se le encoja el escroto de frío a tus rivales con tus furias mientras las valkirias mueven el balón y los ágiles gorrinos reparten cruzcampo.",
+        "Nórdicos": "los furiosos **Nórdicos**. Haz que se le encoja el escroto de frío a tus rivales con tus furias mientras las valkirias mueven el balón y los ágiles gorrinos reparten cruzcampo.",
         "Orco": "los poderosos Orcos, grita WAAAAGH! con ellos mientras destrozas a tus rivales.",
         "Orco Negro": "los imponentes **Orcos Negros**, utiliza tu fuerza bruta para dominar el campo de juego mientras tus goblins rematan a tus rivales.",
         "Renegados": "el variopinto equipo de **Renegados**, une a los marginados de todos los rincones para formar un equipo único.",
         "Skaven": "los rápidos y traicioneros **Skaven**, corre por el campo sembrando caos y aprovechando cualquier debilidad.",
         "Stunty":"los epiquisímos **Stunty**, el tamaño no importa y vas a demostrarselo a esos abusones con tu equipo. Estalla a esos grandullones de maneras que nunca han imaginado.",
-        "Unión Élfica": "la rapidsíma **Unión Élfica**, humilla a tus enemigos con tu juego de balón y ríete de ellos mientras intentan atraparte."
+        "Unión Élfica": "la rapidsíma **Unión Élfica**, humilla a tus enemigos con tu juego de balón y ríete de ellos mientras intentan atraparte.",
+        "Vampiros": "los siniestros **Vampiros**, domina a tus rivales con tu hipnótica presencia y sacia tu sed con cada touchdown.",
+        "Khorne": "los sedientos de sangre seguidores de **Khorne**, arrasa el campo al grito de ¡SANGRE PARA EL DIOS DE LA SANGRE, CRÁNEOS PARA EL TRONO DE KHORNE!"
     }
 
+
     # Devuelve el mensaje asociado a la raza, o un mensaje genérico si la raza no está en el diccionario.
-    return frases.get(raza, "una raza no identificada, verifica el nombre e inténtalo de nuevo.")
+    return frases.get(raza, "una raza ("+raza+") no identificada, verifica el nombre e inténtalo de nuevo.")
     
 
 @bot.command(name="dinero")
@@ -3634,7 +3637,7 @@ tareas_programadas = {
     "Monday": {
         "09": [
             (
-                func_proximos_partidos_playoff,
+                func_proximos_eventos,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3647,7 +3650,7 @@ tareas_programadas = {
     "Tuesday": {
         "09": [
             (
-                func_proximos_partidos_playoff,
+                func_proximos_eventos,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3660,7 +3663,7 @@ tareas_programadas = {
     "Wednesday": {
         "09": [
             (
-                func_proximos_partidos_playoff,
+                func_proximos_eventos,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3682,7 +3685,7 @@ tareas_programadas = {
     "Thursday": {
         "09": [
             (
-                func_proximos_partidos_playoff,
+                func_proximos_eventos,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3695,7 +3698,7 @@ tareas_programadas = {
     "Friday": {
         "09": [
             (
-                func_proximos_partidos_playoff,
+                func_proximos_eventos,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3708,7 +3711,7 @@ tareas_programadas = {
     "Saturday": {
         "09": [
             (
-                func_proximos_partidos_playoff,
+                func_proximos_eventos,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3721,7 +3724,7 @@ tareas_programadas = {
     "Sunday": {
         "09": [
             (
-                func_proximos_partidos_playoff,
+                func_proximos_eventos,
                 {
                     "bot": bot,
                     "usuario": maestros[0],

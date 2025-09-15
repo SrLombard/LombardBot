@@ -153,27 +153,36 @@ async def gestionar_canal_discord(ctx, accion, nombre_canal=None, coach1_id_disc
 
     if mensaje == "":
         if bbname1 and bbname2:
-            mensaje = """Bienvenidos, {mention1}({raza1}) [{bbname1}] y {mention2}({raza2}) [{bbname2}]! Por favor, acuerden una fecha para jugar el primer partido. ¡Y recordad que antes de jugar hay que usar el canal de spin!""" + mensajePreferencias1 + mensajePreferencias2 +"""
+            mensaje = """Bienvenidos, {mention1}({raza1}) [{bbname1}] y {mention2}({raza2}) [{bbname2}]! 
+            
+Tenéis que crear vuestros equipos, cuando lo hagáis **mencionad** por este canal a @comisario especificando el **nombre del equipo** al que queréis recibir la invitacón.
 
-Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España. Esto es OBLIGATORIO y para al administración será clave a la hora de tomar decisiones en caso de que alguien no se presente. {fecha}
+Por favor, acuerden una fecha para jugar el primer partido.""" + mensajePreferencias1 + mensajePreferencias2 + """
 
-Justo antes de jugar el partido tendréis que **USAD EL CANAL**  <#1224128423929315468> y **LIBERADLO** al encontrar partido.De esta manera no os emparejará con otra persona.
+Cuando acordéis una fecha **usad** el comando `/fecha` para que el bot pueda registrar vuestro partido con el horario de España. Esto es **OBLIGATORIO** y para la administración será clave a la hora de tomar decisiones en caso de que alguien no se presente. {fecha}
 
-Otro comando del bot que os puede ser útil es **/preferenciashorario**. Ahí podréis poner que horarios os vienen bien generalmente, me encargaré de decirselo a vuestros próximos rivales para que las quedadas sean más ágiles.
+Justo antes de jugar el partido tendréis que **USAR EL CANAL**  <#1224128423929315468> y **LIBERADLO** al encontrar partido. De esta manera no os emparejará con otra persona.
+
+Otro comando del bot que os puede ser útil es `/preferenciashorario`. Ahí podréis poner qué horarios os vienen bien generalmente, me encargaré de decírselo a vuestros próximos rivales para que las quedadas sean más ágiles.
 
 Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
-            """
+"""
         else:
-            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Por favor, acuerden una fecha para jugar el primer partido. ¡Y recordad que antes de jugar hay que usar el canal de spin!""" + mensajePreferencias1 + mensajePreferencias2 +"""
+            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! 
+            
+Tenéis que crear vuestros equipos, cuando lo hagáis **mencionad** por este canal a @comisario especificando el **nombre del equipo** al que queréis recibir la invitacón.
 
-Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España. Esto es OBLIGATORIO y para al administración será clave a la hora de tomar decisiones en caso de que alguien no se presente. {fecha}
+Por favor, acuerden una fecha para jugar el primer partido.""" + mensajePreferencias1 + mensajePreferencias2 + """
 
-Justo antes de jugar el partido tendréis que **USAD EL CANAL**  <#1224128423929315468> y **LIBERADLO** al encontrar partido.De esta manera no os emparejará con otra persona.
+Cuando acordéis una fecha **usad** el comando `/fecha` para que el bot pueda registrar vuestro partido con el horario de España. Esto es **OBLIGATORIO** y para la administración será clave a la hora de tomar decisiones en caso de que alguien no se presente. {fecha}
 
-Otro comando del bot que os puede ser útil es **/preferenciashorario**. Ahí podréis poner que horarios os vienen bien generalmente, me encargaré de decirselo a vuestros próximos rivales para que las quedadas sean más ágiles.
+Justo antes de jugar el partido tendréis que **USAR EL CANAL**  <#1224128423929315468> y **LIBERADLO** al encontrar partido. De esta manera no os emparejará con otra persona.
+
+Otro comando del bot que os puede ser útil es `/preferenciashorario`. Ahí podréis poner qué horarios os vienen bien generalmente, me encargaré de decírselo a vuestros próximos rivales para que las quedadas sean más ágiles.
 
 Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
-            """
+"""
+
 
     if quedada:
         mensaje += ""
