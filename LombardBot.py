@@ -431,7 +431,21 @@ async def actualizar_clasificacion(ctx,session, obtener_partidos_func, tabla_cal
                     else:
                         categoria_id_nuevo = 1326104557767491584
                     nombre_canal = f"j{usuario.jornada_actual}-{rival.nombre_discord}vs{usuario.nombre_discord}"
-                    idNuevoCanal = await UtilesDiscord.gestionar_canal_discord(ctx, "crear", nombre_canal, rival.id_discord, usuario.id_discord, raza1=rival.raza, raza2=usuario.raza, fechalimite=int(calendario.fechaFinal.timestamp()), preferencias1=preferenciasRival, preferencias2=preferenciasUsuario,categoria_id=categoria_id_nuevo)
+                    idNuevoCanal = await UtilesDiscord.gestionar_canal_discord(
+                        ctx,
+                        "crear",
+                        nombre_canal,
+                        rival.id_discord,
+                        usuario.id_discord,
+                        raza1=rival.raza,
+                        raza2=usuario.raza,
+                        fechalimite=int(calendario.fechaFinal.timestamp()),
+                        preferencias1=preferenciasRival,
+                        preferencias2=preferenciasUsuario,
+                        categoria_id=categoria_id_nuevo,
+                        bbname1=rival.nombre_bloodbowl or "",
+                        bbname2=usuario.nombre_bloodbowl or "",
+                    )
                     if idNuevoCanal:
                         calendario.canalAsociado = idNuevoCanal
                         session.commit()
@@ -607,10 +621,18 @@ async def actualizar_clasificacion_partido(ctx, session, match, tabla_calendario
             elif rival:
                 nombre_canal = f"j{usuario.jornada_actual}-{rival.nombre_discord}vs{usuario.nombre_discord}"
                 idNuevoCanal = await UtilesDiscord.gestionar_canal_discord(
-                    ctx, "crear", nombre_canal, rival.id_discord, usuario.id_discord,
-                    raza1=rival.raza, raza2=usuario.raza,
+                    ctx,
+                    "crear",
+                    nombre_canal,
+                    rival.id_discord,
+                    usuario.id_discord,
+                    raza1=rival.raza,
+                    raza2=usuario.raza,
                     fechalimite=int(calendario.fechaFinal.timestamp()),
-                    preferencias1=preferenciasRival, preferencias2=preferenciasUsuario
+                    preferencias1=preferenciasRival,
+                    preferencias2=preferenciasUsuario,
+                    bbname1=rival.nombre_bloodbowl or "",
+                    bbname2=usuario.nombre_bloodbowl or "",
                 )
                 if idNuevoCanal:
                     calendario.canalAsociado = idNuevoCanal
