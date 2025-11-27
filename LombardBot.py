@@ -3661,7 +3661,7 @@ tareas_programadas = {
     "Monday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3674,7 +3674,7 @@ tareas_programadas = {
     "Tuesday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3687,7 +3687,7 @@ tareas_programadas = {
     "Wednesday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3709,7 +3709,7 @@ tareas_programadas = {
     "Thursday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3722,7 +3722,7 @@ tareas_programadas = {
     "Friday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3735,7 +3735,7 @@ tareas_programadas = {
     "Saturday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
@@ -3748,7 +3748,7 @@ tareas_programadas = {
     "Sunday": {
         "09": [
             (
-                func_proximos_eventos,
+                func_proximos_partidos_playoff,
                 {
                     "bot": bot,
                     "usuario": maestros[0],
