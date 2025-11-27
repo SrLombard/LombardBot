@@ -2958,7 +2958,9 @@ async def CreaCanalesPlayoff(ctx, jornada, tipo):
             
             Aquí os jugáis el ascenso de categoría, puntos extra para la próxima reforma y preferencia a la hora de elegir un equipo Reformado/nuevo la próxima temporada.
             
-            RECORDAD inscribir vuestros equipos en la competición PlayOffs4 contraseña PlayOffs4. Los playoff se juegan en formato resurreción, por ello no podréis modificar vuestro equipo después del primer partido. Recordad también que debéis que enviar un pantallazo de como queda vuestro equipo a Pikoleto. \n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
+            Sentimos mucho el jaleo, han coincidido unos días malos con los ajustes que tenemos que hacer con los cambios venideros, esperamos que podáis disfrutardel playoff a pesar de todos los cambios ;-).
+            
+            RECORDAD inscribir vuestros equipos en la competición PlayOffs5 contraseña PlayOffs5. Los playoff se juegan en formato resurreción, por ello no podréis modificar vuestro equipo después del primer partido. Recordad también que debéis que enviar un pantallazo de como queda vuestro equipo a Pikoleto. \n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
 Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España.{fecha}
             
 -------------------------------------------
