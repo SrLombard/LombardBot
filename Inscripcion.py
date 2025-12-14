@@ -24,12 +24,16 @@ racesIniciales = [
     "Orcos", "Orcos negros", "Renegados", "Skaven", "Unión elfica","Stunty","Nueva raza"
 ]
 
-# tipoPreferenciaOptions = [
-#     ("Nuevo", "Nuevo"),
-#     ("Nuevo/Reformado", "Prefiero nuevo pero tengo existente"),
-#     ("Reformado/Nuevo", "Prefiero existente pero puedo nuevo"),
-#     ("Reformado", "Existente")
-# ]
+tipoPreferenciaOptions = [
+    ("Nuevo", "Nuevo"),
+    ("Reformado", "Reformado")
+]
+
+
+async def enviar_mensaje_flexibilidad(user):
+    await user.send(
+        "En el caso de que quieras ser flexible y permitirnos ajustar mejor las divisiones y no te importe que modifiquemos tu opción contacta con Pikoleto por mensaje privado"
+    )
 
 async def handle_registration(user):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
@@ -42,12 +46,10 @@ async def handle_registration(user):
             session.add(nueva_inscripcion)
             session.commit()
             await user.send(f"Gracias por inscribirte en la Quinta edición de la Butter Cup, {usuario.nombre_bloodbowl}!")
-            # Temporada 25/26: todos los equipos deben ser nuevos
-            await registroEquipoNuevo(user)
+            await seleccionar_tipo_preferencia(user)
         else:
             await user.send(f"Ya tiene un registro comenzado {usuario.nombre_bloodbowl}, si continua sus datos se sobreescribirán")
-            # Temporada 25/26: se omite la elección de tipo de equipo
-            await registroEquipoNuevo(user)
+            await seleccionar_tipo_preferencia(user)
     else:
         view = WelcomeView(user.id)
         await user.send("""Bienvenido a la quinta edición de la BUTTER CUP.
@@ -58,45 +60,45 @@ Estamos emocionados por contar contigo. Vamos a empezar tu inscripción.
 Primero necesitamos saber tu nombre EXACTO en blood bowl, pulsa EMPEZAR y escribelo (¡importan las mayúsculas!)""", view=view)
     session.close()
     
-# async def seleccionar_tipo_preferencia(user):
-#     view = TipoPreferenciaView(user.id)
-#     await user.send("Elija su preferencia de equipo:", view=view)
+async def seleccionar_tipo_preferencia(user):
+    view = TipoPreferenciaView(user.id)
+    await user.send("Elija su preferencia de equipo:", view=view)
 
 
-# class TipoPreferenciaView(discord.ui.View):
-#     def __init__(self, usuario_id):
-#         super().__init__(timeout=None)
-#         self.usuario_id = usuario_id
-#         for label, desc in tipoPreferenciaOptions:
-#             button = discord.ui.Button(label=desc, style=discord.ButtonStyle.primary, custom_id=label)
-#             button.callback = self.select_preference
-#             self.add_item(button)
-#
-#     async def select_preference(self, interaction: discord.Interaction):
-#         preference = interaction.data['custom_id']
-#         await interaction.response.defer()
-#
-#         Session = sessionmaker(bind=GestorSQL.conexionEngine())
-#         session = Session()
-#         try:
-#             inscripcion = session.query(GestorSQL.Inscripcion).filter_by(id_usuario_discord=self.usuario_id).first()
-#             if not inscripcion:
-#                 inscripcion = GestorSQL.Inscripcion(id_usuario_discord=self.usuario_id)
-#                 session.add(inscripcion)
-#             inscripcion.tipoPreferencia = preference
-#             session.commit()
-#
-#             if preference == 'Nuevo':
-#                 await registroEquipoNuevo(interaction.user)
-#             elif preference == 'Reformado':
-#                 await registroEquipoExistente(interaction.user)
-#             else:
-#                 await registroEquipoExistente(interaction.user, next_step='preferencias')
-#         except Exception as e:
-#             session.rollback()
-#             await interaction.followup.send("Error al registrar la preferencia.", ephemeral=True)
-#         finally:
-#             session.close()
+class TipoPreferenciaView(discord.ui.View):
+    def __init__(self, usuario_id):
+        super().__init__(timeout=None)
+        self.usuario_id = usuario_id
+        for label, desc in tipoPreferenciaOptions:
+            button = discord.ui.Button(label=desc, style=discord.ButtonStyle.primary, custom_id=label)
+            button.callback = self.select_preference
+            self.add_item(button)
+
+    async def select_preference(self, interaction: discord.Interaction):
+        preference = interaction.data['custom_id']
+        await interaction.response.defer()
+
+        Session = sessionmaker(bind=GestorSQL.conexionEngine())
+        session = Session()
+        try:
+            inscripcion = session.query(GestorSQL.Inscripcion).filter_by(id_usuario_discord=self.usuario_id).first()
+            if not inscripcion:
+                inscripcion = GestorSQL.Inscripcion(id_usuario_discord=self.usuario_id)
+                session.add(inscripcion)
+            inscripcion.tipoPreferencia = preference
+            session.commit()
+
+            await enviar_mensaje_flexibilidad(interaction.user)
+
+            if preference == 'Nuevo':
+                await registroEquipoNuevo(interaction.user)
+            elif preference == 'Reformado':
+                await registroEquipoExistente(interaction.user)
+        except Exception as e:
+            session.rollback()
+            await interaction.followup.send("Error al registrar la preferencia.", ephemeral=True)
+        finally:
+            session.close()
 
 async def registroEquipoNuevo(user):
     await user.send("""Para crear un nuevo equipo en la Butter Cup primero te tenemos que adjudicar una raza por __**sorteo**__.
@@ -107,19 +109,19 @@ Para que te podamos asignar una raza deberás elegir __4 favoritas__ y __banear 
 Intentaremos asignarte una de tus razas favoritas, pero hay un número limitado de plazas por raza. Si no se pudiera se te asignaría cualquier otra raza pero nunca una de las baneadas asi que... ¡elige sabiamente!""")
     await registroPreferencias(user)
     
-# async def registroEquipoExistente(user, next_step=None):
-#     Session = sessionmaker(bind=GestorSQL.conexionEngine())
-#     session = Session()
-#     usuario = session.query(GestorSQL.Usuario).filter_by(id_discord=user.id).first()
-#     if usuario:
-#         equipos = session.query(GestorSQL.equiposReformados).filter_by(id_usuario=usuario.idUsuarios).all()
-#         if equipos:
-#             view = EquiposView(user.id, equipos, next_step)
-#             await user.send("Selecciona uno de tus equipos existentes:", view=view)
-#         else:
-#             await user.send("No tiene equipos creados, continuaremos con un equipo nuevo.")
-#             await registroEquipoNuevo(user)
-#     session.close()
+async def registroEquipoExistente(user, next_step=None):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    usuario = session.query(GestorSQL.Usuario).filter_by(id_discord=user.id).first()
+    if usuario:
+        equipos = session.query(GestorSQL.equiposReformados).filter_by(id_usuario=usuario.idUsuarios).all()
+        if equipos:
+            view = EquiposView(user.id, equipos, next_step)
+            await user.send("Selecciona uno de tus equipos existentes:", view=view)
+        else:
+            await user.send("No tiene equipos creados, continuaremos con un equipo nuevo.")
+            await registroEquipoNuevo(user)
+    session.close()
 
 async def registroPreferencias(user):
     view = RazasView(racesIniciales, racesConEmojiIniciales, user.id, tipo='preferencias')
@@ -159,42 +161,42 @@ class ModalNuevoUsuario(discord.ui.Modal, title="Registro de Usuario"):
         division_view = DivisionView(self.usuario_id)
         await interaction.followup.send("Como aún no te conocemos no sabemos cuales son tus habilidades como entrenador. ¡Elige una división para tu bautismo de sangre!:", view=division_view)
 
-                
-# class EquiposView(discord.ui.View):
-#     def __init__(self, usuario_id, equipos, next_step=None):
-#         super().__init__()
-#         self.usuario_id = usuario_id
-#         self.next_step = next_step
-#         for equipo in equipos:
-#             self.add_item(discord.ui.Button(label=equipo.nombre_equipo, style=discord.ButtonStyle.primary, custom_id=f"equipo_{equipo.id}"))
-#
-#     async def interaction_check(self, interaction: discord.Interaction):
-#         if 'custom_id' in interaction.data and interaction.data['custom_id'].startswith("equipo_"):
-#             await self.elegir_equipo(interaction)
-#         return True
-#
-#     async def elegir_equipo(self, interaction: discord.Interaction):
-#         equipo_id = interaction.data['custom_id'].split('_')[1]
-#         await interaction.response.defer()
-#         Session = sessionmaker(bind=GestorSQL.conexionEngine())
-#         session = Session()
-#         try:
-#             equipo = session.query(GestorSQL.equiposReformados).filter_by(id=equipo_id).first()
-#             inscripcion = session.query(GestorSQL.Inscripcion).filter_by(id_usuario_discord=self.usuario_id).first()
-#             if inscripcion:
-#                 inscripcion.nombre_equipo = equipo.nombre_equipo
-#                 session.commit()
-#                 if self.next_step == 'preferencias':
-#                     await registroPreferencias(interaction.user)
-#                 else:
-#                     await interaction.followup.send("Ha terminado la inscripción para la cuarta edición de la Butter Cup. ¡Nos vemos el 12 de mayo!. Te avisaré de todo por mp 😉")
-#                     await asyncio.sleep(60)
-#                     await interaction.followup.send("¡Se me olvidaba! La Butter Cup tiene premios y sorteos alucinantes, lamentablemente el Lombard es un vago y aún no ha hecho el sorteo anterior. ¡Pásate por el canal 💰premios💰 para echarles un ojo! ¡Te avisaremos cuando se abran los de esta edición!")
-#         except Exception as e:
-#             session.rollback()
-#             await interaction.followup.send("Error al registrar el equipo.", ephemeral=True)
-#         finally:
-#             session.close()
+
+class EquiposView(discord.ui.View):
+    def __init__(self, usuario_id, equipos, next_step=None):
+        super().__init__()
+        self.usuario_id = usuario_id
+        self.next_step = next_step
+        for equipo in equipos:
+            self.add_item(discord.ui.Button(label=equipo.nombre_equipo, style=discord.ButtonStyle.primary, custom_id=f"equipo_{equipo.id}"))
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        if 'custom_id' in interaction.data and interaction.data['custom_id'].startswith("equipo_"):
+            await self.elegir_equipo(interaction)
+        return True
+
+    async def elegir_equipo(self, interaction: discord.Interaction):
+        equipo_id = interaction.data['custom_id'].split('_')[1]
+        await interaction.response.defer()
+        Session = sessionmaker(bind=GestorSQL.conexionEngine())
+        session = Session()
+        try:
+            equipo = session.query(GestorSQL.equiposReformados).filter_by(id=equipo_id).first()
+            inscripcion = session.query(GestorSQL.Inscripcion).filter_by(id_usuario_discord=self.usuario_id).first()
+            if inscripcion:
+                inscripcion.nombre_equipo = equipo.nombre_equipo
+                session.commit()
+                if self.next_step == 'preferencias':
+                    await registroPreferencias(interaction.user)
+                else:
+                    await interaction.followup.send("Ha terminado la inscripción para la quinta edición de la Butter Cup. ¡Nos vemos el 13 de septiembre!. Te avisaré de todo por mp 😉")
+                    await asyncio.sleep(60)
+                    await interaction.followup.send("¡Se me olvidaba! La Butter Cup tiene premios y sorteos alucinantes, lamentablemente el Lombard es un vago y aún no ha hecho el sorteo anterior. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo! ¡Te avisaremos cuando se abran los de esta edición!")
+        except Exception as e:
+            session.rollback()
+            await interaction.followup.send("Error al registrar el equipo.", ephemeral=True)
+        finally:
+            session.close()
 
 class RazasView(discord.ui.View):
     def __init__(self, races, racesConEmoji, usuario_id, tipo, preferencias=None):
@@ -295,7 +297,7 @@ class DivisionView(discord.ui.View):
             inscripcion = session.query(GestorSQL.Inscripcion).filter_by(id_usuario_discord=self.usuario_id).first()
             inscripcion.division = division
             session.commit()
-            await registroEquipoNuevo(interaction.user)
+            await seleccionar_tipo_preferencia(interaction.user)
         except Exception as e:
             session.rollback()
             await interaction.followup.send_message("Error al guardar la división.", ephemeral=True)
