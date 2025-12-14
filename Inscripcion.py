@@ -26,13 +26,13 @@ racesIniciales = [
 
 tipoPreferenciaOptions = [
     ("Nuevo", "Nuevo"),
-    ("Reformado", "Reformado")
+    ("Existente", "Existente")
 ]
 
 
 async def enviar_mensaje_flexibilidad(user):
     await user.send(
-"A continuación te explicamos, de forma clara y rápida, cómo se organizarán los equipos y los grupos:\n\n1️⃣ EQUIPOS NUEVOS\nTras el sorteo de los equipos para quienes hayan elegido la opción \"nuevo\", los grupos se crearán automáticamente.\n\n2️⃣ EVITAR MIRRORS\nSe intentará, siempre que sea posible, que no haya dos equipos iguales dentro del mismo grupo.\n\n3️⃣ BALANCE DE GRUPOS\nBuscaremos grupos equilibrados, con una composición aproximada de:\n- 2 equipos de fuerza\n- 2 equipos equilibrados\n- 2 equipos de agilidad\n(Este equilibrio se aplicará en la medida de lo posible).\n\n4️⃣ SI NO SON MÚLTIPLOS DE 6\nSi el número de equipos nuevos no es múltiplo de 6, se intentará que los equipos nuevos se enfrenten a los equipos de menor valoración disponible.\n\n5️⃣ __FLEXIBILIDAD NUEVO / REFORMADO__\nSi alguien puede darnos flexibilidad para usar nuevo o reformado, se lo agradeceremos mucho.\nNuestro objetivo es que los equipos nuevos sean múltiplos de 6 dentro de su división.\n👉 Para ofrecer esta flexibilidad, envía un MP a Pikoleto.\n\n"
+"A continuación te explicamos, de forma clara y rápida, cómo se organizarán los equipos y los grupos:\n\n1️⃣ EQUIPOS NUEVOS\nTras el sorteo de los equipos para quienes hayan elegido la opción \"nuevo\", los grupos se crearán automáticamente.\n\n2️⃣ EVITAR MIRRORS\nSe intentará, siempre que sea posible, que no haya dos equipos iguales dentro del mismo grupo.\n\n3️⃣ BALANCE DE GRUPOS\nBuscaremos grupos equilibrados, con una composición aproximada de:\n- 2 equipos de fuerza\n- 2 equipos equilibrados\n- 2 equipos de agilidad\n(Este equilibrio se aplicará en la medida de lo posible).\n\n4️⃣ SI NO SON MÚLTIPLOS DE 6\nSi el número de equipos nuevos no es múltiplo de 6, se intentará que los equipos nuevos se enfrenten a los equipos de menor valoración disponible.\n\n5️⃣ __FLEXIBILIDAD NUEVO / EXISTENTE__\nSi alguien puede darnos flexibilidad para usar nuevo o existente, se lo agradeceremos mucho.\nNuestro objetivo es que los equipos nuevos sean múltiplos de 6 dentro de su división.\n👉 Para ofrecer esta flexibilidad, envía un MP a Pikoleto.\n\n"
     )
 
 async def handle_registration(user):
@@ -92,7 +92,7 @@ class TipoPreferenciaView(discord.ui.View):
 
             if preference == 'Nuevo':
                 await registroEquipoNuevo(interaction.user)
-            elif preference == 'Reformado':
+            elif preference == 'Existente':
                 await registroEquipoExistente(interaction.user)
         except Exception as e:
             session.rollback()

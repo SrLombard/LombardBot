@@ -2,6 +2,7 @@
 import asyncio
 from pickle import LONG
 from re import A
+from typing import Optional
 
 from discord.ext.commands.parameters import Author
 
@@ -3392,7 +3393,7 @@ async def verificar_inscripciones(ctx):
 
 @bot.command(name="recordar_inscripciones")
 @commands.has_permissions(administrator=True)
-async def recordar_inscripciones(ctx):
+async def recordar_inscripciones(ctx, solo_objetivo: Optional[int] = None):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
 
@@ -3413,7 +3414,16 @@ async def recordar_inscripciones(ctx):
         822383329855930388  # mygaitero
     }
 
+    TARGET_REMINDER_IDS = {
+        681577610010296372,
+        208239645014753280,
+    }
+
+    solo_ids_objetivo = str(solo_objetivo) == "1"
+
     miembros_con_rol = butter_role.members
+    if solo_ids_objetivo:
+        miembros_con_rol = [member for member in miembros_con_rol if member.id in TARGET_REMINDER_IDS]
     no_inscritos_con_rol = []
 
     for member in miembros_con_rol:
