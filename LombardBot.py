@@ -3436,14 +3436,14 @@ async def recordar_inscripciones(ctx):
 """🚨🚨 **ÚLTIMO AVISO** 🚨🚨
 
 🏆 **BUTTER CUP V (quinta edición)**  
-Arranca el recorrido hacia los **tickets del Mundial 2026**: serán **3 ediciones** (invierno 2025, primavera 2026 y verano 2026) y todo culmina en un **playoff veraniego**.
+Segunda temporada hacia los **tickets del Mundial 2026**: serán **3 ediciones** (invierno 2025, primavera 2026 y verano 2026) y todo culmina en un **playoff veraniego**.
 
 ⚙️ **Formato**  
 • **3 divisiones**: Oro, Plata y Bronce.  
 • Los mejores **ascienden de división** cada edición.  
 • Los grupos se crean en **packs de 6**.
 
-📅 **Cierre de inscripciones: mañana, sábado 13 de septiembre**  
+📅 **Cierre de inscripciones: sábado 27 de Diciembre**  
 No te quedes sin plaza: apúntate en <#1280102673059680316>, **consulta las reglas** y pregunta lo que necesites.
 
 Si solo tienes el rol para estar atento de la copa, no necesitas hacer nada.
