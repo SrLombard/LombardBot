@@ -3433,8 +3433,7 @@ async def recordar_inscripciones(ctx):
     for member in no_inscritos_con_rol:
         try:
             await member.send(
-"""🚨🚨 **ÚLTIMO AVISO** 🚨🚨
-
+"""
 🏆 **BUTTER CUP V (quinta edición)**  
 Segunda temporada hacia los **tickets del Mundial 2026**: serán **3 ediciones** (invierno 2025, primavera 2026 y verano 2026) y todo culmina en un **playoff veraniego**.
 
