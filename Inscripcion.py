@@ -24,6 +24,9 @@ racesIniciales = [
     "Orcos", "Orcos negros", "Renegados", "Skaven", "Unión elfica","Stunty","Nueva raza"
 ]
 
+NUM_PREFERENCIAS = 5
+NUM_BANS = 5
+
 # tipoPreferenciaOptions = [
 #     ("Nuevo", "Nuevo"),
 #     ("Nuevo/Reformado", "Prefiero nuevo pero tengo existente"),
@@ -103,7 +106,7 @@ async def registroEquipoNuevo(user):
                     
  El sorteo se realizará en directo aproximadamente el <t:1757790000:F> en canal de twitch de SrLombard.
                     
-Para que te podamos asignar una raza deberás elegir __4 favoritas__ y __banear otras 4__.
+Para que te podamos asignar una raza deberás elegir __5 favoritas__ y __banear otras 5__.
 Intentaremos asignarte una de tus razas favoritas, pero hay un número limitado de plazas por raza. Si no se pudiera se te asignaría cualquier otra raza pero nunca una de las baneadas asi que... ¡elige sabiamente!""")
     await registroPreferencias(user)
     
@@ -205,6 +208,7 @@ class RazasView(discord.ui.View):
         self.tipo         = tipo
         self.seleccionados= []
         self.preferencias = preferencias or []
+        self.max_selecciones = NUM_PREFERENCIAS if tipo == 'preferencias' else NUM_BANS
 
         # Recorremos ambos arrays juntos
         for race, emoji in zip(races, racesConEmoji):
@@ -219,15 +223,15 @@ class RazasView(discord.ui.View):
     async def select_race(self, interaction: discord.Interaction):
         race_selected = interaction.data['custom_id']
         self.seleccionados.append(race_selected)
-        if len(self.seleccionados) < 4:
+        if len(self.seleccionados) < self.max_selecciones:
             for item in self.children:
                 if getattr(item, "custom_id", None) == race_selected:
                     item.disabled = True
                     break
             await interaction.response.edit_message(view=self)
-        
-        if len(self.seleccionados) == 4:
-            for item in self.children:               
+
+        if len(self.seleccionados) == self.max_selecciones:
+            for item in self.children:
                 item.disabled = True
 
             await interaction.response.edit_message(view=self)
@@ -238,7 +242,7 @@ class RazasView(discord.ui.View):
                 new_races = [r for r in self.races if r not in self.seleccionados]
                 new_racesConEmoji = [emoji for r, emoji in zip(self.races, self.racesConEmoji) if r not in self.seleccionados]
                 new_view = RazasView(new_races, new_racesConEmoji, self.usuario_id, 'bans',preferencias=self.seleccionados)
-                await interaction.followup.send("Ahora debe banear 4 razas con las que no quiere jugar:", view=new_view)
+                await interaction.followup.send("Ahora debe banear 5 razas con las que no quiere jugar:", view=new_view)
             else:
                 mensaje = f"Sus bans son: {', '.join(self.seleccionados)}"
                 guardar_preferencias_bans(self.usuario_id,self.preferencias,self.seleccionados)
@@ -256,15 +260,20 @@ def guardar_preferencias_bans(usuario_id, preferencias, bans):
             inscripcion = GestorSQL.Inscripcion(id_usuario_discord=usuario_id)
             session.add(inscripcion)
         
-        inscripcion.pref1 = preferencias[0]
-        inscripcion.pref2 = preferencias[1]
-        inscripcion.pref3 = preferencias[2]
-        inscripcion.pref4 = preferencias[3]
-        
-        inscripcion.ban1 = bans[0]
-        inscripcion.ban2 = bans[1]
-        inscripcion.ban3 = bans[2]
-        inscripcion.ban4 = bans[3]
+        preferencias_ext = (preferencias + [None] * NUM_PREFERENCIAS)[:NUM_PREFERENCIAS]
+        bans_ext = (bans + [None] * NUM_BANS)[:NUM_BANS]
+
+        inscripcion.pref1 = preferencias_ext[0]
+        inscripcion.pref2 = preferencias_ext[1]
+        inscripcion.pref3 = preferencias_ext[2]
+        inscripcion.pref4 = preferencias_ext[3]
+        inscripcion.pref5 = preferencias_ext[4]
+
+        inscripcion.ban1 = bans_ext[0]
+        inscripcion.ban2 = bans_ext[1]
+        inscripcion.ban3 = bans_ext[2]
+        inscripcion.ban4 = bans_ext[3]
+        inscripcion.ban5 = bans_ext[4]
         
         session.commit()
     except Exception as e:
