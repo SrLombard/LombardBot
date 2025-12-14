@@ -221,26 +221,26 @@ class RazasView(discord.ui.View):
     async def select_race(self, interaction: discord.Interaction):
         race_selected = interaction.data['custom_id']
         self.seleccionados.append(race_selected)
-        if len(self.seleccionados) < 4:
+        if len(self.seleccionados) < 5:
             for item in self.children:
                 if getattr(item, "custom_id", None) == race_selected:
                     item.disabled = True
                     break
             await interaction.response.edit_message(view=self)
-        
-        if len(self.seleccionados) == 4:
-            for item in self.children:               
+
+        if len(self.seleccionados) == 5:
+            for item in self.children:
                 item.disabled = True
 
             await interaction.response.edit_message(view=self)
-            
+
             if self.tipo == 'preferencias':
                 mensaje = f"Sus preferencias son: {', '.join(self.seleccionados)}"
                 await interaction.followup.send(mensaje)
                 new_races = [r for r in self.races if r not in self.seleccionados]
                 new_racesConEmoji = [emoji for r, emoji in zip(self.races, self.racesConEmoji) if r not in self.seleccionados]
                 new_view = RazasView(new_races, new_racesConEmoji, self.usuario_id, 'bans',preferencias=self.seleccionados)
-                await interaction.followup.send("Ahora debe banear 4 razas con las que no quiere jugar:", view=new_view)
+                await interaction.followup.send("Ahora debe banear 5 razas con las que no quiere jugar:", view=new_view)
             else:
                 mensaje = f"Sus bans son: {', '.join(self.seleccionados)}"
                 guardar_preferencias_bans(self.usuario_id,self.preferencias,self.seleccionados)
@@ -262,11 +262,13 @@ def guardar_preferencias_bans(usuario_id, preferencias, bans):
         inscripcion.pref2 = preferencias[1]
         inscripcion.pref3 = preferencias[2]
         inscripcion.pref4 = preferencias[3]
-        
+        inscripcion.pref5 = preferencias[4]
+
         inscripcion.ban1 = bans[0]
         inscripcion.ban2 = bans[1]
         inscripcion.ban3 = bans[2]
         inscripcion.ban4 = bans[3]
+        inscripcion.ban5 = bans[4]
         
         session.commit()
     except Exception as e:
