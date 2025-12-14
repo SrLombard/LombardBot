@@ -12,16 +12,16 @@ import UtilesDiscord
 import asyncio
 
 racesConEmojiIniciales = [
-    "👴🏻Alianza del viejo mundo👴🏻","🏹Amazonas🏹", "🐐Caos Elegido🐐", "⛏Enanos⛏", "🔮Elfos oscuros🔮",
+    "👴🏻Alianza del viejo mundo👴🏻","🏹Amazonas🏹", "🐐Caos Elegido🐐", "⛏Enanos⛏","👹Enanos del Caos👹", "🔮Elfos oscuros🔮",
     "🌲Elfos silvanos🌲", "🦎Hombres lagarto🦎", "🐺Horror nigromántico🐺", "🙎🏻‍Humanos🙎🏻‍",
     "🤢Inframundo🤢","🩸Khrone🩸", "💀No muertos💀", "👲🏻Nobleza Imperial👲🏻","❄Nordicos❄", "🤮Nurgle🤮",
-    "🐸Orcos🐸", "👹Orcos negros👹", "👨‍👧‍👦Renegados👨‍👨‍👧", "🐀Skaven🐀", "🤾🏻‍Unión elfica🤾","🧚🏻‍♂️Stunty🌜","🎲Nueva raza🎲"
+    "🐸Orcos🐸", "👹Orcos negros👹", "👨‍👧‍👦Renegados👨‍👨‍👧", "🐀Skaven🐀", "🤾🏻‍Unión elfica🤾","🧚🏻‍♂️Stunty🌜"
 ]
 racesIniciales = [
-    "Alianza del viejo mundo","Amazonas,", "Caos Elegido", "Enanos", "Elfos oscuros",
+    "Alianza del viejo mundo","Amazonas,", "Caos Elegido", "Enanos","Eanos del Caos", "Elfos oscuros",
     "Elfos silvanos", "Hombres lagarto", "Horror nigromántico", "Humanos",
     "Inframundo","Khorne", "No muertos", "Nobleza Imperial", "Nordicos","Nurgle",
-    "Orcos", "Orcos negros", "Renegados", "Skaven", "Unión elfica","Stunty","Nueva raza"
+    "Orcos", "Orcos negros", "Renegados", "Skaven", "Unión elfica","Stunty"
 ]
 
 tipoPreferenciaOptions = [
@@ -32,7 +32,7 @@ tipoPreferenciaOptions = [
 
 async def enviar_mensaje_flexibilidad(user):
     await user.send(
-        "En el caso de que quieras ser flexible y permitirnos ajustar mejor las divisiones y no te importe que modifiquemos tu opción contacta con Pikoleto por mensaje privado"
+"A continuación te explicamos, de forma clara y rápida, cómo se organizarán los equipos y los grupos:\n\n1️⃣ EQUIPOS NUEVOS\nTras el sorteo de los equipos para quienes hayan elegido la opción \"nuevo\", los grupos se crearán automáticamente.\n\n2️⃣ EVITAR MIRRORS\nSe intentará, siempre que sea posible, que no haya dos equipos iguales dentro del mismo grupo.\n\n3️⃣ BALANCE DE GRUPOS\nBuscaremos grupos equilibrados, con una composición aproximada de:\n- 2 equipos de fuerza\n- 2 equipos equilibrados\n- 2 equipos de agilidad\n(Este equilibrio se aplicará en la medida de lo posible).\n\n4️⃣ SI NO SON MÚLTIPLOS DE 6\nSi el número de equipos nuevos no es múltiplo de 6, se intentará que los equipos nuevos se enfrenten a los equipos de menor valoración disponible.\n\n5️⃣ __FLEXIBILIDAD NUEVO / REFORMADO__\nSi alguien puede darnos flexibilidad para usar nuevo o reformado, se lo agradeceremos mucho.\nNuestro objetivo es que los equipos nuevos sean múltiplos de 6 dentro de su división.\n👉 Para ofrecer esta flexibilidad, envía un MP a Pikoleto.\n\n"
     )
 
 async def handle_registration(user):
@@ -45,14 +45,14 @@ async def handle_registration(user):
             nueva_inscripcion = GestorSQL.Inscripcion(id_usuario_discord=user.id, nombre_bloodbowl=usuario.nombre_bloodbowl)
             session.add(nueva_inscripcion)
             session.commit()
-            await user.send(f"Gracias por inscribirte en la Quinta edición de la Butter Cup, {usuario.nombre_bloodbowl}!")
+            await user.send(f"Gracias por inscribirte en la Sexta edición de la Butter Cup, {usuario.nombre_bloodbowl}!")
             await seleccionar_tipo_preferencia(user)
         else:
             await user.send(f"Ya tiene un registro comenzado {usuario.nombre_bloodbowl}, si continua sus datos se sobreescribirán")
             await seleccionar_tipo_preferencia(user)
     else:
         view = WelcomeView(user.id)
-        await user.send("""Bienvenido a la quinta edición de la BUTTER CUP.
+        await user.send("""Bienvenido a la sexta edición de la BUTTER CUP.
                         
 Estamos emocionados por contar contigo. Vamos a empezar tu inscripción.
 
@@ -103,9 +103,9 @@ class TipoPreferenciaView(discord.ui.View):
 async def registroEquipoNuevo(user):
     await user.send("""Para crear un nuevo equipo en la Butter Cup primero te tenemos que adjudicar una raza por __**sorteo**__.
                     
- El sorteo se realizará en directo aproximadamente el <t:1757790000:F> en canal de twitch de SrLombard.
+ El sorteo se realizará en directo aproximadamente el <t:1766950200:F> en canal de twitch de SrLombard.
                     
-Para que te podamos asignar una raza deberás elegir __4 favoritas__ y __banear otras 4__.
+Para que te podamos asignar una raza deberás elegir __5 favoritas__ y __banear otras 5__.
 Intentaremos asignarte una de tus razas favoritas, pero hay un número limitado de plazas por raza. Si no se pudiera se te asignaría cualquier otra raza pero nunca una de las baneadas asi que... ¡elige sabiamente!""")
     await registroPreferencias(user)
     
@@ -189,9 +189,9 @@ class EquiposView(discord.ui.View):
                 if self.next_step == 'preferencias':
                     await registroPreferencias(interaction.user)
                 else:
-                    await interaction.followup.send("Ha terminado la inscripción para la quinta edición de la Butter Cup. ¡Nos vemos el 13 de septiembre!. Te avisaré de todo por mp 😉")
+                    await interaction.followup.send("Ha terminado la inscripción para la quinta edición de la Butter Cup. ¡Nos vemos el 28 de Diciembre!. Te avisaré de todo por mp 😉")
                     await asyncio.sleep(60)
-                    await interaction.followup.send("¡Se me olvidaba! La Butter Cup tiene premios y sorteos alucinantes, lamentablemente el Lombard es un vago y aún no ha hecho el sorteo anterior. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo! ¡Te avisaremos cuando se abran los de esta edición!")
+                    await interaction.followup.send("¡Se me olvidaba! La Butter Cup tiene premios y sorteos alucinantes, Es totalmente opcional y sirve para financiar los premios físicos. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo!")
         except Exception as e:
             session.rollback()
             await interaction.followup.send("Error al registrar el equipo.", ephemeral=True)
@@ -245,9 +245,9 @@ class RazasView(discord.ui.View):
                 mensaje = f"Sus bans son: {', '.join(self.seleccionados)}"
                 guardar_preferencias_bans(self.usuario_id,self.preferencias,self.seleccionados)
                 await interaction.followup.send(mensaje)
-                await interaction.followup.send("Ha terminado la inscripción para la quinta edición de la Butter Cup. ¡Nos vemos el 13 de septiembre!. Te avisaré de todo por mp 😉")
+                await interaction.followup.send("Ha terminado la inscripción para la quinta edición de la Butter Cup. ¡Nos vemos el 28 de Diciembre!. Te avisaré de todo por mp 😉")
                 await asyncio.sleep(60)
-                await interaction.followup.send("¡Se me olvidaba! La Butter Cup tiene premios y sorteos alucinantes, lamentablemente el Lombard es un vago y aún no ha hecho el sorteo anterior. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo! ¡Te avisaremos cuando se abran los de esta edición!")
+                await interaction.followup.send("¡Se me olvidaba! La Butter Cup tiene premios y sorteos alucinantes, Es totalmente opcional y sirve para financiar los premios físicos. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo!")
         
 def guardar_preferencias_bans(usuario_id, preferencias, bans):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
