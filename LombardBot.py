@@ -3444,7 +3444,7 @@ async def recordar_inscripciones(ctx, solo_objetivo: Optional[int] = None):
         try:
             await member.send(
 """
-🏆 **BUTTER CUP V (quinta edición)**  
+🏆 **BUTTER CUP VI (sexta edición)**  
 Segunda temporada hacia los **tickets del Mundial 2026**: serán **3 ediciones** (invierno 2025, primavera 2026 y verano 2026) y todo culmina en un **playoff veraniego**.
 
 ⚙️ **Formato**  
