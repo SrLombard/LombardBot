@@ -31,6 +31,7 @@ import aiohttp
 import Imagenes
 import threading
 import random
+import math
 from sqlalchemy import BIGINT, create_engine, Column, Integer, String, ForeignKey, false, true,text
 from sqlalchemy import and_, or_ 
 from sqlalchemy.ext.declarative import declarative_base
@@ -70,6 +71,10 @@ canales_permitidos = ['457740100097540106']
 
 # Lista de comandos a los que el bot reaccionará
 comandos = ['eco', 'otroComando']
+
+# IDs para la actualización programada de peticiones de razas
+PETICIONES_RAZAS_CANAL_ID = 1324722363380477972
+PETICIONES_RAZAS_MESSAGE_ID = 1324722388076140677
 
 
 @tasks.loop(minutes=60)
@@ -3475,7 +3480,7 @@ async def comprueba_quedadas(ctx, enviar_mensaje: int = 0):
 
 async def func_comprueba_quedadas(enviar_mensaje: int = 0):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
-    session = Session()    
+    session = Session()
     try:
         # Obtener las filas relevantes del calendario
         proximos_martes = datetime.now() + timedelta((1 - datetime.now().weekday() + 7) % 7 + 2)  # Calcula el próximo martes
@@ -3665,6 +3670,135 @@ async def Reforma(interaction: discord.Interaction):
     # Llamar a la lógica en Reformas.py, pasando el token de la API
     await Reformas.iniciar_reforma(interaction, bbowl_API_token)
 
+
+def _normalizar_raza(raza: str) -> str:
+    if not raza:
+        return ""
+    return raza.strip().strip(",").lower()
+
+
+def _generar_contenido_peticiones_razas(session):
+    race_mapping = {
+        _normalizar_raza(race): (race, emoji)
+        for race, emoji in zip(Inscripcion.racesIniciales, Inscripcion.racesConEmojiIniciales)
+    }
+
+    preferencias_count = {race: 0 for race in race_mapping}
+    existentes_count = {race: 0 for race in race_mapping}
+
+    inscripciones = session.query(GestorSQL.Inscripcion).all()
+
+    total_personas = len(inscripciones)
+    numero_razas = 22
+    capacidad_por_raza = math.ceil(total_personas / numero_razas + 1)
+
+    for inscripcion in inscripciones:
+        if (inscripcion.tipoPreferencia or "").lower() != "nuevo":
+            continue
+
+        raza_pref = _normalizar_raza(inscripcion.pref1)
+        if raza_pref in preferencias_count:
+            preferencias_count[raza_pref] += 1
+
+    for inscripcion in inscripciones:
+        if (inscripcion.tipoPreferencia or "").lower() != "existente":
+            continue
+
+        usuario = session.query(GestorSQL.Usuario).filter_by(
+            id_discord=inscripcion.id_usuario_discord
+        ).first()
+        if not usuario or not usuario.raza:
+            continue
+
+        raza_equipo = _normalizar_raza(usuario.raza)
+        if raza_equipo in existentes_count:
+            existentes_count[raza_equipo] += 1
+
+    timestamp_actualizacion = int(datetime.now().timestamp())
+    lineas_tabla = []
+    filas = []
+
+    for clave_raza, (nombre_raza, emoji) in race_mapping.items():
+        existentes = existentes_count.get(clave_raza, 0)
+        preferencias = preferencias_count.get(clave_raza, 0)
+        total = existentes + preferencias
+        filas.append(
+            {
+                "raza": f"{emoji} {nombre_raza}",
+                "total": f"{total}/{capacidad_por_raza}",
+                "detalle": f"{existentes} equipos existentes y {preferencias} equipos de primera preferencia",
+            }
+        )
+
+    ancho_raza = max(len("Raza"), *(len(fila["raza"]) for fila in filas))
+    ancho_total = max(len("Total"), *(len(fila["total"]) for fila in filas))
+
+    lineas_tabla.append(
+        f"{'Raza'.ljust(ancho_raza)} | {'Total'.ljust(ancho_total)} | Detalle"
+    )
+    lineas_tabla.append(
+        f"{'-' * ancho_raza}-+-{'-' * ancho_total}-+{'-' * 40}"
+    )
+
+    for fila in filas:
+        lineas_tabla.append(
+            f"{fila['raza'].ljust(ancho_raza)} | {fila['total'].ljust(ancho_total)} | {fila['detalle']}"
+        )
+
+    lineas = [
+        f"Lista de peticiones de razas para la sexta temporada actualizada a fecha de <t:{timestamp_actualizacion}:f>",
+        f"Capacidad estimada por raza: ceil(({total_personas}/{numero_razas}) + 1) = {capacidad_por_raza}",
+        "",
+        "```",
+        *lineas_tabla,
+        "```",
+    ]
+
+    return "\n".join(lineas)
+
+
+async def actualizar_peticiones_razas(
+    bot,
+    canal_id: int = PETICIONES_RAZAS_CANAL_ID,
+    mensaje_id: int = PETICIONES_RAZAS_MESSAGE_ID
+):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        contenido = _generar_contenido_peticiones_razas(session)
+
+        canal = bot.get_channel(int(canal_id)) if canal_id else None
+        if not canal:
+            print("No se encontró el canal para actualizar las peticiones de razas.")
+            return
+
+        mensaje = await canal.fetch_message(int(mensaje_id))
+        await mensaje.edit(content=contenido)
+    except Exception as e:
+        print(f"Error al actualizar el mensaje de peticiones de razas: {e}")
+    finally:
+        session.close()
+
+
+@bot.command(name="crear_peticiones_razas")
+async def crear_peticiones_razas(ctx):
+    if str(ctx.author.id) not in maestros:
+        await ctx.send("No tienes permiso para usar este comando.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        contenido = _generar_contenido_peticiones_razas(session)
+        mensaje = await ctx.send(contenido)
+        await ctx.send(
+            f"Mensaje creado. Canal: {ctx.channel.id} | Mensaje: {mensaje.id}"
+        )
+    except Exception as e:
+        await ctx.send(f"Error al crear el mensaje de peticiones de razas: {e}")
+    finally:
+        session.close()
+
 # Estructura: { "Día": {"Hora": [lista_de_funciones]} }
 tareas_programadas = {
     "Monday": {
@@ -3678,6 +3812,22 @@ tareas_programadas = {
                     "respuesta_privada": False
                 }
             )
+        ],
+        "10": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
+                }
+            )
+        ],
+        "22": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
+                }
+            )
         ]
     },
     "Tuesday": {
@@ -3689,6 +3839,22 @@ tareas_programadas = {
                     "usuario": maestros[0],
                     "canal_destino_id": 1224689043032506429,
                     "respuesta_privada": False
+                }
+            )
+        ],
+        "10": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
+                }
+            )
+        ],
+        "22": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
                 }
             )
         ]
@@ -3705,6 +3871,14 @@ tareas_programadas = {
                 }
             )
         ],
+        "10": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
+                }
+            )
+        ],
         "15":[
             (
                 func_comprueba_quedadas,
@@ -3712,9 +3886,17 @@ tareas_programadas = {
                     "enviar_mensaje" : 1
                 }
             )
-            
+
+        ],
+        "22": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
+                }
+            )
         ]
-    },    
+    },
     "Thursday": {
         "09": [
             (
@@ -3724,6 +3906,22 @@ tareas_programadas = {
                     "usuario": maestros[0],
                     "canal_destino_id": 1224689043032506429,
                     "respuesta_privada": False
+                }
+            )
+        ],
+        "10": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
+                }
+            )
+        ],
+        "22": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
                 }
             )
         ]
@@ -3739,6 +3937,22 @@ tareas_programadas = {
                     "respuesta_privada": False
                 }
             )
+        ],
+        "10": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
+                }
+            )
+        ],
+        "22": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
+                }
+            )
         ]
     },
     "Saturday": {
@@ -3750,6 +3964,22 @@ tareas_programadas = {
                     "usuario": maestros[0],
                     "canal_destino_id": 1224689043032506429,
                     "respuesta_privada": False
+                }
+            )
+        ],
+        "10": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
+                }
+            )
+        ],
+        "22": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
                 }
             )
         ]
@@ -3765,6 +3995,22 @@ tareas_programadas = {
                     "respuesta_privada": False
                 }
             )
+        ],
+        "10": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
+                }
+            )
+        ],
+        "22": [
+            (
+                actualizar_peticiones_razas,
+                {
+                    "bot": bot
+                }
+            )
         ]
     }
 }
@@ -3772,4 +4018,3 @@ tareas_programadas = {
         
 # Ejecutar el bot con el token correspondiente
 bot.run(discord_bot_token)
-
