@@ -18,7 +18,7 @@ racesConEmojiIniciales = [
     "🐸Orcos🐸", "👹Orcos negros👹", "👨‍👧‍👦Renegados👨‍👨‍👧", "🐀Skaven🐀", "🤾🏻‍Unión elfica🤾","🦇Vampiros🦇","🧚🏻‍♂️Stunty🌜"
 ]
 racesIniciales = [
-    "Alianza del viejo mundo","Amazonas,", "Caos Elegido", "Enanos","Eanos del Caos", "Elfos oscuros",
+    "Alianza del viejo mundo","Amazonas", "Caos Elegido", "Enanos","Eanos del Caos", "Elfos oscuros",
     "Elfos silvanos", "Hombres lagarto", "Horror nigromántico", "Humanos",
     "Inframundo","Khorne", "No muertos", "Nobleza Imperial", "Nordicos","Nurgle",
     "Orcos", "Orcos negros", "Renegados", "Skaven", "Unión elfica","Vampiros","Stunty"
