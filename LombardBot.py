@@ -3715,7 +3715,25 @@ def _generar_contenido_peticiones_razas(session):
         if raza_equipo in existentes_count:
             existentes_count[raza_equipo] += 1
 
-    timestamp_actualizacion = int(datetime.now().timestamp())
+    meses_es = [
+        "enero",
+        "febrero",
+        "marzo",
+        "abril",
+        "mayo",
+        "junio",
+        "julio",
+        "agosto",
+        "septiembre",
+        "octubre",
+        "noviembre",
+        "diciembre",
+    ]
+    ahora = datetime.now()
+    fecha_formateada = (
+        f"{ahora.day} de {meses_es[ahora.month - 1]} de {ahora.year} "
+        f"{ahora.strftime('%H:%M')}"
+    )
     lineas_tabla = []
     filas = []
 
@@ -3725,7 +3743,7 @@ def _generar_contenido_peticiones_razas(session):
         total = existentes + preferencias
         filas.append(
             {
-                "raza": f"{emoji} {nombre_raza}",
+                "raza": emoji,
                 "total": f"{total}/{capacidad_por_raza}",
                 "detalle": f"A E:{existentes} Pref1:{preferencias}",
             }
@@ -3746,14 +3764,10 @@ def _generar_contenido_peticiones_razas(session):
             f"{fila['raza'].ljust(ancho_raza)} | {fila['total'].ljust(ancho_total)} | {fila['detalle']}"
         )
 
-    resumen_totales = "  ".join(
-        f"{fila['raza']}: {fila['total']}" for fila in filas
-    )
-
     lineas_header = [
-        f"Lista de peticiones de razas para la sexta temporada actualizada a fecha de <t:{timestamp_actualizacion}:f>",
+        "Lista de peticiones de razas para la sexta temporada actualizada a fecha de "
+        f"{fecha_formateada}",
         f"Capacidad estimada por raza: ceil(({total_personas}/{numero_razas}) + 1) = {capacidad_por_raza}",
-        f"Totales por raza (A=existentes+pref1): {resumen_totales}",
     ]
 
     lineas_tabla_contenido = [
@@ -3782,11 +3796,6 @@ async def actualizar_peticiones_razas(
             print("No se encontró el canal para actualizar las peticiones de razas.")
             return
 
-        total_longitud = len(contenido_header) + len(contenido_tabla)
-        await canal.send(
-            "Longitud de peticiones de razas -> "
-            f"encabezado: {len(contenido_header)} | tabla: {len(contenido_tabla)} | total: {total_longitud}"
-        )
         mensaje_header = await canal.fetch_message(int(mensaje_header_id))
         await mensaje_header.edit(content=contenido_header)
         mensaje_tabla = await canal.fetch_message(int(mensaje_tabla_id))
@@ -3807,11 +3816,6 @@ async def crear_peticiones_razas(ctx):
     session = Session()
     try:
         contenido_header, contenido_tabla = _generar_contenido_peticiones_razas(session)
-        total_longitud = len(contenido_header) + len(contenido_tabla)
-        await ctx.send(
-            "Longitud de peticiones de razas -> "
-            f"encabezado: {len(contenido_header)} | tabla: {len(contenido_tabla)} | total: {total_longitud}"
-        )
         mensaje_header = await ctx.send(contenido_header)
         mensaje_tabla = await ctx.send(contenido_tabla)
         await ctx.send(
