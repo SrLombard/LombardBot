@@ -3772,6 +3772,9 @@ async def actualizar_peticiones_razas(
             print("No se encontró el canal para actualizar las peticiones de razas.")
             return
 
+        await canal.send(
+            f"Longitud del mensaje de peticiones de razas: {len(contenido)} caracteres."
+        )
         mensaje = await canal.fetch_message(int(mensaje_id))
         await mensaje.edit(content=contenido)
     except Exception as e:
@@ -3790,6 +3793,9 @@ async def crear_peticiones_razas(ctx):
     session = Session()
     try:
         contenido = _generar_contenido_peticiones_razas(session)
+        await ctx.send(
+            f"Longitud del mensaje de peticiones de razas: {len(contenido)} caracteres."
+        )
         mensaje = await ctx.send(contenido)
         await ctx.send(
             f"Mensaje creado. Canal: {ctx.channel.id} | Mensaje: {mensaje.id}"
