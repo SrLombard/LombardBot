@@ -18,6 +18,7 @@ from discord import app_commands
 from datetime import datetime, timedelta
 import tzlocal
 import os
+from wcwidth import wcswidth
 from dotenv import load_dotenv
 import requests
 import asyncio
@@ -3737,6 +3738,10 @@ def _generar_contenido_peticiones_razas(session):
     lineas_tabla = []
     filas = []
 
+    def pad_display(texto: str, width: int) -> str:
+        padding = max(width - wcswidth(texto), 0)
+        return texto + (" " * padding)
+
     for clave_raza, (nombre_raza, emoji) in race_mapping.items():
         existentes = existentes_count.get(clave_raza, 0)
         preferencias = preferencias_count.get(clave_raza, 0)
@@ -3749,11 +3754,11 @@ def _generar_contenido_peticiones_razas(session):
             }
         )
 
-    ancho_raza = max(len("Raza"), *(len(fila["raza"]) for fila in filas))
-    ancho_total = max(len("Total"), *(len(fila["total"]) for fila in filas))
+    ancho_raza = max(wcswidth("Raza"), *(wcswidth(fila["raza"]) for fila in filas))
+    ancho_total = max(wcswidth("Total"), *(wcswidth(fila["total"]) for fila in filas))
 
     lineas_tabla.append(
-        f"{'Raza'.ljust(ancho_raza)} | {'Total'.ljust(ancho_total)} | Detalle"
+        f"{pad_display('Raza', ancho_raza)} | {pad_display('Total', ancho_total)} | Detalle"
     )
     lineas_tabla.append(
         f"{'-' * ancho_raza}-+-{'-' * ancho_total}-+{'-' * 40}"
@@ -3761,7 +3766,7 @@ def _generar_contenido_peticiones_razas(session):
 
     for fila in filas:
         lineas_tabla.append(
-            f"{fila['raza'].ljust(ancho_raza)} | {fila['total'].ljust(ancho_total)} | {fila['detalle']}"
+            f"{pad_display(fila['raza'], ancho_raza)} | {pad_display(fila['total'], ancho_total)} | {fila['detalle']}"
         )
 
     lineas_header = [
