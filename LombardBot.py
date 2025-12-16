@@ -74,7 +74,8 @@ comandos = ['eco', 'otroComando']
 
 # IDs para la actualización programada de peticiones de razas
 PETICIONES_RAZAS_CANAL_ID = 1324722363380477972
-PETICIONES_RAZAS_MESSAGE_ID = 1324722388076140677
+PETICIONES_RAZAS_HEADER_MESSAGE_ID = 1324722388076140677
+PETICIONES_RAZAS_TABLA_MESSAGE_ID = 1324722388076140677
 
 
 @tasks.loop(minutes=60)
@@ -3745,38 +3746,51 @@ def _generar_contenido_peticiones_razas(session):
             f"{fila['raza'].ljust(ancho_raza)} | {fila['total'].ljust(ancho_total)} | {fila['detalle']}"
         )
 
-    lineas = [
+    resumen_totales = "  ".join(
+        f"{fila['raza']}: {fila['total']}" for fila in filas
+    )
+
+    lineas_header = [
         f"Lista de peticiones de razas para la sexta temporada actualizada a fecha de <t:{timestamp_actualizacion}:f>",
         f"Capacidad estimada por raza: ceil(({total_personas}/{numero_razas}) + 1) = {capacidad_por_raza}",
-        "",
+        f"Totales por raza (A=existentes+pref1): {resumen_totales}",
+    ]
+
+    lineas_tabla_contenido = [
+        "Tabla detallada de peticiones de razas:",
         "```",
         *lineas_tabla,
         "```",
     ]
 
-    return "\n".join(lineas)
+    return "\n".join(lineas_header), "\n".join(lineas_tabla_contenido)
 
 
 async def actualizar_peticiones_razas(
     bot,
     canal_id: int = PETICIONES_RAZAS_CANAL_ID,
-    mensaje_id: int = PETICIONES_RAZAS_MESSAGE_ID
+    mensaje_header_id: int = PETICIONES_RAZAS_HEADER_MESSAGE_ID,
+    mensaje_tabla_id: int = PETICIONES_RAZAS_TABLA_MESSAGE_ID,
 ):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
     try:
-        contenido = _generar_contenido_peticiones_razas(session)
+        contenido_header, contenido_tabla = _generar_contenido_peticiones_razas(session)
 
         canal = bot.get_channel(int(canal_id)) if canal_id else None
         if not canal:
             print("No se encontró el canal para actualizar las peticiones de razas.")
             return
 
+        total_longitud = len(contenido_header) + len(contenido_tabla)
         await canal.send(
-            f"Longitud del mensaje de peticiones de razas: {len(contenido)} caracteres."
+            "Longitud de peticiones de razas -> "
+            f"encabezado: {len(contenido_header)} | tabla: {len(contenido_tabla)} | total: {total_longitud}"
         )
-        mensaje = await canal.fetch_message(int(mensaje_id))
-        await mensaje.edit(content=contenido)
+        mensaje_header = await canal.fetch_message(int(mensaje_header_id))
+        await mensaje_header.edit(content=contenido_header)
+        mensaje_tabla = await canal.fetch_message(int(mensaje_tabla_id))
+        await mensaje_tabla.edit(content=contenido_tabla)
     except Exception as e:
         print(f"Error al actualizar el mensaje de peticiones de razas: {e}")
     finally:
@@ -3792,13 +3806,17 @@ async def crear_peticiones_razas(ctx):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
     try:
-        contenido = _generar_contenido_peticiones_razas(session)
+        contenido_header, contenido_tabla = _generar_contenido_peticiones_razas(session)
+        total_longitud = len(contenido_header) + len(contenido_tabla)
         await ctx.send(
-            f"Longitud del mensaje de peticiones de razas: {len(contenido)} caracteres."
+            "Longitud de peticiones de razas -> "
+            f"encabezado: {len(contenido_header)} | tabla: {len(contenido_tabla)} | total: {total_longitud}"
         )
-        mensaje = await ctx.send(contenido)
+        mensaje_header = await ctx.send(contenido_header)
+        mensaje_tabla = await ctx.send(contenido_tabla)
         await ctx.send(
-            f"Mensaje creado. Canal: {ctx.channel.id} | Mensaje: {mensaje.id}"
+            "Mensajes creados. "
+            f"Canal: {ctx.channel.id} | Encabezado: {mensaje_header.id} | Tabla: {mensaje_tabla.id}"
         )
     except Exception as e:
         await ctx.send(f"Error al crear el mensaje de peticiones de razas: {e}")
