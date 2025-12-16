@@ -3726,7 +3726,7 @@ def _generar_contenido_peticiones_razas(session):
             {
                 "raza": f"{emoji} {nombre_raza}",
                 "total": f"{total}/{capacidad_por_raza}",
-                "detalle": f"{existentes} equipos existentes y {preferencias} equipos de primera preferencia",
+                "detalle": f"A E:{existentes} Pref1:{preferencias}",
             }
         )
 
