@@ -31,6 +31,7 @@ import aiohttp
 import Imagenes
 import threading
 import random
+import math
 from sqlalchemy import BIGINT, create_engine, Column, Integer, String, ForeignKey, false, true,text
 from sqlalchemy import and_, or_ 
 from sqlalchemy.ext.declarative import declarative_base
@@ -3687,6 +3688,10 @@ def _generar_contenido_peticiones_razas(session):
 
     inscripciones = session.query(GestorSQL.Inscripcion).all()
 
+    total_personas = len(inscripciones)
+    numero_razas = 22
+    capacidad_por_raza = math.ceil(total_personas / numero_razas + 1)
+
     for inscripcion in inscripciones:
         if (inscripcion.tipoPreferencia or "").lower() != "nuevo":
             continue
@@ -3710,17 +3715,44 @@ def _generar_contenido_peticiones_razas(session):
             existentes_count[raza_equipo] += 1
 
     timestamp_actualizacion = int(datetime.now().timestamp())
-    lineas = [
-        f"Lista de peticiones de razas para la sexta temporada actualizada a fecha de <t:{timestamp_actualizacion}:f>",
-        "",
-    ]
+    lineas_tabla = []
+    filas = []
 
-    for clave_raza, (_, emoji) in race_mapping.items():
+    for clave_raza, (nombre_raza, emoji) in race_mapping.items():
         existentes = existentes_count.get(clave_raza, 0)
         preferencias = preferencias_count.get(clave_raza, 0)
-        lineas.append(
-            f"{emoji}: {existentes} equipos existentes y {preferencias} equipos de primera preferencia"
+        total = existentes + preferencias
+        filas.append(
+            {
+                "raza": f"{emoji} {nombre_raza}",
+                "total": f"{total}/{capacidad_por_raza}",
+                "detalle": f"{existentes} equipos existentes y {preferencias} equipos de primera preferencia",
+            }
         )
+
+    ancho_raza = max(len("Raza"), *(len(fila["raza"]) for fila in filas))
+    ancho_total = max(len("Total"), *(len(fila["total"]) for fila in filas))
+
+    lineas_tabla.append(
+        f"{'Raza'.ljust(ancho_raza)} | {'Total'.ljust(ancho_total)} | Detalle"
+    )
+    lineas_tabla.append(
+        f"{'-' * ancho_raza}-+-{'-' * ancho_total}-+{'-' * 40}"
+    )
+
+    for fila in filas:
+        lineas_tabla.append(
+            f"{fila['raza'].ljust(ancho_raza)} | {fila['total'].ljust(ancho_total)} | {fila['detalle']}"
+        )
+
+    lineas = [
+        f"Lista de peticiones de razas para la sexta temporada actualizada a fecha de <t:{timestamp_actualizacion}:f>",
+        f"Capacidad estimada por raza: ceil(({total_personas}/{numero_razas}) + 1) = {capacidad_por_raza}",
+        "",
+        "```",
+        *lineas_tabla,
+        "```",
+    ]
 
     return "\n".join(lineas)
 
