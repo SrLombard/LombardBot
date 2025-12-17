@@ -74,9 +74,9 @@ canales_permitidos = ['457740100097540106']
 comandos = ['eco', 'otroComando']
 
 # IDs para la actualización programada de peticiones de razas
-PETICIONES_RAZAS_CANAL_ID = 1324722363380477972
-PETICIONES_RAZAS_HEADER_MESSAGE_ID = 1324722388076140677
-PETICIONES_RAZAS_TABLA_MESSAGE_ID = 1324722388076140677
+PETICIONES_RAZAS_CANAL_ID = 1280102673059680316
+PETICIONES_RAZAS_HEADER_MESSAGE_ID = 1450467375794094083
+PETICIONES_RAZAS_TABLA_MESSAGE_ID = 1450467376763240660
 
 
 @tasks.loop(minutes=60)
@@ -3748,7 +3748,7 @@ def _generar_contenido_peticiones_razas(session):
         total = existentes + preferencias
         filas.append(
             {
-                "raza": emoji,
+                "raza": nombre_raza,
                 "total": f"{total}/{capacidad_por_raza}",
                 "detalle": f"A E:{existentes} Pref1:{preferencias}",
             }
