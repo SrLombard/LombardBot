@@ -3418,7 +3418,8 @@ async def recordar_inscripciones(ctx, solo_objetivo: Optional[int] = None):
 
     # IDs de usuarios a los que nunca queremos mandar este recordatorio
     SKIP_REMINDER_IDS = {
-        822383329855930388  # mygaitero
+        822383329855930388,  # mygaitero
+        148860105071263744   # Elkai
     }
 
     TARGET_REMINDER_IDS = {
@@ -3450,8 +3451,10 @@ async def recordar_inscripciones(ctx, solo_objetivo: Optional[int] = None):
     for member in no_inscritos_con_rol:
         try:
             await member.send(
-"""
-🏆 **BUTTER CUP VI (sexta edición)**  
+"""Recordatorio, si ves esto es que no estás inscrito!
+
+
+🏆 **BUTTER CUP VI (sexta edición)**   
 Segunda temporada hacia los **tickets del Mundial 2026**: serán **3 ediciones** (invierno 2025, primavera 2026 y verano 2026) y todo culmina en un **playoff veraniego**.
 
 ⚙️ **Formato**  
@@ -3464,9 +3467,9 @@ No te quedes sin plaza: apúntate en <#1280102673059680316>, **consulta las regl
 
 Si solo tienes el rol para estar atento de la copa, no necesitas hacer nada.
 
-Si no quieres recibir más notificaciones mías, escribe a **SrLombard** para que no te moleste más.
+Si no quieres recibir más notificaciones mías, escribe a **SrLombard** para que no te moleste más, Pero solo escribiré una vez más el sábado ;).
 
-¡Te esperamos en la **BUTTER CUP V**! 🏉✨"""
+¡Te esperamos en la **BUTTER CUP VI**! 🏉✨"""
             )
             await ctx.send(f"Recordatorio enviado a {member.name}")
         except discord.Forbidden:
