@@ -3304,6 +3304,10 @@ async def verificar_inscripciones(ctx):
     role_name = "Butter Cup"         # Nombre del rol a revisar
     canal_inscripciones_id = 1280102673059680316  # ID del canal donde está el mensaje
     canal_inscripciones = bot.get_channel(canal_inscripciones_id)
+    inscritos_ids = {
+        inscripcion_id[0]
+        for inscripcion_id in session.query(GestorSQL.Inscripcion.id_usuario_discord).all()
+    }
 
     # 1. OBTENER EL MENSAJE Y SUS REACCIONES
     try:
@@ -3385,6 +3389,22 @@ async def verificar_inscripciones(ctx):
             respuesta.append(f"- <@{user_id}>")
     else:
         respuesta.append("Todos los usuarios en la tabla 'Usuarios' están inscritos.")
+
+    respuesta.append("\n")
+
+    if inscritos_ids:
+        desertores_inscritos = session.query(GestorSQL.Desertor).filter(
+            GestorSQL.Desertor.id_discord.in_(inscritos_ids)
+        ).all()
+    else:
+        desertores_inscritos = []
+
+    if desertores_inscritos:
+        respuesta.append("**Usuarios desertores que están inscritos:**")
+        for desertor in desertores_inscritos:
+            respuesta.append(f"- <@{desertor.id_discord}>")
+    else:
+        respuesta.append("No hay desertores inscritos.")
 
     # Enviar la respuesta en partes para evitar el límite de 2000 caracteres
     mensaje_actual = ""

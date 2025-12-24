@@ -26,6 +26,15 @@ class Usuario(Base):
     resultados_encuesta = relationship("ResultadoEncuesta", back_populates="usuario")
     equipos_reformados= relationship("equiposReformados", back_populates="usuario")
 
+class Desertor(Base):
+    __tablename__ = 'desertores'
+    idUsuarios = Column(Integer, primary_key=True)
+    nombre_discord = Column(String)
+    id_discord = Column(BigInteger)
+    nombre_bloodbowl = Column(String)
+    id_bloodbowl = Column(String)
+    motivo = Column(Text)
+
 
 class PreferenciasFecha(Base):
     __tablename__ = 'preferenciasFecha'
