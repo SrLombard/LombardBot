@@ -1771,6 +1771,7 @@ def finalFraseRaza(raza):
         "Alianza V. Mundo": "la variada **Alianza del Viejo Mundo**, demuestra la fuerza en la unidad y la estrategia sobre la pura fuerza. Suerte Charguet, nadie más ha elegido esto asi que puedo poner una dedicatoria personalizada en esta raza ^^",
         "Amazonas": "las poderosas **Amazonas**, esquiva a esos inútiles y estallales donde menos se lo esperen. Practicamente imposibles de derribar conseguirán la victoria al grito de ¡MUERTE POR KIKI!",
         "Caos Elegido": "los temibles **Elegidos del Caos**, siembra el terror y la desolación en el corazón de tus enemigos.",
+        "Enanos del Caos": "los implacables **Enanos del Caos**, atrinchérate con tus barbas acorazadas y hornos humeantes mientras tus hobgoblins roban balones al grito de ¡Gloria a Hashut!",
         "Elfos Oscuros": "los sanguinarios **Elfos Oscuros**, utiliza tu astucia y llévale los corazones de tus rivales a Morathi.",
         "Elfos Silvanos": "los ágiles **Elfos Silvanos**, domina el campo con una gracia y velocidad inigualables.",
         "Enano": "los resistentes **Enanos**, deja que tu solidez defensiva y tu poderío ofensivo hablen por ti en el campo.",
