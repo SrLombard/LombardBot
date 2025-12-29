@@ -1774,17 +1774,17 @@ def finalFraseRaza(raza):
         "Enanos del Caos": "los implacables **Enanos del Caos**, atrinchérate con tus barbas acorazadas y hornos humeantes mientras tus hobgoblins roban balones al grito de ¡Gloria a Hashut!",
         "Elfos Oscuros": "los sanguinarios **Elfos Oscuros**, utiliza tu astucia y llévale los corazones de tus rivales a Morathi.",
         "Elfos Silvanos": "los ágiles **Elfos Silvanos**, domina el campo con una gracia y velocidad inigualables.",
-        "Enano": "los resistentes **Enanos**, deja que tu solidez defensiva y tu poderío ofensivo hablen por ti en el campo.",
+        "Enanos": "los resistentes **Enanos**, deja que tu solidez defensiva y tu poderío ofensivo hablen por ti en el campo.",
         "Hombres Lagarto": "los ágiles y fuertes **Hombres Lagarto**, no tienes nada que temer ya que el Gran Plan te guia.",
         "Horror Nigromántico":"los **Horrores nigrománticos** directamente desde una pelicula de miedo de los 80, aúlla a la luna con tus lobos mientras tus golems paran a un equipo entero.",
         "Humanos": "lo versátiles **Humanos**, adapta tu estrategia a cualquier rival y muestra la habilidad de jugar en cualquier posición.",
-        "Inframundo": "el temible equipo del **Inframundo**, usa tus trucos y mutaciones para que no quede nadie Irikum.",
+        "Inframundo": "el temible equipo del **Irikumundo**, usa tus trucos y mutaciones para que no quede nadie Irikum.",
         "Nobleza Imperial": "la distinguida **Nobleza Imperial**, utiliza tu elegancia y tácticas refinadas para ganar tus partidos.",
-        "No muerto": "los terroríficos **No Muertos**, haz que tus rivales teman enfrentarse a ti tanto en vida como en muerte.",
+        "No muertos": "los terroríficos **No Muertos**, haz que tus rivales teman enfrentarse a ti tanto en vida como en muerte.",
         "Nurgle": "los repugnantes seguidores de **Nurgle**, usa tu resistencia y habilidades únicas para soportar cualquier cosa mientras pudres a tus oponentes.",
         "Nórdicos": "los furiosos **Nórdicos**. Haz que se le encoja el escroto de frío a tus rivales con tus furias mientras las valkirias mueven el balón y los ágiles gorrinos reparten cruzcampo.",
-        "Orco": "los poderosos Orcos, grita WAAAAGH! con ellos mientras destrozas a tus rivales.",
-        "Orco Negro": "los imponentes **Orcos Negros**, utiliza tu fuerza bruta para dominar el campo de juego mientras tus goblins rematan a tus rivales.",
+        "Orcos": "los poderosos Orcos, grita WAAAAGH! con ellos mientras destrozas a tus rivales.",
+        "Orcos Negros": "los imponentes **Orcos Negros**, utiliza tu fuerza bruta para dominar el campo de juego mientras tus goblins rematan a tus rivales.",
         "Renegados": "el variopinto equipo de **Renegados**, une a los marginados de todos los rincones para formar un equipo único.",
         "Skaven": "los rápidos y traicioneros **Skaven**, corre por el campo sembrando caos y aprovechando cualquier debilidad.",
         "Stunty":"los epiquisímos **Stunty**, el tamaño no importa y vas a demostrarselo a esos abusones con tu equipo. Estalla a esos grandullones de maneras que nunca han imaginado.",
@@ -2062,7 +2062,7 @@ async def crear_grupos(ctx):
 
             for i, jornada in enumerate(jornadas):
                 for partido in jornada:
-                    fecha_final = datetime(2025, 5, 18, 23, 59) + timedelta(weeks=i)
+                    fecha_final = datetime(2026, 1, 4, 23, 59) + timedelta(weeks=i)
                     nuevo_partido = GestorSQL.Calendario(
                         jornada=i+1,
                         canalAsociado=0,  # Asume un valor por defecto o ajusta según necesidad
