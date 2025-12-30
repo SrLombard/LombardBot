@@ -1652,15 +1652,13 @@ async def enviarInvitacion(ctx):
             else:
                 nombres_compañeros = "No tienes compañeros en este grupo."
             
-            mensaje = f"""¡Bienvenido a la Cuarta Edición de la Butter Cup!
+            mensaje = f"""¡Bienvenido a la Sexta Edición de la Butter Cup!
 
 Se te han asignado {finalFraseRaza(usuario.raza)}
 
 Tus compañeros esta temporada serán {nombres_compañeros}.
 
 Se creará un canal automáticamente durante la próxima hora donde podrás quedar con tu primer adversario. ¡Recuerda que antes de jugar tienes que pasarte por el canal de Spin para no ser emparejado con otros jugadores! De todas maneras esto lo explicaremos más detalladamente en el canal de la quedada.
-
-Puedes ir creando el equipo si no lo tienes ya hecho. Cuando lo tengas, envíale un privado a Pikoleto o SrLombard para que te manden una invitación.
 
 ¡Te esperamos!
 """
@@ -1784,7 +1782,7 @@ def finalFraseRaza(raza):
         "Nurgle": "los repugnantes seguidores de **Nurgle**, usa tu resistencia y habilidades únicas para soportar cualquier cosa mientras pudres a tus oponentes.",
         "Nórdicos": "los furiosos **Nórdicos**. Haz que se le encoja el escroto de frío a tus rivales con tus furias mientras las valkirias mueven el balón y los ágiles gorrinos reparten cruzcampo.",
         "Orcos": "los poderosos Orcos, grita WAAAAGH! con ellos mientras destrozas a tus rivales.",
-        "Orcos Negros": "los imponentes **Orcos Negros**, utiliza tu fuerza bruta para dominar el campo de juego mientras tus goblins rematan a tus rivales.",
+        "Orcos negros": "los imponentes **Orcos Negros**, utiliza tu fuerza bruta para dominar el campo de juego mientras tus goblins rematan a tus rivales.",
         "Renegados": "el variopinto equipo de **Renegados**, une a los marginados de todos los rincones para formar un equipo único.",
         "Skaven": "los rápidos y traicioneros **Skaven**, corre por el campo sembrando caos y aprovechando cualquier debilidad.",
         "Stunty":"los epiquisímos **Stunty**, el tamaño no importa y vas a demostrarselo a esos abusones con tu equipo. Estalla a esos grandullones de maneras que nunca han imaginado.",
