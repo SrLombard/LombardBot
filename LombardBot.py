@@ -2156,25 +2156,46 @@ async def func_proximos_eventos(bot, usuario, canal_destino_id=None, respuesta_p
     # Construir mensaje
     hay_eventos = bool(eventos or eventos_ticket)
     mensaje = (
-        "<@&1217130802572296315>, si os apetece un poco de Blood Bowl estos son los "
+        "Próximos partidos del calendario:\n\n"
         if hay_eventos else "No hay eventos programados en el intervalo dado."
     )
 
     if hay_eventos:
-        mensaje += "próximos partidos:\n\n"
         ids_discord = []
         if eventos:
             for evento in eventos:
                 calendario, nd1, raza1, id1, nd2, id2, raza2 = evento
-                mensaje += f"**{nd1}** ({raza1}) VS **{nd2}** ({raza2}), <t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
-                ids_discord.extend([id1, id2])
+                menciones = []
+                if id1:
+                    menciones.append(f"<@{id1}>")
+                    ids_discord.append(id1)
+                if id2:
+                    menciones.append(f"<@{id2}>")
+                    ids_discord.append(id2)
+                nombres = " VS ".join(menciones) if menciones else f"**{nd1}** VS **{nd2}**"
+                mensaje += (
+                    f"{nombres} ({raza1} vs {raza2}), "
+                    f"<t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
+                )
         if eventos_ticket:
             mensaje += "🎟Ticket🎟\n"
             for evento in eventos_ticket:
                 calendario, nd1, raza1, id1, nd2, id2, raza2 = evento
-                mensaje += f"**{nd1}** ({raza1}) VS **{nd2}** ({raza2}), <t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
-                ids_discord.extend([id1, id2])
-        mensaje += "\n\n" + mensaje_gracioso(list(set(f"<@{i}>" for i in ids_discord)))
+                menciones = []
+                if id1:
+                    menciones.append(f"<@{id1}>")
+                    ids_discord.append(id1)
+                if id2:
+                    menciones.append(f"<@{id2}>")
+                    ids_discord.append(id2)
+                nombres = " VS ".join(menciones) if menciones else f"**{nd1}** VS **{nd2}**"
+                mensaje += (
+                    f"{nombres} ({raza1} vs {raza2}), "
+                    f"<t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
+                )
+        menciones_unicas = list({f"<@{i}>" for i in ids_discord if i})
+        if menciones_unicas:
+            mensaje += "\n\n" + mensaje_gracioso(menciones_unicas)
 
     # Enviar el mensaje
     try:
@@ -2182,7 +2203,7 @@ async def func_proximos_eventos(bot, usuario, canal_destino_id=None, respuesta_p
     except Exception as e:
         print(f"No se pudo enviar el mensaje: {e}")
     
- 
+        
         
 def mensaje_gracioso(ids_discord):
     mensajes = [
@@ -3855,220 +3876,265 @@ async def crear_peticiones_razas(ctx):
         session.close()
 
 # Estructura: { "Día": {"Hora": [lista_de_funciones]} }
-tareas_programadas = {
-    "Monday": {
-        "09": [
-            (
-                func_proximos_partidos_playoff,
-                {
-                    "bot": bot,
-                    "usuario": maestros[0],
-                    "canal_destino_id": 1224689043032506429,
-                    "respuesta_privada": False
-                }
-            )
-        ],
-        "10": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ],
-        "22": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ]
-    },
-    "Tuesday": {
-        "09": [
-            (
-                func_proximos_partidos_playoff,
-                {
-                    "bot": bot,
-                    "usuario": maestros[0],
-                    "canal_destino_id": 1224689043032506429,
-                    "respuesta_privada": False
-                }
-            )
-        ],
-        "10": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ],
-        "22": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ]
-    },
-    "Wednesday": {
-        "09": [
-            (
-                func_proximos_partidos_playoff,
-                {
-                    "bot": bot,
-                    "usuario": maestros[0],
-                    "canal_destino_id": 1224689043032506429,
-                    "respuesta_privada": False
-                }
-            )
-        ],
-        "10": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ],
-        "15":[
-            (
-                func_comprueba_quedadas,
-                {
-                    "enviar_mensaje" : 1
-                }
-            )
+# tareas_programadas = {
+#     "Monday": {
+#         "09": [
+#             (
+#                 func_proximos_partidos_playoff,
+#                 {
+#                     "bot": bot,
+#                     "usuario": maestros[0],
+#                     "canal_destino_id": 1224689043032506429,
+#                     "respuesta_privada": False
+#                 }
+#             )
+#         ],
+#         "10": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ],
+#         "22": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ]
+#     },
+#     "Tuesday": {
+#         "09": [
+#             (
+#                 func_proximos_partidos_playoff,
+#                 {
+#                     "bot": bot,
+#                     "usuario": maestros[0],
+#                     "canal_destino_id": 1224689043032506429,
+#                     "respuesta_privada": False
+#                 }
+#             )
+#         ],
+#         "10": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ],
+#         "22": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ]
+#     },
+#     "Wednesday": {
+#         "09": [
+#             (
+#                 func_proximos_partidos_playoff,
+#                 {
+#                     "bot": bot,
+#                     "usuario": maestros[0],
+#                     "canal_destino_id": 1224689043032506429,
+#                     "respuesta_privada": False
+#                 }
+#             )
+#         ],
+#         "10": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ],
+#         "15":[
+#             (
+#                 func_comprueba_quedadas,
+#                 {
+#                     "enviar_mensaje" : 1
+#                 }
+#             )
+#
+#         ],
+#         "22": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ]
+#     },
+#     "Thursday": {
+#         "09": [
+#             (
+#                 func_proximos_partidos_playoff,
+#                 {
+#                     "bot": bot,
+#                     "usuario": maestros[0],
+#                     "canal_destino_id": 1224689043032506429,
+#                     "respuesta_privada": False
+#                 }
+#             )
+#         ],
+#         "10": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ],
+#         "22": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ]
+#     },
+#     "Friday": {
+#         "09": [
+#             (
+#                 func_proximos_partidos_playoff,
+#                 {
+#                     "bot": bot,
+#                     "usuario": maestros[0],
+#                     "canal_destino_id": 1224689043032506429,
+#                     "respuesta_privada": False
+#                 }
+#             )
+#         ],
+#         "10": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ],
+#         "22": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ]
+#     },
+#     "Saturday": {
+#         "09": [
+#             (
+#                 func_proximos_partidos_playoff,
+#                 {
+#                     "bot": bot,
+#                     "usuario": maestros[0],
+#                     "canal_destino_id": 1224689043032506429,
+#                     "respuesta_privada": False
+#                 }
+#             )
+#         ],
+#         "10": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ],
+#         "22": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ]
+#     },
+#     "Sunday": {
+#         "09": [
+#             (
+#                 func_proximos_partidos_playoff,
+#                 {
+#                     "bot": bot,
+#                     "usuario": maestros[0],
+#                     "canal_destino_id": 1224689043032506429,
+#                     "respuesta_privada": False
+#                 }
+#             )
+#         ],
+#         "10": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ],
+#         "22": [
+#             (
+#                 actualizar_peticiones_razas,
+#                 {
+#                     "bot": bot
+#                 }
+#             )
+#         ]
+#     }
+# }
 
-        ],
-        "22": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ]
-    },
-    "Thursday": {
-        "09": [
-            (
-                func_proximos_partidos_playoff,
-                {
-                    "bot": bot,
-                    "usuario": maestros[0],
-                    "canal_destino_id": 1224689043032506429,
-                    "respuesta_privada": False
-                }
-            )
-        ],
-        "10": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ],
-        "22": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ]
-    },
-    "Friday": {
-        "09": [
-            (
-                func_proximos_partidos_playoff,
-                {
-                    "bot": bot,
-                    "usuario": maestros[0],
-                    "canal_destino_id": 1224689043032506429,
-                    "respuesta_privada": False
-                }
-            )
-        ],
-        "10": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ],
-        "22": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ]
-    },
-    "Saturday": {
-        "09": [
-            (
-                func_proximos_partidos_playoff,
-                {
-                    "bot": bot,
-                    "usuario": maestros[0],
-                    "canal_destino_id": 1224689043032506429,
-                    "respuesta_privada": False
-                }
-            )
-        ],
-        "10": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ],
-        "22": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ]
-    },
-    "Sunday": {
-        "09": [
-            (
-                func_proximos_partidos_playoff,
-                {
-                    "bot": bot,
-                    "usuario": maestros[0],
-                    "canal_destino_id": 1224689043032506429,
-                    "respuesta_privada": False
-                }
-            )
-        ],
-        "10": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ],
-        "22": [
-            (
-                actualizar_peticiones_razas,
-                {
-                    "bot": bot
-                }
-            )
-        ]
+dias_semana = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday"
+]
+
+aviso_calendario = (
+    func_proximos_eventos,
+    {
+        "bot": bot,
+        "usuario": maestros[0],
+        "canal_destino_id": 1224689043032506429,
+        "respuesta_privada": False
     }
+)
+
+actualizacion_peticiones = (
+    actualizar_peticiones_razas,
+    {
+        "bot": bot
+    }
+)
+
+tareas_programadas = {
+    dia: {
+        "09": [aviso_calendario],
+        "10": [actualizacion_peticiones],
+        "22": [actualizacion_peticiones],
+    }
+    for dia in dias_semana
 }
+
+tareas_programadas["Wednesday"]["15"] = [
+    (
+        func_comprueba_quedadas,
+        {
+            "enviar_mensaje": 1
+        }
+    )
+]
 
         
 # Ejecutar el bot con el token correspondiente
