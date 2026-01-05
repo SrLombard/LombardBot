@@ -154,8 +154,6 @@ async def gestionar_canal_discord(ctx, accion, nombre_canal=None, coach1_id_disc
     if mensaje == "":
         if bbname1 and bbname2:
             mensaje = """Bienvenidos, {mention1}({raza1}) [{bbname1}] y {mention2}({raza2}) [{bbname2}]! 
-
-Si se os ha asignado un equipo nuevo en el sorteo tendréis que crearlo y avisar a SrLombard mencionandole en este canal para que os invite indicando el nombre del equipo, NO PUEDE SER UN EQUIPO CUSTOM.
                      
 Por favor, acuerden una fecha para jugar el primer partido.""" + mensajePreferencias1 + mensajePreferencias2 + """
 
