@@ -783,6 +783,123 @@ async def vincular_partido(ctx, id_partido: int, id_calendario: int):
     session.close()
     await ctx.send("Partido vinculado y canales actualizados.")
 
+async def obtener_hilo_por_id(guild: discord.Guild, thread_id: int) -> Optional[discord.Thread]:
+    hilo = guild.get_thread(thread_id)
+    if hilo:
+        return hilo
+
+    try:
+        canal = await guild.fetch_channel(thread_id)
+        if isinstance(canal, discord.Thread):
+            return canal
+    except Exception as e:
+        print(f"No se pudo recuperar el hilo {thread_id}: {e}")
+
+    # Intentar obtenerlo a través del cliente global por si no está en caché
+    try:
+        canal = await DiscordClientSingleton.get_bot_instance().fetch_channel(thread_id)
+        if isinstance(canal, discord.Thread):
+            return canal
+    except Exception as e:
+        print(f"No se pudo recuperar el hilo {thread_id} con el bot: {e}")
+
+    return None
+
+@bot.command(name="administrar_partido")
+@commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
+async def administrar_partido(ctx, jornada: int, ganador: discord.Member):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+
+    id_canal_contexto = ctx.channel.parent_id if isinstance(ctx.channel, discord.Thread) else ctx.channel.id
+
+    ganador_bd = session.query(GestorSQL.Usuario).filter_by(id_discord=ganador.id).first()
+    if not ganador_bd:
+        await ctx.send("No se encontró al usuario ganador en la base de datos.")
+        session.close()
+        return
+
+    calendario_registro = session.query(GestorSQL.Calendario).filter(
+        GestorSQL.Calendario.jornada == jornada,
+        GestorSQL.Calendario.partidos_idPartidos == None,
+        or_(GestorSQL.Calendario.coach1 == ganador_bd.idUsuarios, GestorSQL.Calendario.coach2 == ganador_bd.idUsuarios)
+    ).first()
+
+    if not calendario_registro:
+        calendario_registro = session.query(GestorSQL.Calendario).filter(
+            GestorSQL.Calendario.jornada == jornada,
+            GestorSQL.Calendario.canalAsociado == id_canal_contexto,
+            GestorSQL.Calendario.partidos_idPartidos == None
+        ).first()
+
+    if not calendario_registro:
+        await ctx.send("No se encontró el partido para administrar. Verifica la jornada y el canal.")
+        session.close()
+        return
+
+    coach1 = calendario_registro.usuario_coach1
+    coach2 = calendario_registro.usuario_coach2
+
+    if ganador_bd.idUsuarios == coach1.idUsuarios:
+        resultado1, resultado2 = 1, 0
+    elif ganador_bd.idUsuarios == coach2.idUsuarios:
+        resultado1, resultado2 = 0, 1
+    else:
+        await ctx.send("El ganador indicado no forma parte de este partido.")
+        session.close()
+        return
+
+    descripcion_partido = f"administrado {coach1.nombre_discord} vs {coach2.nombre_discord}"
+    nuevo_partido = GestorSQL.Partidos(
+        resultado1=resultado1,
+        resultado2=resultado2,
+        lesiones1=0,
+        lesiones2=0,
+        muertes1=0,
+        muertes2=0,
+        idPartidoBbowl=descripcion_partido,
+        pases1=0,
+        pases2=0,
+        catches1=0,
+        catches2=0,
+        interceptions1=0,
+        interceptions2=0,
+        ko1=0,
+        ko2=0,
+        push1=0,
+        push2=0,
+        mRun1=0,
+        mRun2=0,
+        mPass1=0,
+        mPass2=0,
+        logo1="",
+        logo2="",
+        nombreEquipo1="",
+        nombreEquipo2=""
+    )
+
+    session.add(nuevo_partido)
+    session.commit()
+    session.refresh(nuevo_partido)
+
+    calendario_id = calendario_registro.idCalendario
+    grupo = calendario_registro.usuario_coach1.grupo_grupo.nombre_grupo if calendario_registro.usuario_coach1.grupo_grupo else calendario_registro.usuario_coach1.grupo
+    coach1_nombre = calendario_registro.usuario_coach1.nombre_discord
+    coach2_nombre = calendario_registro.usuario_coach2.nombre_discord
+    partido_id = nuevo_partido.idPartidos
+    session.close()
+
+    await vincular_partido(ctx, partido_id, calendario_id)
+
+    mensaje_hilo = f"Partido administrado de la Jornada {jornada} entre {coach1_nombre} y {coach2_nombre} del grupo {grupo}. Ganador {ganador.mention}"
+    hilo_aviso = await obtener_hilo_por_id(ctx.guild, 1430913723039744162)
+    if hilo_aviso:
+        await hilo_aviso.send(mensaje_hilo)
+    else:
+        await UtilesDiscord.mensaje_administradores(f"No se pudo encontrar el hilo de administración para avisar sobre el partido de la jornada {jornada}.")
+
+    await ctx.send(f"Partido administrado y vinculado con éxito. ID de partido: {partido_id}, calendario: {calendario_id}")
+
 @bot.command()
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
 async def CreaCanalesJornada(ctx, jornada, *, mensaje=""):
