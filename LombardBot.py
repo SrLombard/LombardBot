@@ -805,6 +805,21 @@ async def obtener_hilo_por_id(guild: discord.Guild, thread_id: int) -> Optional[
 
     return None
 
+def obtener_nombre_equipo_previo(session, coach_id: int) -> str:
+    calendario_prev = session.query(GestorSQL.Calendario).filter(
+        or_(GestorSQL.Calendario.coach1 == coach_id, GestorSQL.Calendario.coach2 == coach_id),
+        GestorSQL.Calendario.partidos_idPartidos != None
+    ).order_by(GestorSQL.Calendario.jornada.desc()).first()
+
+    if calendario_prev and calendario_prev.partidos_idPartidos:
+        partido_prev = session.query(GestorSQL.Partidos).filter_by(idPartidos=calendario_prev.partidos_idPartidos).first()
+        if partido_prev:
+            if calendario_prev.coach1 == coach_id:
+                return partido_prev.nombreEquipo1 or "Equipo nuevo (sin datos)"
+            return partido_prev.nombreEquipo2 or "Equipo nuevo (sin datos)"
+
+    return "Equipo nuevo (sin datos)"
+
 @bot.command(name="administrar_partido")
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
 async def administrar_partido(ctx, jornada: int, ganador: discord.Member):
@@ -886,12 +901,17 @@ async def administrar_partido(ctx, jornada: int, ganador: discord.Member):
     grupo = calendario_registro.usuario_coach1.grupo_grupo.nombre_grupo if calendario_registro.usuario_coach1.grupo_grupo else calendario_registro.usuario_coach1.grupo
     coach1_nombre = calendario_registro.usuario_coach1.nombre_discord
     coach2_nombre = calendario_registro.usuario_coach2.nombre_discord
+    equipo_coach1 = obtener_nombre_equipo_previo(session, coach1.idUsuarios)
+    equipo_coach2 = obtener_nombre_equipo_previo(session, coach2.idUsuarios)
     partido_id = nuevo_partido.idPartidos
     session.close()
 
     await vincular_partido(ctx, partido_id, calendario_id)
 
-    mensaje_hilo = f"Partido administrado de la Jornada {jornada} entre {coach1_nombre} y {coach2_nombre} del grupo {grupo}. Ganador {ganador.mention}"
+    mensaje_hilo = (
+        f"Partido administrado de la Jornada {jornada} entre {coach1_nombre} ({equipo_coach1}) "
+        f"y {coach2_nombre} ({equipo_coach2}) del grupo {grupo}. Ganador {ganador.mention}"
+    )
     hilo_aviso = await obtener_hilo_por_id(ctx.guild, 1430913723039744162)
     if hilo_aviso:
         await hilo_aviso.send(mensaje_hilo)
