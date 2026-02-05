@@ -2,6 +2,7 @@
 import asyncio
 from pickle import LONG
 from re import A
+import re
 from typing import Optional
 
 from discord.ext.commands.parameters import Author
@@ -2222,6 +2223,20 @@ async def eventos(interaction: discord.Interaction, canal_destino_id: str = None
     await func_proximos_eventos(bot, interaction.user, canal_destino_id if canal_destino_id else interaction.channel_id, respuesta_privada)
     await interaction.response.send_message("Enviado",ephemeral=True)
 
+
+def obtener_icono_grupo(nombre_grupo):
+    if not nombre_grupo:
+        return ""
+    grupo_base = re.sub(r"\d+$", "", nombre_grupo).strip().lower()
+    if grupo_base == "oro":
+        return "🥇"
+    if grupo_base == "plata":
+        return "🥈"
+    if grupo_base == "bronce":
+        return "🥉"
+    return ""
+
+
 async def func_proximos_eventos(bot, usuario, canal_destino_id=None, respuesta_privada=True):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     ahora = datetime.now()
@@ -2250,6 +2265,7 @@ async def func_proximos_eventos(bot, usuario, canal_destino_id=None, respuesta_p
     # Consultar eventos
     UsuarioCoach1 = aliased(GestorSQL.Usuario)
     UsuarioCoach2 = aliased(GestorSQL.Usuario)
+    GrupoCoach1 = aliased(GestorSQL.Grupo)
     eventos = session.query(
         GestorSQL.Calendario,
         UsuarioCoach1.nombre_discord.label("nombre_discord1"),
@@ -2258,10 +2274,13 @@ async def func_proximos_eventos(bot, usuario, canal_destino_id=None, respuesta_p
         UsuarioCoach2.nombre_discord.label("nombre_discord2"),
         UsuarioCoach2.id_discord.label("id_discord2"),
         UsuarioCoach2.raza.label("raza2"),
+        GrupoCoach1.nombre_grupo.label("nombre_grupo"),
     ).join(
         UsuarioCoach1, GestorSQL.Calendario.coach1 == UsuarioCoach1.idUsuarios
     ).join(
         UsuarioCoach2, GestorSQL.Calendario.coach2 == UsuarioCoach2.idUsuarios
+    ).outerjoin(
+        GrupoCoach1, UsuarioCoach1.grupo == GrupoCoach1.id_grupo
     ).filter(
         GestorSQL.Calendario.fecha >= ahora,
         GestorSQL.Calendario.fecha <= fin
@@ -2301,7 +2320,8 @@ async def func_proximos_eventos(bot, usuario, canal_destino_id=None, respuesta_p
         ids_discord = []
         if eventos:
             for evento in eventos:
-                calendario, nd1, raza1, id1, nd2, id2, raza2 = evento
+                calendario, nd1, raza1, id1, nd2, id2, raza2, nombre_grupo = evento
+                grupo_icono = obtener_icono_grupo(nombre_grupo)
                 menciones = []
                 if id1:
                     menciones.append(f"<@{id1}>")
@@ -2310,8 +2330,9 @@ async def func_proximos_eventos(bot, usuario, canal_destino_id=None, respuesta_p
                     menciones.append(f"<@{id2}>")
                     ids_discord.append(id2)
                 nombres = " VS ".join(menciones) if menciones else f"**{nd1}** VS **{nd2}**"
+                prefijo = f"{grupo_icono} " if grupo_icono else ""
                 mensaje += (
-                    f"{nombres} ({raza1} vs {raza2}), "
+                    f"{prefijo}{nombres} ({raza1} vs {raza2}), "
                     f"<t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
                 )
         if eventos_ticket:
