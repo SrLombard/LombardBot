@@ -17,6 +17,7 @@ from discord import File
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import tzlocal
 import os
 from wcwidth import wcswidth
@@ -2041,7 +2042,13 @@ async def fecha(interaction: discord.Interaction, dia: int, mes: int, hora: int,
             session.commit()
 
             timestamp = int(fecha_nueva.timestamp())
-            response_message = f"Se ha concertado la cita para <t:{timestamp}:F>"
+            fecha_espana = fecha_nueva.astimezone(ZoneInfo("Europe/Madrid"))
+            hora_espana = fecha_espana.strftime("%H:%M")
+            dia_espana = fecha_espana.strftime("%d/%m/%Y")
+            response_message = (
+                f"Se ha concertado la cita para <t:{timestamp}:F>, "
+                f"que corresponde a las {hora_espana} del día {dia_espana} en España."
+            )
             await interaction.response.send_message(response_message)
             
             #de momento no cambio nombre a canales porque se pone triste discord
