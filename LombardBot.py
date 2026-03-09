@@ -4267,8 +4267,8 @@ dias_semana = [
     "Sunday"
 ]
 
-aviso_calendario = (
-    func_proximos_eventos,
+aviso_playoffs = (
+    func_proximos_partidos_playoff,
     {
         "bot": bot,
         "usuario": maestros[0],
@@ -4286,7 +4286,7 @@ actualizacion_peticiones = (
 
 tareas_programadas = {
     dia: {
-        "09": [aviso_calendario],
+        "09": [aviso_playoffs],
         "10": [actualizacion_peticiones],
         "22": [actualizacion_peticiones],
     }
