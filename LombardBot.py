@@ -1839,15 +1839,17 @@ async def informarResultados(ctx,usuario_id: int = None):
             elif puesto in [5, 6]:               
                 mensaje = f"{usuario.nombre_discord}, has quedado {puesto}º en tu grupo. Es momento de curar de las heridas y volver más fuerte la próxima temporada. Recuerda sacrificar unos snotling a Nuffle ^^."
                 if grupo == "Oro":
-                    mensaje += " Descenderás a la liga de Plata. Recuerda que la próxima edición comienza el 15/9/2025 ^^"
+                    mensaje += " Descenderás a la liga de Plata. Recuerda que la próxima edición comienza el 27/04/2026 ^^"
                 elif grupo == "Plata":
-                    mensaje += " Descenderás a la liga de Bronce. Recuerda que la próxima edición comienza el 15/9/2025 ^^"
+                    mensaje += " Descenderás a la liga de Bronce. Recuerda que la próxima edición comienza el 27/04/2026 ^^"
                 
             try:
                 user = await bot.fetch_user(usuario.id_discord)
                 if user:
                     await user.send(mensaje)
                     await ctx.send(f"Mensaje enviado a {user.name}#{user.discriminator}")
+                    actualizacion2026 = "\n-----------------------------------------\nPor último, las reglas para el traslado de equipos a Warhammer Blood bowl se están aún discutiendo. Avisaremos por el general tan pronto como tengamos noticias. \n-----------------------------------------\n"
+                    await user.send(actualizacion2026)
                     # reformaDinero = "\n-----------------------------------------\nPor último, las reglas para las reformas del equipo son:\n" + reglasReforma(dinero) + "\n-----------------------------------------"
                     # await user.send(reformaDinero)
             except Exception as e:
@@ -1880,8 +1882,8 @@ def consultaResultados(session, usuario, jornada, grupo, grupo_nombre):
 def reglasPLayOffGrupo():
    reglas = "1- Puedes modificar el equipo según las reglas del juego hasta el día anterior a la fecha del primer partido.\n"\
    "2- Una vez realizados los cambios el equipo permanecerá inmutable durante el periodo de play-off.\n"\
-   "3- Se debe avisar a Pikoleto mandandole una imagen del estado del equipo final, además si tienes algún MNG avísale para que lo cure.\n"\
-   "4- Se podrá consultar el calendario y los emparejamientos en el discord.\n"\
+   "3- Se debe avisar a los commisarios mandando una imagen del estado del equipo final al hilo https://discord.com/channels/405763002768424970/1480291295502012536.\n"\
+   "4- Se podrá consultar el calendario y los emparejamientos en el discord https://discord.com/channels/405763002768424970/1349451633418960947.\n"\
    "5- El bot se encargará de crear canales cada vez que las jornadas terminen, las quedadas se harán de la misma forma que en la liga regular."
    return reglas
 
@@ -3149,11 +3151,10 @@ async def CreaCanalesPlayoff(ctx, jornada, tipo):
 
             mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs porque sois lo mejor de lo mejor. 
             
-            Aquí os jugáis el ascenso de categoría, puntos extra para la próxima reforma y preferencia a la hora de elegir un equipo Reformado/nuevo la próxima temporada.
+Aquí os jugáis el ascenso de categoría, puntos extra para la próxima reforma y preferencia a la hora de elegir un equipo Reformado/nuevo la próxima temporada.
             
-            Sentimos mucho el jaleo, han coincidido unos días malos con los ajustes que tenemos que hacer con los cambios venideros, esperamos que podáis disfrutardel playoff a pesar de todos los cambios ;-).
-            
-            RECORDAD inscribir vuestros equipos en la competición PlayOffs5 contraseña PlayOffs5. Los playoff se juegan en formato resurreción, por ello no podréis modificar vuestro equipo después del primer partido. Recordad también que debéis que enviar un pantallazo de como queda vuestro equipo a Pikoleto. \n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
+           
+RECORDAD inscribir vuestros equipos en la competición PlayOffs6 contraseña PlayOffs6. Los playoff se juegan en formato resurreción, por ello no podréis modificar vuestro equipo después del primer partido. Recordad también que debéis que enviar un pantallazo al hilo de equipos de como queda vuestro equipo 1 día antes del partido siempre que sea posible. \n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
 Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España.{fecha}
             
 -------------------------------------------
