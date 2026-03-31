@@ -27,7 +27,7 @@ def obtener_partido_PlayOfTicket(api_token):
     return obtener_partidos(api_token, competition_id)
 
 def obtener_partido_PlayOff(api_token):
-    competition_id = 'ec5ad94d-cae3-11f0-a124-bc2411305479' #id del PLayoff
+    competition_id = '3888b0a2-1c60-11f1-a124-bc2411305479' #id del PLayoff
     return obtener_partidos(api_token, competition_id)
 
 
