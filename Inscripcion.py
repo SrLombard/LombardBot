@@ -10,6 +10,34 @@ from sqlalchemy.sql import case,func
 import GestorSQL
 import UtilesDiscord
 import asyncio
+from pathlib import Path
+
+
+def _leer_configuracion_inscripcion():
+    """Lee configuracionInscripcion.txt una sola vez al iniciar el bot."""
+    ruta = Path(__file__).with_name("configuracionInscripcion.txt")
+    valor_por_defecto = False
+
+    try:
+        contenido = ruta.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {"existentes": valor_por_defecto}
+
+    for linea in contenido.splitlines():
+        linea = linea.strip()
+        if not linea or linea.startswith("#"):
+            continue
+        if "=" not in linea:
+            continue
+
+        clave, valor = [parte.strip().lower() for parte in linea.split("=", 1)]
+        if clave == "existentes":
+            return {"existentes": valor == "true"}
+
+    return {"existentes": valor_por_defecto}
+
+
+CONFIG_INSCRIPCION = _leer_configuracion_inscripcion()
 
 racesConEmojiIniciales = [
     "👴🏻Alianza del viejo mundo👴🏻","🏹Amazonas🏹", "🐐Caos Elegido🐐", "⛏Enanos⛏","🎠Enanos del Caos🎠", "🔮Elfos oscuros🔮",
@@ -69,8 +97,16 @@ class TipoPreferenciaView(discord.ui.View):
     def __init__(self, usuario_id):
         super().__init__(timeout=None)
         self.usuario_id = usuario_id
+        existentes_habilitado = CONFIG_INSCRIPCION.get("existentes", False)
+
         for label, desc in tipoPreferenciaOptions:
-            button = discord.ui.Button(label=desc, style=discord.ButtonStyle.primary, custom_id=label)
+            deshabilitado = label == "Existente" and not existentes_habilitado
+            button = discord.ui.Button(
+                label=desc,
+                style=discord.ButtonStyle.primary,
+                custom_id=label,
+                disabled=deshabilitado
+            )
             button.callback = self.select_preference
             self.add_item(button)
 
