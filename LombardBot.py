@@ -4250,6 +4250,98 @@ async def suizo_add_jugador(ctx, torneo_id: int, usuario: discord.Member, raza_c
         f"Raza competición: **{raza_texto}**"
     )
 
+
+@bot.command(name="suizo_add_lote")
+async def suizo_add_lote(ctx, torneo_id: int, *tokens_usuarios: str):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    if not tokens_usuarios:
+        await ctx.send(
+            "Uso: `!suizo_add_lote <torneo_id> <lista_de_menciones_o_ids_discord>`\n"
+            "Ejemplo: `!suizo_add_lote 12 @Usuario1 123456789012345678 <@987654321098765432>`"
+        )
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await ctx.send(f"No existe un torneo suizo con ID `{torneo_id}`.")
+            return
+
+        total_recibidos = len(tokens_usuarios)
+        altas_ok = 0
+        duplicados = 0
+        no_encontrados = 0
+        ids_discord_procesados = set()
+
+        for token in tokens_usuarios:
+            token_limpio = token.strip()
+            match = re.match(r"^<@!?(\d+)>$", token_limpio)
+            if match:
+                id_discord_txt = match.group(1)
+            else:
+                id_discord_txt = token_limpio
+
+            if not id_discord_txt.isdigit():
+                no_encontrados += 1
+                continue
+
+            id_discord = int(id_discord_txt)
+            if id_discord in ids_discord_procesados:
+                duplicados += 1
+                continue
+            ids_discord_procesados.add(id_discord)
+
+            usuario_bd = session.query(GestorSQL.Usuario).filter_by(id_discord=id_discord).first()
+            if usuario_bd is None:
+                no_encontrados += 1
+                continue
+
+            participante_existente = (
+                session.query(GestorSQL.SuizoParticipante)
+                .filter_by(torneo_id=torneo_id, usuario_id=usuario_bd.idUsuarios)
+                .first()
+            )
+            if participante_existente is not None:
+                duplicados += 1
+                continue
+
+            raza_final = usuario_bd.raza
+            nuevo_participante = GestorSQL.SuizoParticipante(
+                torneo_id=torneo_id,
+                usuario_id=usuario_bd.idUsuarios,
+                estado="ACTIVO",
+                tiene_bye=0,
+                cantidad_byes=0,
+                late_join_ronda=None,
+                puntos_ajuste_inicial=0,
+                raza_competicion=raza_final,
+                created_at=datetime.now(),
+            )
+            session.add(nuevo_participante)
+            altas_ok += 1
+
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo procesar el alta masiva en torneo suizo: {e}")
+        return
+    finally:
+        session.close()
+
+    await ctx.send(
+        "📦 Resultado de alta masiva en torneo suizo:\n"
+        f"Torneo ID: **{torneo_id}**\n"
+        f"Total recibidos: **{total_recibidos}**\n"
+        f"Altas OK: **{altas_ok}**\n"
+        f"Duplicados: **{duplicados}**\n"
+        f"No encontrados en `usuarios`: **{no_encontrados}**"
+    )
+
 # Estructura: { "Día": {"Hora": [lista_de_funciones]} }
 # tareas_programadas = {
 #     "Monday": {
