@@ -4042,6 +4042,92 @@ async def crear_peticiones_razas(ctx):
     finally:
         session.close()
 
+
+@bot.command(name="suizo_crear")
+async def suizo_crear(
+    ctx,
+    nombre: str,
+    rondas: int,
+    ida_vuelta: str,
+    formato_serie: str,
+    fecha_fin: str,
+    hora_fin: str,
+    canal_hub_id: Optional[int] = None,
+):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    if rondas < 1:
+        await ctx.send("El número de rondas debe ser mayor o igual a 1.")
+        return
+
+    ida_vuelta_normalizado = ida_vuelta.strip().lower()
+    if ida_vuelta_normalizado == "ida":
+        ida_vuelta_valor = 0
+    elif ida_vuelta_normalizado == "idavuelta":
+        ida_vuelta_valor = 1
+    else:
+        await ctx.send("Valor inválido para ida/vuelta. Usa `ida` o `idavuelta`.")
+        return
+
+    formato_normalizado = formato_serie.strip().upper()
+    if formato_normalizado not in {"BO1", "BO3", "BO5"}:
+        await ctx.send("Formato de serie inválido. Usa `bo1`, `bo3` o `bo5`.")
+        return
+
+    try:
+        fecha_fin_ronda1 = datetime.strptime(f"{fecha_fin} {hora_fin}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        await ctx.send("Fecha inválida. Usa el formato `YYYY-MM-DD HH:MM`.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        ahora = datetime.now()
+        nuevo_torneo = GestorSQL.SuizoTorneo(
+            nombre=nombre,
+            activo=1,
+            estado="CREADO",
+            rondas_totales=rondas,
+            ida_vuelta=ida_vuelta_valor,
+            formato_serie=formato_normalizado,
+            puntos_win=3,
+            puntos_draw=1,
+            puntos_loss=0,
+            puntos_bye=1.5,
+            fecha_fin_ronda1=fecha_fin_ronda1,
+            dias_por_ronda=7,
+            canal_hub_id=canal_hub_id,
+            creado_por_discord_id=ctx.author.id,
+            created_at=ahora,
+            updated_at=ahora,
+        )
+        session.add(nuevo_torneo)
+        session.commit()
+        session.refresh(nuevo_torneo)
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo crear el torneo suizo: {e}")
+        return
+    finally:
+        session.close()
+
+    ida_vuelta_texto = "idavuelta (1)" if ida_vuelta_valor == 1 else "ida (0)"
+    canal_hub_texto = canal_hub_id if canal_hub_id is not None else "sin canal"
+
+    await ctx.send(
+        "✅ Torneo suizo creado correctamente.\n"
+        f"ID torneo: **{nuevo_torneo.id}**\n"
+        f"Nombre: **{nombre}**\n"
+        f"Rondas: **{rondas}**\n"
+        f"Modo: **{ida_vuelta_texto}**\n"
+        f"Formato: **{formato_normalizado}**\n"
+        f"Fin ronda 1: **{fecha_fin_ronda1.strftime('%Y-%m-%d %H:%M')}**\n"
+        f"Canal hub: **{canal_hub_texto}**"
+    )
+
 # Estructura: { "Día": {"Hora": [lista_de_funciones]} }
 # tareas_programadas = {
 #     "Monday": {
