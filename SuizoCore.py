@@ -1,10 +1,17 @@
 """Lógica base de standings para torneos suizos."""
 
+import json
 from decimal import Decimal
 from functools import cmp_to_key
 from typing import Any, Dict, List, Optional
 
-from GestorSQL import SuizoEmparejamiento, SuizoParticipante, SuizoRonda, SuizoTorneo
+from GestorSQL import (
+    SuizoEmparejamiento,
+    SuizoParticipante,
+    SuizoRonda,
+    SuizoStandingSnapshot,
+    SuizoTorneo,
+)
 from SuizoConstantes import EMP_ADMINISTRADO, EMP_CERRADO
 
 
@@ -219,3 +226,71 @@ def calcular_standings(session, torneo_id, hasta_ronda: Optional[int] = None) ->
             fila["buchholz_cut"] = suma_rivales - min(puntos_rivales)
 
     return ordenar_standings(list(filas.values()))
+
+
+def _normalizar_json_detalle_tiebreak(fila: EstadoFila) -> Dict[str, Any]:
+    detalle = fila.get("json_detalle_tiebreak")
+    if isinstance(detalle, dict):
+        return dict(detalle)
+
+    if isinstance(detalle, str) and detalle.strip():
+        try:
+            parsed = json.loads(detalle)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+    return {
+        "criterios": {
+            "h2h": str(fila.get("h2h_valor")) if fila.get("h2h_valor") is not None else None,
+            "buchholz_cut": str(_decimal(fila.get("buchholz_cut"))),
+            "diff_score": int(fila.get("diff_score") or 0),
+        },
+        "explicacion": (
+            "Orden aplicado: puntos DESC, h2h DESC (si existe), "
+            "buchholz_cut DESC, diff_score DESC y usuario_id ASC."
+        ),
+    }
+
+
+def guardar_snapshot_ronda(session, torneo_id, ronda_numero, standings_ordenados):
+    """Guarda snapshot completo de standings para una ronda.
+
+    Inserta una fila por jugador con estadísticas completas y desempates.
+    Si ya existía snapshot para la ronda, lo reemplaza por completo.
+    """
+    session.query(SuizoStandingSnapshot).filter(
+        SuizoStandingSnapshot.torneo_id == torneo_id,
+        SuizoStandingSnapshot.ronda_numero == ronda_numero,
+    ).delete(synchronize_session=False)
+
+    snapshots = []
+    for idx, fila in enumerate(standings_ordenados, start=1):
+        rank_ronda = int(fila.get("rank") or idx)
+        snapshots.append(
+            SuizoStandingSnapshot(
+                torneo_id=torneo_id,
+                ronda_numero=ronda_numero,
+                usuario_id=int(fila["usuario_id"]),
+                estado_participante=fila.get("estado_participante") or "ACTIVO",
+                pj=int(fila.get("pj") or 0),
+                pg=int(fila.get("pg") or 0),
+                pe=int(fila.get("pe") or 0),
+                pp=int(fila.get("pp") or 0),
+                puntos=_decimal(fila.get("puntos")),
+                score_favor=int(fila.get("score_favor") or 0),
+                score_contra=int(fila.get("score_contra") or 0),
+                diff_score=int(fila.get("diff_score") or 0),
+                buchholz_cut=_decimal(fila.get("buchholz_cut")),
+                h2h_valor=_decimal(fila.get("h2h_valor")) if fila.get("h2h_valor") is not None else None,
+                rank_ronda=rank_ronda,
+                json_detalle_tiebreak=_normalizar_json_detalle_tiebreak(fila),
+            )
+        )
+
+    if snapshots:
+        session.bulk_save_objects(snapshots)
+
+    session.flush()
+    return len(snapshots)
