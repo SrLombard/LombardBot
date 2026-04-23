@@ -4462,6 +4462,342 @@ def _partidos_requeridos_desde_formato(formato_serie: str) -> int:
     return 1
 
 
+def _nombre_usuario_suizo(usuario) -> str:
+    if usuario is None:
+        return "N/D"
+    return (
+        getattr(usuario, "nombreAMostrar", None)
+        or getattr(usuario, "nombre_discord", None)
+        or getattr(usuario, "nombre_bloodbowl", None)
+        or f"u{getattr(usuario, 'idUsuarios', '??')}"
+    )
+
+
+def _tabla_compacta(columnas, filas) -> str:
+    anchos = [len(str(c)) for c in columnas]
+    for fila in filas:
+        for idx, celda in enumerate(fila):
+            anchos[idx] = max(anchos[idx], len(str(celda)))
+
+    cabecera = " | ".join(str(columnas[i]).ljust(anchos[i]) for i in range(len(columnas)))
+    separador = "-+-".join("-" * anchos[i] for i in range(len(columnas)))
+    cuerpo = [
+        " | ".join(str(fila[i]).ljust(anchos[i]) for i in range(len(columnas)))
+        for fila in filas
+    ]
+    return "\n".join([cabecera, separador, *cuerpo]) if cuerpo else "\n".join([cabecera, separador, "(sin filas)"])
+
+
+def _resolver_ronda_suizo(session, torneo_id: int, ronda: Optional[int]):
+    if ronda is not None:
+        return (
+            session.query(GestorSQL.SuizoRonda)
+            .filter_by(torneo_id=torneo_id, numero=ronda)
+            .first()
+        )
+    return (
+        session.query(GestorSQL.SuizoRonda)
+        .filter_by(torneo_id=torneo_id)
+        .order_by(GestorSQL.SuizoRonda.numero.desc())
+        .first()
+    )
+
+
+@bot.tree.command(name="suizo_consulta_clasificacion", description="Consulta clasificación de torneo suizo")
+async def suizo_consulta_clasificacion(interaction: discord.Interaction, torneo_id: int, ronda: Optional[int] = None):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await interaction.response.send_message(f"No existe un torneo suizo con ID `{torneo_id}`.", ephemeral=True)
+            return
+
+        hasta_ronda = int(ronda) if ronda is not None else None
+        standings = calcular_standings(session, torneo_id, hasta_ronda=hasta_ronda)
+        if not standings:
+            await interaction.response.send_message("No hay datos de clasificación para ese torneo/ronda.")
+            return
+
+        usuarios_ids = [int(fila["usuario_id"]) for fila in standings]
+        usuarios = session.query(GestorSQL.Usuario).filter(GestorSQL.Usuario.idUsuarios.in_(usuarios_ids)).all()
+        por_id = {u.idUsuarios: u for u in usuarios}
+
+        filas = []
+        for fila in standings:
+            usuario_id = int(fila["usuario_id"])
+            nombre = _nombre_usuario_suizo(por_id.get(usuario_id))
+            estado = str(fila.get("estado_participante") or "ACTIVO")
+            filas.append([
+                fila.get("rank"),
+                nombre,
+                estado,
+                fila.get("pj"),
+                fila.get("pg"),
+                fila.get("pe"),
+                fila.get("pp"),
+                fila.get("puntos"),
+                fila.get("buchholz_cut"),
+                fila.get("diff_score"),
+            ])
+
+        tabla = _tabla_compacta(
+            ["#", "Jugador", "Estado", "PJ", "PG", "PE", "PP", "PTS", "BH", "DIF"],
+            filas,
+        )
+        ronda_label = ronda if ronda is not None else "actual"
+        await interaction.response.send_message(
+            f"**Clasificación suizo** torneo `{torneo_id}` (ronda: {ronda_label})\n```{tabla}```"
+        )
+    except Exception as e:
+        if interaction.response.is_done():
+            await interaction.followup.send(f"Error consultando clasificación suiza: {e}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"Error consultando clasificación suiza: {e}", ephemeral=True)
+    finally:
+        session.close()
+
+
+@bot.tree.command(name="suizo_consulta_jugador", description="Consulta detalle de un jugador en torneo suizo")
+async def suizo_consulta_jugador(interaction: discord.Interaction, torneo_id: int, jugador: str):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await interaction.response.send_message(f"No existe un torneo suizo con ID `{torneo_id}`.", ephemeral=True)
+            return
+
+        usuario = None
+        if jugador.isdigit():
+            usuario = (
+                session.query(GestorSQL.Usuario)
+                .filter(
+                    or_(
+                        GestorSQL.Usuario.idUsuarios == int(jugador),
+                        GestorSQL.Usuario.id_discord == int(jugador),
+                    )
+                )
+                .first()
+            )
+
+        if usuario is None:
+            usuario = (
+                session.query(GestorSQL.Usuario)
+                .filter(
+                    or_(
+                        GestorSQL.Usuario.nombreAMostrar == jugador,
+                        GestorSQL.Usuario.nombre_discord == jugador,
+                        GestorSQL.Usuario.nombre_bloodbowl == jugador,
+                    )
+                )
+                .first()
+            )
+
+        if usuario is None:
+            await interaction.response.send_message(f"No se encontró jugador `{jugador}`.", ephemeral=True)
+            return
+
+        participante = (
+            session.query(GestorSQL.SuizoParticipante)
+            .filter_by(torneo_id=torneo_id, usuario_id=usuario.idUsuarios)
+            .first()
+        )
+        if participante is None:
+            await interaction.response.send_message(
+                f"El jugador `{_nombre_usuario_suizo(usuario)}` no participa en el torneo `{torneo_id}`."
+            )
+            return
+
+        emparejamientos = (
+            session.query(GestorSQL.SuizoEmparejamiento, GestorSQL.SuizoRonda)
+            .join(GestorSQL.SuizoRonda, GestorSQL.SuizoRonda.id == GestorSQL.SuizoEmparejamiento.ronda_id)
+            .filter(
+                GestorSQL.SuizoEmparejamiento.torneo_id == torneo_id,
+                or_(
+                    GestorSQL.SuizoEmparejamiento.coach1_usuario_id == usuario.idUsuarios,
+                    GestorSQL.SuizoEmparejamiento.coach2_usuario_id == usuario.idUsuarios,
+                ),
+            )
+            .order_by(GestorSQL.SuizoRonda.numero.asc(), GestorSQL.SuizoEmparejamiento.mesa_numero.asc())
+            .all()
+        )
+
+        filas = []
+        for emp, ronda_db in emparejamientos:
+            es_c1 = int(emp.coach1_usuario_id) == int(usuario.idUsuarios)
+            rival_id = emp.coach2_usuario_id if es_c1 else emp.coach1_usuario_id
+            rival = session.query(GestorSQL.Usuario).filter_by(idUsuarios=rival_id).first() if rival_id else None
+            rival_part = (
+                session.query(GestorSQL.SuizoParticipante)
+                .filter_by(torneo_id=torneo_id, usuario_id=rival_id)
+                .first()
+                if rival_id
+                else None
+            )
+            rival_nombre = "BYE" if emp.es_bye else _nombre_usuario_suizo(rival)
+            if rival_part is not None and rival_part.estado == "RETIRADO":
+                rival_nombre = f"{rival_nombre} (RETIRADO)"
+
+            score = f"{emp.score_final_c1}-{emp.score_final_c2}" if es_c1 else f"{emp.score_final_c2}-{emp.score_final_c1}"
+            filas.append([ronda_db.numero, emp.mesa_numero, rival_nombre, emp.estado, score, emp.puntos_c1 if es_c1 else emp.puntos_c2])
+
+        tabla = _tabla_compacta(["R", "Mesa", "Rival", "Estado", "Score", "Pts"], filas)
+        await interaction.response.send_message(
+            f"**Jugador:** `{_nombre_usuario_suizo(usuario)}` | Estado: **{participante.estado}**\n```{tabla}```"
+        )
+    except Exception as e:
+        if interaction.response.is_done():
+            await interaction.followup.send(f"Error consultando jugador suizo: {e}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"Error consultando jugador suizo: {e}", ephemeral=True)
+    finally:
+        session.close()
+
+
+@bot.tree.command(name="suizo_consulta_ronda", description="Consulta emparejamientos de una ronda suiza")
+async def suizo_consulta_ronda(interaction: discord.Interaction, torneo_id: int, ronda: int):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        ronda_db = _resolver_ronda_suizo(session, torneo_id, ronda)
+        if ronda_db is None:
+            await interaction.response.send_message(f"No existe la ronda `{ronda}` para torneo `{torneo_id}`.", ephemeral=True)
+            return
+
+        participantes = session.query(GestorSQL.SuizoParticipante).filter_by(torneo_id=torneo_id).all()
+        estado_participante = {p.usuario_id: p.estado for p in participantes}
+
+        emparejamientos = (
+            session.query(GestorSQL.SuizoEmparejamiento)
+            .filter_by(torneo_id=torneo_id, ronda_id=ronda_db.id)
+            .order_by(GestorSQL.SuizoEmparejamiento.mesa_numero.asc())
+            .all()
+        )
+
+        filas = []
+        for emp in emparejamientos:
+            n1 = _nombre_usuario_suizo(emp.coach1_usuario)
+            if estado_participante.get(emp.coach1_usuario_id) == "RETIRADO":
+                n1 = f"{n1} (RETIRADO)"
+            if emp.es_bye or emp.coach2_usuario_id is None:
+                n2 = "BYE"
+            else:
+                n2 = _nombre_usuario_suizo(emp.coach2_usuario)
+                if estado_participante.get(emp.coach2_usuario_id) == "RETIRADO":
+                    n2 = f"{n2} (RETIRADO)"
+
+            filas.append([emp.mesa_numero, n1, n2, emp.estado, f"{emp.score_final_c1}-{emp.score_final_c2}"])
+
+        tabla = _tabla_compacta(["Mesa", "Coach1", "Coach2", "Estado", "Score"], filas)
+        await interaction.response.send_message(
+            f"**Ronda {ronda_db.numero}** (estado `{ronda_db.estado}`) torneo `{torneo_id}`\n```{tabla}```"
+        )
+    except Exception as e:
+        if interaction.response.is_done():
+            await interaction.followup.send(f"Error consultando ronda suiza: {e}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"Error consultando ronda suiza: {e}", ephemeral=True)
+    finally:
+        session.close()
+
+
+@bot.tree.command(name="suizo_consulta_desempates", description="Consulta criterios de desempate suizo")
+async def suizo_consulta_desempates(interaction: discord.Interaction, torneo_id: int, ronda: Optional[int] = None):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        standings = calcular_standings(session, torneo_id, hasta_ronda=ronda if ronda is not None else None)
+        if not standings:
+            await interaction.response.send_message("No hay standings para calcular desempates.")
+            return
+
+        usuarios_ids = [int(fila["usuario_id"]) for fila in standings]
+        usuarios = session.query(GestorSQL.Usuario).filter(GestorSQL.Usuario.idUsuarios.in_(usuarios_ids)).all()
+        por_id = {u.idUsuarios: u for u in usuarios}
+
+        filas = []
+        for fila in standings:
+            uid = int(fila["usuario_id"])
+            filas.append([
+                fila.get("rank"),
+                _nombre_usuario_suizo(por_id.get(uid)),
+                fila.get("estado_participante"),
+                fila.get("puntos"),
+                fila.get("h2h_valor") if fila.get("h2h_valor") is not None else "-",
+                fila.get("buchholz_cut"),
+                fila.get("diff_score"),
+            ])
+
+        tabla = _tabla_compacta(["#", "Jugador", "Estado", "PTS", "H2H", "BH", "DIF"], filas)
+        ronda_txt = ronda if ronda is not None else "actual"
+        await interaction.response.send_message(
+            f"**Desempates** torneo `{torneo_id}` (ronda: {ronda_txt})\n```{tabla}```\n"
+            "Orden: puntos > H2H (si aplica) > Buchholz Cut > diferencia de score."
+        )
+    except Exception as e:
+        if interaction.response.is_done():
+            await interaction.followup.send(f"Error consultando desempates suizos: {e}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"Error consultando desempates suizos: {e}", ephemeral=True)
+    finally:
+        session.close()
+
+
+@bot.tree.command(name="suizo_consulta_estado_canales", description="Consulta estado de canales por ronda suiza")
+async def suizo_consulta_estado_canales(interaction: discord.Interaction, torneo_id: int, ronda: Optional[int] = None):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        ronda_db = _resolver_ronda_suizo(session, torneo_id, ronda)
+        if ronda_db is None:
+            mensaje_ronda = f"{ronda}" if ronda is not None else "actual"
+            await interaction.response.send_message(
+                f"No hay ronda `{mensaje_ronda}` para el torneo `{torneo_id}`.",
+                ephemeral=True,
+            )
+            return
+
+        participantes = session.query(GestorSQL.SuizoParticipante).filter_by(torneo_id=torneo_id).all()
+        estado_participante = {p.usuario_id: p.estado for p in participantes}
+
+        emparejamientos = (
+            session.query(GestorSQL.SuizoEmparejamiento)
+            .filter_by(torneo_id=torneo_id, ronda_id=ronda_db.id)
+            .order_by(GestorSQL.SuizoEmparejamiento.mesa_numero.asc())
+            .all()
+        )
+
+        filas = []
+        for emp in emparejamientos:
+            n1 = _nombre_usuario_suizo(emp.coach1_usuario)
+            if estado_participante.get(emp.coach1_usuario_id) == "RETIRADO":
+                n1 = f"{n1} (RETIRADO)"
+
+            if emp.es_bye or emp.coach2_usuario is None:
+                n2 = "BYE"
+            else:
+                n2 = _nombre_usuario_suizo(emp.coach2_usuario)
+                if estado_participante.get(emp.coach2_usuario_id) == "RETIRADO":
+                    n2 = f"{n2} (RETIRADO)"
+
+            canal = emp.canal_id if emp.canal_id else "-"
+            estado_canal = "SIN_CANAL" if not emp.canal_id else ("ABIERTO" if emp.estado == "PENDIENTE" else "CERRADO")
+            filas.append([emp.mesa_numero, n1, n2, canal, estado_canal, emp.estado])
+
+        tabla = _tabla_compacta(["Mesa", "Coach1", "Coach2", "Canal", "EstadoCanal", "EstadoEmp"], filas)
+        await interaction.response.send_message(
+            f"**Estado de canales** torneo `{torneo_id}`, ronda `{ronda_db.numero}`\n```{tabla}```"
+        )
+    except Exception as e:
+        if interaction.response.is_done():
+            await interaction.followup.send(f"Error consultando estado de canales: {e}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"Error consultando estado de canales: {e}", ephemeral=True)
+    finally:
+        session.close()
+
+
 @bot.command(name="suizo_generar_ronda")
 async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
     if not es_comisario(ctx):
