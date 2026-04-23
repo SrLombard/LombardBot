@@ -1,6 +1,7 @@
 """Lógica base de standings para torneos suizos."""
 
 from decimal import Decimal
+from functools import cmp_to_key
 from typing import Any, Dict, List, Optional
 
 from GestorSQL import SuizoEmparejamiento, SuizoParticipante, SuizoRonda, SuizoTorneo
@@ -76,6 +77,46 @@ def calcular_h2h(standings: List[EstadoFila], emparejamientos_cerrados: List[Any
                 h2h_por_usuario[usuario_id] = h2h_acumulado[usuario_id]
 
     return h2h_por_usuario
+
+
+def ordenar_standings(standings: List[EstadoFila]) -> List[EstadoFila]:
+    """Ordena standings con desempates deterministas y asigna rank consecutivo."""
+
+    def _comparar_filas(fila_a: EstadoFila, fila_b: EstadoFila) -> int:
+        puntos_a = _decimal(fila_a.get("puntos"))
+        puntos_b = _decimal(fila_b.get("puntos"))
+        if puntos_a != puntos_b:
+            return -1 if puntos_a > puntos_b else 1
+
+        h2h_a = fila_a.get("h2h_valor")
+        h2h_b = fila_b.get("h2h_valor")
+        if h2h_a is not None and h2h_b is not None:
+            h2h_a_dec = _decimal(h2h_a)
+            h2h_b_dec = _decimal(h2h_b)
+            if h2h_a_dec != h2h_b_dec:
+                return -1 if h2h_a_dec > h2h_b_dec else 1
+
+        buchholz_a = _decimal(fila_a.get("buchholz_cut"))
+        buchholz_b = _decimal(fila_b.get("buchholz_cut"))
+        if buchholz_a != buchholz_b:
+            return -1 if buchholz_a > buchholz_b else 1
+
+        diff_a = int(fila_a.get("diff_score") or 0)
+        diff_b = int(fila_b.get("diff_score") or 0)
+        if diff_a != diff_b:
+            return -1 if diff_a > diff_b else 1
+
+        usuario_a = int(fila_a.get("usuario_id"))
+        usuario_b = int(fila_b.get("usuario_id"))
+        if usuario_a != usuario_b:
+            return -1 if usuario_a < usuario_b else 1
+
+        return 0
+
+    ordenados = sorted(standings, key=cmp_to_key(_comparar_filas))
+    for idx, fila in enumerate(ordenados, start=1):
+        fila["rank"] = idx
+    return ordenados
 
 
 def calcular_standings(session, torneo_id, hasta_ronda: Optional[int] = None) -> List[EstadoFila]:
@@ -177,12 +218,4 @@ def calcular_standings(session, torneo_id, hasta_ronda: Optional[int] = None) ->
             suma_rivales = sum(puntos_rivales, Decimal("0"))
             fila["buchholz_cut"] = suma_rivales - min(puntos_rivales)
 
-    return sorted(
-        filas.values(),
-        key=lambda f: (
-            -_decimal(f["puntos"]),
-            -f["diff_score"],
-            -f["score_favor"],
-            f["usuario_id"],
-        ),
-    )
+    return ordenar_standings(list(filas.values()))
