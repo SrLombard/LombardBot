@@ -17,6 +17,7 @@ from discord import File
 from discord.ext import commands
 from discord import app_commands
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 import tzlocal
 import os
@@ -4126,6 +4127,64 @@ async def suizo_crear(
         f"Formato: **{formato_normalizado}**\n"
         f"Fin ronda 1: **{fecha_fin_ronda1.strftime('%Y-%m-%d %H:%M')}**\n"
         f"Canal hub: **{canal_hub_texto}**"
+    )
+
+
+@bot.command(name="suizo_set_puntos")
+async def suizo_set_puntos(ctx, torneo_id: int, win: str, draw: str, loss: str, bye: str):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    try:
+        puntos_win = Decimal(win)
+        puntos_draw = Decimal(draw)
+        puntos_loss = Decimal(loss)
+        puntos_bye = Decimal(bye)
+    except InvalidOperation:
+        await ctx.send("Valores inválidos. Usa números válidos para win, draw, loss y bye.")
+        return
+
+    if any(valor < 0 for valor in (puntos_win, puntos_draw, puntos_loss, puntos_bye)):
+        await ctx.send("Todos los valores deben ser mayores o iguales a 0.")
+        return
+
+    if not (puntos_win > puntos_draw >= puntos_loss):
+        await ctx.send("Regla inválida: debe cumplirse `win > draw >= loss`.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await ctx.send(f"No existe un torneo suizo con ID `{torneo_id}`.")
+            return
+
+        if torneo.estado == "FINALIZADO":
+            await ctx.send("No se pueden modificar puntos: el torneo está en estado `FINALIZADO`.")
+            return
+
+        torneo.puntos_win = puntos_win
+        torneo.puntos_draw = puntos_draw
+        torneo.puntos_loss = puntos_loss
+        torneo.puntos_bye = puntos_bye
+        torneo.updated_at = datetime.now()
+
+        session.commit()
+        session.refresh(torneo)
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudieron actualizar los puntos del torneo: {e}")
+        return
+    finally:
+        session.close()
+
+    await ctx.send(
+        "✅ Puntuación del torneo suizo actualizada correctamente.\n"
+        f"Torneo ID: **{torneo_id}**\n"
+        f"win: **{torneo.puntos_win}** | draw: **{torneo.puntos_draw}** | "
+        f"loss: **{torneo.puntos_loss}** | bye: **{torneo.puntos_bye}**"
     )
 
 # Estructura: { "Día": {"Hora": [lista_de_funciones]} }
