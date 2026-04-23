@@ -98,6 +98,7 @@ def calcular_standings(session, torneo_id, hasta_ronda: Optional[int] = None) ->
     )
 
     filas: Dict[int, EstadoFila] = {}
+    rivales_por_usuario: Dict[int, List[int]] = {}
     for p in participantes:
         filas[p.usuario_id] = {
             "usuario_id": p.usuario_id,
@@ -110,7 +111,9 @@ def calcular_standings(session, torneo_id, hasta_ronda: Optional[int] = None) ->
             "score_favor": 0,
             "score_contra": 0,
             "diff_score": 0,
+            "buchholz_cut": Decimal("0"),
         }
+        rivales_por_usuario[p.usuario_id] = []
 
     emparejamientos_q = (
         session.query(SuizoEmparejamiento)
@@ -151,6 +154,8 @@ def calcular_standings(session, torneo_id, hasta_ronda: Optional[int] = None) ->
 
         filas[c1]["puntos"] += _decimal(emp.puntos_c1)
         filas[c2]["puntos"] += _decimal(emp.puntos_c2)
+        rivales_por_usuario[c1].append(c2)
+        rivales_por_usuario[c2].append(c1)
 
         if s1 > s2:
             filas[c1]["pg"] += 1
@@ -164,6 +169,13 @@ def calcular_standings(session, torneo_id, hasta_ronda: Optional[int] = None) ->
 
     for fila in filas.values():
         fila["diff_score"] = fila["score_favor"] - fila["score_contra"]
+        rivales = rivales_por_usuario.get(fila["usuario_id"], [])
+        puntos_rivales = [_decimal(filas[r]["puntos"]) for r in rivales if r in filas]
+        if len(puntos_rivales) < 2:
+            fila["buchholz_cut"] = Decimal("0")
+        else:
+            suma_rivales = sum(puntos_rivales, Decimal("0"))
+            fila["buchholz_cut"] = suma_rivales - min(puntos_rivales)
 
     return sorted(
         filas.values(),
