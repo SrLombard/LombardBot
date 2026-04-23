@@ -1,12 +1,14 @@
 """Lógica base de standings para torneos suizos."""
 
 import json
+from datetime import datetime
 from decimal import Decimal
 from functools import cmp_to_key
 from typing import Any, Dict, List, Optional
 
 from GestorSQL import (
     SuizoEmparejamiento,
+    SuizoPairingTrace,
     SuizoParticipante,
     SuizoRonda,
     SuizoStandingSnapshot,
@@ -294,3 +296,202 @@ def guardar_snapshot_ronda(session, torneo_id, ronda_numero, standings_ordenados
 
     session.flush()
     return len(snapshots)
+
+
+def generar_pairings_backtracking(session, torneo_id, ronda_numero):
+    """Genera pairings de ronda usando backtracking con reglas suizas.
+
+    Prioridades:
+    1) Evitar rivales repetidos.
+    2) Evitar mirror de raza.
+    3) Permitir repetidos/mirror como fallback si no hay solución.
+    """
+    ronda = (
+        session.query(SuizoRonda)
+        .filter(
+            SuizoRonda.torneo_id == torneo_id,
+            SuizoRonda.numero == ronda_numero,
+        )
+        .one_or_none()
+    )
+    if ronda is None:
+        return []
+
+    standings = calcular_standings(session, torneo_id, hasta_ronda=ronda_numero - 1 if ronda_numero > 1 else None)
+    participantes = (
+        session.query(SuizoParticipante)
+        .filter(
+            SuizoParticipante.torneo_id == torneo_id,
+            SuizoParticipante.estado == "ACTIVO",
+        )
+        .all()
+    )
+    participantes_por_usuario = {int(p.usuario_id): p for p in participantes}
+    activos = [fila for fila in standings if int(fila["usuario_id"]) in participantes_por_usuario]
+    if not activos:
+        return []
+
+    activos_por_puntos: Dict[str, List[int]] = {}
+    for fila in activos:
+        puntos = str(_decimal(fila.get("puntos")))
+        activos_por_puntos.setdefault(puntos, []).append(int(fila["usuario_id"]))
+
+    usuarios_ordenados = [int(f["usuario_id"]) for f in activos]
+    grupo_por_usuario = {}
+    for idx, (_, usuarios) in enumerate(
+        sorted(activos_por_puntos.items(), key=lambda item: Decimal(item[0]), reverse=True)
+    ):
+        for u in usuarios:
+            grupo_por_usuario[u] = idx
+
+    historial = (
+        session.query(SuizoEmparejamiento.coach1_usuario_id, SuizoEmparejamiento.coach2_usuario_id, SuizoEmparejamiento.es_bye)
+        .join(SuizoRonda, SuizoRonda.id == SuizoEmparejamiento.ronda_id)
+        .filter(
+            SuizoEmparejamiento.torneo_id == torneo_id,
+            SuizoRonda.numero < ronda_numero,
+        )
+        .all()
+    )
+
+    rivales_previos = {u: set() for u in usuarios_ordenados}
+    byes_previos = {u: int(participantes_por_usuario[u].cantidad_byes or 0) for u in usuarios_ordenados}
+    for c1, c2, es_bye in historial:
+        if c1 is None:
+            continue
+        c1 = int(c1)
+        if c1 in byes_previos and bool(es_bye):
+            byes_previos[c1] += 1
+        if c2 is None or bool(es_bye):
+            continue
+        c2 = int(c2)
+        if c1 in rivales_previos:
+            rivales_previos[c1].add(c2)
+        if c2 in rivales_previos:
+            rivales_previos[c2].add(c1)
+
+    def es_mirror(u1, u2):
+        raza1 = (participantes_por_usuario[u1].raza_competicion or "").strip().lower()
+        raza2 = (participantes_por_usuario[u2].raza_competicion or "").strip().lower()
+        return bool(raza1 and raza2 and raza1 == raza2)
+
+    def elegir_bye(disponibles):
+        elegibles = [u for u in disponibles if byes_previos.get(u, 0) == 0]
+        pool = elegibles if elegibles else list(disponibles)
+        return sorted(
+            pool,
+            key=lambda u: (
+                grupo_por_usuario.get(u, 10**6),
+                _decimal(next(f["puntos"] for f in activos if int(f["usuario_id"]) == u)),
+                u,
+            ),
+            reverse=True,
+        )[-1]
+
+    def resolver(allow_repeat, allow_mirror):
+        conflictos = {"repetido": 0, "mirror": 0, "sin_rival": 0}
+        usados = set()
+        mesas = []
+
+        bye_asignado = None
+        if len(usuarios_ordenados) % 2 == 1:
+            bye_asignado = elegir_bye(usuarios_ordenados)
+            usados.add(bye_asignado)
+            mesas.append(
+                {
+                    "coach1": bye_asignado,
+                    "coach2": None,
+                    "es_bye": True,
+                    "forfeit_tipo": "NONE",
+                }
+            )
+
+        restantes = [u for u in usuarios_ordenados if u not in usados]
+
+        def backtrack(pendientes):
+            if not pendientes:
+                return True
+            u1 = pendientes[0]
+            candidatos = []
+            for u2 in pendientes[1:]:
+                delta_grupo = abs(grupo_por_usuario.get(u1, 0) - grupo_por_usuario.get(u2, 0))
+                candidatos.append((delta_grupo, es_mirror(u1, u2), u2))
+            candidatos.sort(key=lambda x: (x[0], x[1], x[2]))
+
+            for _, mirror_actual, u2 in candidatos:
+                repetido = u2 in rivales_previos.get(u1, set())
+                if repetido and not allow_repeat:
+                    conflictos["repetido"] += 1
+                    continue
+                if mirror_actual and not allow_mirror:
+                    conflictos["mirror"] += 1
+                    continue
+
+                mesas.append(
+                    {
+                        "coach1": u1,
+                        "coach2": u2,
+                        "es_bye": False,
+                        "forfeit_tipo": "NONE",
+                    }
+                )
+                nuevos = [u for u in pendientes[1:] if u != u2]
+                if backtrack(nuevos):
+                    return True
+                mesas.pop()
+
+            conflictos["sin_rival"] += 1
+            return False
+
+        ok = backtrack(restantes)
+        if not ok:
+            return None, conflictos
+        mesas_ordenadas = sorted(
+            mesas,
+            key=lambda m: (0 if not m["es_bye"] else 1, m["coach1"], m["coach2"] if m["coach2"] is not None else 10**9),
+        )
+        return mesas_ordenadas, conflictos
+
+    seed_snapshot = (
+        session.query(SuizoStandingSnapshot.id)
+        .filter(
+            SuizoStandingSnapshot.torneo_id == torneo_id,
+            SuizoStandingSnapshot.ronda_numero == max(1, ronda_numero - 1),
+        )
+        .order_by(SuizoStandingSnapshot.id.asc())
+        .first()
+    )
+    seed_snapshot_id = int(seed_snapshot[0]) if seed_snapshot else None
+
+    intentos = [
+        (1, False, False, "OK"),
+        (2, False, True, "FALLBACK_MIRROR"),
+        (3, True, False, "FALLBACK_REPETIDO"),
+        (4, True, True, "FALLBACK_REPETIDO"),
+    ]
+
+    resultado_final = []
+    for intento, allow_repeat, allow_mirror, resultado in intentos:
+        mesas, conflictos = resolver(allow_repeat=allow_repeat, allow_mirror=allow_mirror)
+        traza = SuizoPairingTrace(
+            torneo_id=torneo_id,
+            ronda_id=ronda.id,
+            seed_snapshot_id=seed_snapshot_id,
+            intento=intento,
+            resultado=resultado if mesas else "SIN_SOLUCION",
+            reglas_aplicadas={
+                "solo_activos": True,
+                "agrupado_por_puntos": True,
+                "allow_repeat": allow_repeat,
+                "allow_mirror": allow_mirror,
+            },
+            conflictos=conflictos,
+            created_at=datetime.utcnow(),
+        )
+        session.add(traza)
+        if mesas is not None:
+            resultado_final = mesas
+            break
+
+    session.flush()
+    return resultado_final
