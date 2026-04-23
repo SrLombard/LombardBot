@@ -46,7 +46,10 @@ import inspect
 import mysql.connector
 import Inscripcion
 import Reformas
-from SuizoCore import generar_pairings_backtracking
+from SuizoCore import (
+    generar_pairings_backtracking,
+    procesar_cierre_ronda_si_corresponde,
+)
 
 
 # Cargar las variables de entorno desde .env
@@ -4759,10 +4762,49 @@ async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
                 f"Emparejamientos pendientes: **{pendientes}**."
             )
         else:
-            await ctx.send(
-                f"🏁 Ronda {ronda_abierta.numero} completa en torneo {torneo_id}. "
-                "Se dispara cierre automático (tarea 17)."
-            )
+            cierre = procesar_cierre_ronda_si_corresponde(session, torneo_id, ronda_abierta.numero)
+            if not cierre.get("cerrada"):
+                await ctx.send(
+                    f"⏳ Ronda {ronda_abierta.numero} aún no se puede cerrar en torneo {torneo_id}. "
+                    f"Motivo: **{cierre.get('motivo', 'DESCONOCIDO')}**."
+                )
+            else:
+                session.commit()
+                await ctx.send(
+                    f"🏁 Ronda {ronda_abierta.numero} cerrada en torneo {torneo_id}. "
+                    f"Snapshot de standings guardado: **{cierre.get('snapshot_filas', 0)}** filas."
+                )
+
+                if cierre.get("es_ultima_ronda"):
+                    clasificacion = cierre.get("standings") or []
+                    top = []
+                    for fila in clasificacion[:16]:
+                        usuario_id = int(fila.get("usuario_id"))
+                        usuario = session.query(GestorSQL.Usuario).filter_by(idUsuarios=usuario_id).first()
+                        nombre = (
+                            getattr(usuario, "nombreAMostrar", None)
+                            or getattr(usuario, "nombre_discord", None)
+                            or f"u{usuario_id}"
+                        )
+                        top.append(
+                            f"**#{fila.get('rank')}** {nombre} — "
+                            f"{fila.get('puntos')} pts | "
+                            f"PJ {fila.get('pj')} | "
+                            f"Dif {fila.get('diff_score')}"
+                        )
+
+                    await ctx.send(
+                        f"🏆 Torneo **{torneo_id}** finalizado.\n"
+                        "Clasificación final:\n"
+                        + ("\n".join(top) if top else "_Sin datos de clasificación._")
+                    )
+                else:
+                    siguiente_ronda = int(cierre.get("siguiente_ronda_numero"))
+                    await ctx.send(
+                        f"➡️ Se generará automáticamente la ronda **{siguiente_ronda}** "
+                        f"del torneo **{torneo_id}**."
+                    )
+                    await suizo_generar_ronda(ctx, torneo_id, siguiente_ronda)
 
         await ctx.send(
             "📊 Actualización suiza terminada.\n"

@@ -14,7 +14,13 @@ from GestorSQL import (
     SuizoStandingSnapshot,
     SuizoTorneo,
 )
-from SuizoConstantes import EMP_ADMINISTRADO, EMP_CERRADO
+from SuizoConstantes import (
+    EMP_ADMINISTRADO,
+    EMP_CERRADO,
+    EMP_PENDIENTE,
+    RONDA_CERRADA,
+    TORNEO_FINALIZADO,
+)
 
 
 EstadoFila = Dict[str, Any]
@@ -296,6 +302,64 @@ def guardar_snapshot_ronda(session, torneo_id, ronda_numero, standings_ordenados
 
     session.flush()
     return len(snapshots)
+
+
+def procesar_cierre_ronda_si_corresponde(session, torneo_id, ronda_numero):
+    """Cierra una ronda si ya no hay emparejamientos pendientes.
+
+    Flujo:
+    - Si quedan emparejamientos en estado PENDIENTE, no cierra.
+    - Cierra ronda (estado + cerrada_en), recalcula standings y guarda snapshot.
+    - Si era última ronda, finaliza torneo.
+    - Si no era la última, devuelve instrucción para generar la siguiente.
+    """
+    torneo = session.query(SuizoTorneo).filter(SuizoTorneo.id == torneo_id).one_or_none()
+    if torneo is None:
+        return {"cerrada": False, "motivo": "TORNEO_NO_EXISTE", "pendientes": None}
+
+    ronda = (
+        session.query(SuizoRonda)
+        .filter(
+            SuizoRonda.torneo_id == torneo_id,
+            SuizoRonda.numero == ronda_numero,
+        )
+        .one_or_none()
+    )
+    if ronda is None:
+        return {"cerrada": False, "motivo": "RONDA_NO_EXISTE", "pendientes": None}
+
+    pendientes = (
+        session.query(SuizoEmparejamiento)
+        .filter(
+            SuizoEmparejamiento.torneo_id == torneo_id,
+            SuizoEmparejamiento.ronda_id == ronda.id,
+            SuizoEmparejamiento.estado == EMP_PENDIENTE,
+        )
+        .count()
+    )
+    if pendientes > 0:
+        return {"cerrada": False, "motivo": "HAY_PENDIENTES", "pendientes": int(pendientes)}
+
+    ronda.estado = RONDA_CERRADA
+    ronda.cerrada_en = datetime.now()
+
+    standings = calcular_standings(session, torneo_id, hasta_ronda=ronda_numero)
+    snapshot_filas = guardar_snapshot_ronda(session, torneo_id, ronda_numero, standings)
+
+    es_ultima_ronda = int(ronda_numero) >= int(torneo.rondas_totales)
+    if es_ultima_ronda:
+        torneo.estado = TORNEO_FINALIZADO
+
+    session.flush()
+    return {
+        "cerrada": True,
+        "motivo": "CERRADA",
+        "pendientes": 0,
+        "es_ultima_ronda": es_ultima_ronda,
+        "siguiente_ronda_numero": None if es_ultima_ronda else int(ronda_numero) + 1,
+        "snapshot_filas": int(snapshot_filas),
+        "standings": standings,
+    }
 
 
 def generar_pairings_backtracking(session, torneo_id, ronda_numero):
