@@ -4959,6 +4959,141 @@ async def suizo_admin_resultado(
     finally:
         session.close()
 
+
+@bot.command(name="suizo_drop")
+async def suizo_drop(ctx, torneo_id: int, usuario: discord.Member, *, motivo: str):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    motivo_txt = (motivo or "").strip()
+    if not motivo_txt:
+        await ctx.send("Debes indicar un motivo para el drop.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await ctx.send(f"No existe un torneo suizo con ID `{torneo_id}`.")
+            return
+
+        usuario_bd = session.query(GestorSQL.Usuario).filter_by(id_discord=usuario.id).first()
+        if usuario_bd is None:
+            await ctx.send(
+                f"El usuario {usuario.mention} no está registrado en `usuarios` "
+                "(campo `id_discord`)."
+            )
+            return
+
+        participante = (
+            session.query(GestorSQL.SuizoParticipante)
+            .filter_by(torneo_id=torneo_id, usuario_id=usuario_bd.idUsuarios)
+            .first()
+        )
+        if participante is None:
+            await ctx.send(f"El usuario {usuario.mention} no participa en el torneo `{torneo_id}`.")
+            return
+
+        participante.estado = "RETIRADO"
+
+        ronda_abierta = (
+            session.query(GestorSQL.SuizoRonda)
+            .filter_by(torneo_id=torneo_id, estado="ABIERTA")
+            .order_by(GestorSQL.SuizoRonda.numero.asc())
+            .first()
+        )
+
+        emp_actualizado = None
+        if ronda_abierta is not None:
+            emp_actualizado = (
+                session.query(GestorSQL.SuizoEmparejamiento)
+                .filter_by(torneo_id=torneo_id, ronda_id=ronda_abierta.id, estado="PENDIENTE")
+                .filter(
+                    or_(
+                        GestorSQL.SuizoEmparejamiento.coach1_usuario_id == usuario_bd.idUsuarios,
+                        GestorSQL.SuizoEmparejamiento.coach2_usuario_id == usuario_bd.idUsuarios,
+                    )
+                )
+                .order_by(GestorSQL.SuizoEmparejamiento.mesa_numero.asc())
+                .first()
+            )
+
+        if emp_actualizado is not None and not emp_actualizado.es_bye:
+            if int(emp_actualizado.coach1_usuario_id) == int(usuario_bd.idUsuarios):
+                emp_actualizado.score_final_c1 = 0
+                emp_actualizado.score_final_c2 = 1
+                emp_actualizado.puntos_c1 = Decimal("0")
+                emp_actualizado.puntos_c2 = Decimal("3")
+                emp_actualizado.ganador_usuario_id = emp_actualizado.coach2_usuario_id
+                emp_actualizado.forfeit_tipo = "VISITANTE"
+            else:
+                emp_actualizado.score_final_c1 = 1
+                emp_actualizado.score_final_c2 = 0
+                emp_actualizado.puntos_c1 = Decimal("3")
+                emp_actualizado.puntos_c2 = Decimal("0")
+                emp_actualizado.ganador_usuario_id = emp_actualizado.coach1_usuario_id
+                emp_actualizado.forfeit_tipo = "LOCAL"
+
+            emp_actualizado.partidos_reportados = emp_actualizado.partidos_requeridos
+            emp_actualizado.estado = "ADMINISTRADO"
+            emp_actualizado.resultado_origen = "ADMIN"
+
+            try:
+                if emp_actualizado.canal_id:
+                    await UtilesDiscord.gestionar_canal_discord(
+                        ctx,
+                        "eliminar",
+                        canal_id=int(emp_actualizado.canal_id),
+                    )
+            except Exception:
+                pass
+
+        cierre = None
+        if ronda_abierta is not None:
+            cierre = procesar_cierre_ronda_si_corresponde(session, torneo_id, ronda_abierta.numero)
+
+        session.commit()
+
+        if emp_actualizado is not None and not emp_actualizado.es_bye:
+            await ctx.send(
+                f"✅ Drop aplicado en torneo **{torneo_id}** para {usuario.mention}.\n"
+                f"Motivo: **{motivo_txt}**\n"
+                f"Ronda abierta: **{ronda_abierta.numero}**, mesa **{emp_actualizado.mesa_numero}** "
+                f"administrada por forfeit (**{emp_actualizado.forfeit_tipo}**) con estado **ADMINISTRADO**."
+            )
+        elif ronda_abierta is not None and emp_actualizado is not None and emp_actualizado.es_bye:
+            await ctx.send(
+                f"✅ Drop aplicado en torneo **{torneo_id}** para {usuario.mention}.\n"
+                f"Motivo: **{motivo_txt}**\n"
+                f"Ronda abierta: **{ronda_abierta.numero}**. La mesa pendiente era BYE, sin ajuste adicional."
+            )
+        else:
+            await ctx.send(
+                f"✅ Drop aplicado en torneo **{torneo_id}** para {usuario.mention}.\n"
+                f"Motivo: **{motivo_txt}**\n"
+                "No se encontró mesa pendiente en ronda abierta para administrar."
+            )
+
+        if cierre is not None:
+            if cierre.get("cerrada"):
+                await ctx.send(
+                    f"🏁 Ronda **{ronda_abierta.numero}** cerrada tras el drop. "
+                    f"Snapshot standings: **{cierre.get('snapshot_filas', 0)}** filas."
+                )
+            else:
+                await ctx.send(
+                    f"⏳ Ronda **{ronda_abierta.numero}** sigue abierta tras el drop. "
+                    f"Motivo: **{cierre.get('motivo', 'DESCONOCIDO')}** "
+                    f"(pendientes: **{cierre.get('pendientes', '?')}**)."
+                )
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo aplicar el drop suizo: {e}")
+    finally:
+        session.close()
+
 # Estructura: { "Día": {"Hora": [lista_de_funciones]} }
 # tareas_programadas = {
 #     "Monday": {
