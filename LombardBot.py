@@ -4187,6 +4187,69 @@ async def suizo_set_puntos(ctx, torneo_id: int, win: str, draw: str, loss: str, 
         f"loss: **{torneo.puntos_loss}** | bye: **{torneo.puntos_bye}**"
     )
 
+
+@bot.command(name="suizo_add_jugador")
+async def suizo_add_jugador(ctx, torneo_id: int, usuario: discord.Member, raza_competicion: Optional[str] = None):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await ctx.send(f"No existe un torneo suizo con ID `{torneo_id}`.")
+            return
+
+        usuario_bd = session.query(GestorSQL.Usuario).filter_by(id_discord=usuario.id).first()
+        if usuario_bd is None:
+            await ctx.send(
+                f"El usuario {usuario.mention} no está registrado en `usuarios` "
+                "(campo `id_discord`)."
+            )
+            return
+
+        participante_existente = (
+            session.query(GestorSQL.SuizoParticipante)
+            .filter_by(torneo_id=torneo_id, usuario_id=usuario_bd.idUsuarios)
+            .first()
+        )
+        if participante_existente is not None:
+            await ctx.send(
+                f"El usuario {usuario.mention} ya está inscrito en el torneo `{torneo_id}`."
+            )
+            return
+
+        raza_final = raza_competicion if raza_competicion is not None else usuario_bd.raza
+        nuevo_participante = GestorSQL.SuizoParticipante(
+            torneo_id=torneo_id,
+            usuario_id=usuario_bd.idUsuarios,
+            estado="ACTIVO",
+            tiene_bye=0,
+            cantidad_byes=0,
+            late_join_ronda=None,
+            puntos_ajuste_inicial=0,
+            raza_competicion=raza_final,
+            created_at=datetime.now(),
+        )
+        session.add(nuevo_participante)
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo añadir el jugador al torneo suizo: {e}")
+        return
+    finally:
+        session.close()
+
+    raza_texto = raza_final if raza_final else "sin raza definida"
+    await ctx.send(
+        "✅ Jugador añadido correctamente al torneo suizo.\n"
+        f"Torneo ID: **{torneo_id}**\n"
+        f"Usuario: {usuario.mention} (idUsuarios: **{usuario_bd.idUsuarios}**)\n"
+        f"Raza competición: **{raza_texto}**"
+    )
+
 # Estructura: { "Día": {"Hora": [lista_de_funciones]} }
 # tareas_programadas = {
 #     "Monday": {
