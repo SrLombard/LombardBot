@@ -1,7 +1,7 @@
 import mysql.connector
 from dotenv import load_dotenv
 import os
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, BigInteger, Text, Numeric, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, BigInteger, Text, Numeric, Boolean, Enum, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -265,6 +265,155 @@ class Recompensas(Base):
 
     # Relación con equiposReformados
     equipo_reformado     = relationship("equiposReformados", back_populates="recompensas")
+
+
+class SuizoTorneo(Base):
+    __tablename__ = 'suizo_torneo'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(120), nullable=False)
+    activo = Column(Boolean, nullable=False, default=True)
+    estado = Column(Enum('CREADO', 'EN_CURSO', 'FINALIZADO', name='suizo_torneo_estado'), nullable=False, default='CREADO')
+    rondas_totales = Column(Integer, nullable=False)
+    ida_vuelta = Column(Boolean, nullable=False, default=False)
+    formato_serie = Column(Enum('BO1', 'BO3', 'BO5', name='suizo_torneo_formato_serie'), nullable=False, default='BO1')
+    puntos_win = Column(Numeric(4, 2), nullable=False, default=3.00)
+    puntos_draw = Column(Numeric(4, 2), nullable=False, default=1.00)
+    puntos_loss = Column(Numeric(4, 2), nullable=False, default=0.00)
+    puntos_bye = Column(Numeric(4, 2), nullable=False, default=1.50)
+    fecha_fin_ronda1 = Column(DateTime, nullable=False)
+    dias_por_ronda = Column(Integer, nullable=False, default=7)
+    canal_hub_id = Column(BigInteger, nullable=True)
+    creado_por_discord_id = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+    participantes = relationship("SuizoParticipante", back_populates="torneo", cascade="all, delete-orphan")
+    rondas = relationship("SuizoRonda", back_populates="torneo", cascade="all, delete-orphan")
+    emparejamientos = relationship("SuizoEmparejamiento", back_populates="torneo", cascade="all, delete-orphan")
+
+
+class SuizoParticipante(Base):
+    __tablename__ = 'suizo_participante'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('suizo_torneo.id'), nullable=False)
+    usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios'), nullable=False)
+    estado = Column(Enum('ACTIVO', 'RETIRADO', name='suizo_participante_estado'), nullable=False, default='ACTIVO')
+    tiene_bye = Column(Boolean, nullable=False, default=False)
+    cantidad_byes = Column(Integer, nullable=False, default=0)
+    late_join_ronda = Column(Integer, nullable=True)
+    puntos_ajuste_inicial = Column(Numeric(6, 2), nullable=False, default=0.00)
+    raza_competicion = Column(String(80), nullable=True)
+    created_at = Column(DateTime, nullable=False)
+
+    torneo = relationship("SuizoTorneo", back_populates="participantes")
+    usuario = relationship("Usuario", foreign_keys=[usuario_id])
+
+
+class SuizoRonda(Base):
+    __tablename__ = 'suizo_ronda'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('suizo_torneo.id'), nullable=False)
+    numero = Column(Integer, nullable=False)
+    estado = Column(Enum('ABIERTA', 'BLOQUEADA', 'CERRADA', name='suizo_ronda_estado'), nullable=False, default='ABIERTA')
+    fecha_inicio = Column(DateTime, nullable=False)
+    fecha_fin = Column(DateTime, nullable=False)
+    generada_por_discord_id = Column(BigInteger, nullable=True)
+    cerrada_en = Column(DateTime, nullable=True)
+
+    torneo = relationship("SuizoTorneo", back_populates="rondas")
+    emparejamientos = relationship("SuizoEmparejamiento", back_populates="ronda", cascade="all, delete-orphan")
+
+
+class SuizoEmparejamiento(Base):
+    __tablename__ = 'suizo_emparejamiento'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('suizo_torneo.id'), nullable=False)
+    ronda_id = Column(Integer, ForeignKey('suizo_ronda.id'), nullable=False)
+    mesa_numero = Column(Integer, nullable=False)
+    coach1_usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios'), nullable=False)
+    coach2_usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios'), nullable=True)
+    canal_id = Column(BigInteger, nullable=True)
+    estado = Column(Enum('PENDIENTE', 'REPORTADO', 'ADMINISTRADO', 'CERRADO', name='suizo_emparejamiento_estado'), nullable=False, default='PENDIENTE')
+    es_bye = Column(Boolean, nullable=False, default=False)
+    forfeit_tipo = Column(Enum('NONE', 'LOCAL', 'VISITANTE', 'DOBLE', name='suizo_emparejamiento_forfeit_tipo'), nullable=False, default='NONE')
+    partidos_requeridos = Column(Integer, nullable=False, default=1)
+    partidos_reportados = Column(Integer, nullable=False, default=0)
+    score_final_c1 = Column(Integer, nullable=False, default=0)
+    score_final_c2 = Column(Integer, nullable=False, default=0)
+    puntos_c1 = Column(Numeric(6, 2), nullable=False, default=0.00)
+    puntos_c2 = Column(Numeric(6, 2), nullable=False, default=0.00)
+    ganador_usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios'), nullable=True)
+    resultado_origen = Column(Enum('API', 'ADMIN', 'BYE', name='suizo_emparejamiento_resultado_origen'), nullable=True)
+
+    torneo = relationship("SuizoTorneo", back_populates="emparejamientos")
+    ronda = relationship("SuizoRonda", back_populates="emparejamientos")
+    coach1_usuario = relationship("Usuario", foreign_keys=[coach1_usuario_id])
+    coach2_usuario = relationship("Usuario", foreign_keys=[coach2_usuario_id])
+    ganador_usuario = relationship("Usuario", foreign_keys=[ganador_usuario_id])
+    games = relationship("SuizoGame", back_populates="emparejamiento", cascade="all, delete-orphan")
+
+
+class SuizoGame(Base):
+    __tablename__ = 'suizo_game'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    emparejamiento_id = Column(Integer, ForeignKey('suizo_emparejamiento.id'), nullable=False)
+    game_index = Column(Integer, nullable=False)
+    id_partido_bbowl = Column(String(64), nullable=True)
+    score_c1 = Column(Integer, nullable=False, default=0)
+    score_c2 = Column(Integer, nullable=False, default=0)
+    origen = Column(Enum('API', 'ADMIN', name='suizo_game_origen'), nullable=False)
+    confirmado = Column(Boolean, nullable=False, default=True)
+    fecha_registro = Column(DateTime, nullable=False)
+
+    emparejamiento = relationship("SuizoEmparejamiento", back_populates="games")
+
+
+class SuizoStandingSnapshot(Base):
+    __tablename__ = 'suizo_standing_snapshot'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('suizo_torneo.id'), nullable=False)
+    ronda_numero = Column(Integer, nullable=False)
+    usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios'), nullable=False)
+    estado_participante = Column(Enum('ACTIVO', 'RETIRADO', name='suizo_standing_snapshot_estado_participante'), nullable=False)
+    pj = Column(Integer, nullable=False, default=0)
+    pg = Column(Integer, nullable=False, default=0)
+    pe = Column(Integer, nullable=False, default=0)
+    pp = Column(Integer, nullable=False, default=0)
+    puntos = Column(Numeric(6, 2), nullable=False, default=0.00)
+    score_favor = Column(Integer, nullable=False, default=0)
+    score_contra = Column(Integer, nullable=False, default=0)
+    diff_score = Column(Integer, nullable=False, default=0)
+    buchholz_cut = Column(Numeric(8, 2), nullable=False, default=0.00)
+    h2h_valor = Column(Numeric(8, 2), nullable=True)
+    rank_ronda = Column(Integer, nullable=False)
+    json_detalle_tiebreak = Column(JSON, nullable=True)
+
+    torneo = relationship("SuizoTorneo")
+    usuario = relationship("Usuario", foreign_keys=[usuario_id])
+
+
+class SuizoPairingTrace(Base):
+    __tablename__ = 'suizo_pairing_trace'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('suizo_torneo.id'), nullable=False)
+    ronda_id = Column(Integer, ForeignKey('suizo_ronda.id'), nullable=False)
+    seed_snapshot_id = Column(Integer, ForeignKey('suizo_standing_snapshot.id'), nullable=True)
+    intento = Column(Integer, nullable=False)
+    resultado = Column(Enum('OK', 'FALLBACK_REPETIDO', 'FALLBACK_MIRROR', 'SIN_SOLUCION', name='suizo_pairing_trace_resultado'), nullable=False)
+    reglas_aplicadas = Column(JSON, nullable=True)
+    conflictos = Column(JSON, nullable=True)
+    created_at = Column(DateTime, nullable=False)
+
+    torneo = relationship("SuizoTorneo")
+    ronda = relationship("SuizoRonda")
+    seed_snapshot = relationship("SuizoStandingSnapshot")
 
 def conexionEngine():
     # Conectarse a la base de datos y crear una sesión
