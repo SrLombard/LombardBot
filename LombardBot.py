@@ -4562,6 +4562,222 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
     else:
         await ctx.send(resumen)
 
+
+@bot.command(name="actualiza_suizo")
+async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await ctx.send(f"No existe un torneo suizo con ID `{torneo_id}`.")
+            return
+
+        ronda_abierta = (
+            session.query(GestorSQL.SuizoRonda)
+            .filter_by(torneo_id=torneo_id, estado="ABIERTA")
+            .order_by(GestorSQL.SuizoRonda.numero.asc())
+            .first()
+        )
+        if ronda_abierta is None:
+            await ctx.send(f"No hay ronda ABIERTA para el torneo `{torneo_id}`.")
+            return
+
+        matches = APIBbowl.obtener_partidos(bbowl_API_token, torneo_id)
+        if not matches:
+            await ctx.send("No se encontraron partidos en la API para el torneo indicado.")
+            return
+
+        total_insertados = 0
+        total_duplicados = 0
+        total_sin_usuario = 0
+        total_sin_emparejamiento = 0
+        resultados_publicados = 0
+
+        for match in matches:
+            match_id = match.get("uuid")
+            if not match_id:
+                continue
+
+            game_duplicado = (
+                session.query(GestorSQL.SuizoGame)
+                .filter_by(id_partido_bbowl=match_id)
+                .first()
+            )
+            if game_duplicado is not None:
+                total_duplicados += 1
+                if todos == 0:
+                    break
+                continue
+
+            coaches = match.get("coaches", [])
+            if len(coaches) < 2:
+                continue
+
+            coach_ids = [coaches[0].get("idcoach"), coaches[1].get("idcoach")]
+            usuarios = (
+                session.query(GestorSQL.Usuario)
+                .filter(GestorSQL.Usuario.id_bloodbowl.in_(coach_ids))
+                .all()
+            )
+            if len(usuarios) != 2:
+                total_sin_usuario += 1
+                continue
+
+            coach_to_usuario = {str(u.id_bloodbowl): u for u in usuarios}
+            coach1_db = coach_to_usuario.get(str(coach_ids[0]))
+            coach2_db = coach_to_usuario.get(str(coach_ids[1]))
+            if coach1_db is None or coach2_db is None:
+                total_sin_usuario += 1
+                continue
+
+            posibles_emparejamientos = (
+                session.query(GestorSQL.SuizoEmparejamiento)
+                .filter_by(
+                    torneo_id=torneo_id,
+                    ronda_id=ronda_abierta.id,
+                    estado="PENDIENTE",
+                )
+                .filter(
+                    or_(
+                        and_(
+                            GestorSQL.SuizoEmparejamiento.coach1_usuario_id == coach1_db.idUsuarios,
+                            GestorSQL.SuizoEmparejamiento.coach2_usuario_id == coach2_db.idUsuarios,
+                        ),
+                        and_(
+                            GestorSQL.SuizoEmparejamiento.coach1_usuario_id == coach2_db.idUsuarios,
+                            GestorSQL.SuizoEmparejamiento.coach2_usuario_id == coach1_db.idUsuarios,
+                        ),
+                    )
+                )
+                .all()
+            )
+
+            emparejamiento = None
+            for candidato in posibles_emparejamientos:
+                if candidato.partidos_reportados < candidato.partidos_requeridos:
+                    emparejamiento = candidato
+                    break
+
+            if emparejamiento is None:
+                total_sin_emparejamiento += 1
+                continue
+
+            local_index = 0 if int(emparejamiento.coach1_usuario.id_bloodbowl) == int(coach_ids[0]) else 1
+            visitante_index = 1 - local_index
+            teams = match.get("teams", [])
+            if len(teams) < 2:
+                continue
+
+            score_c1 = int(teams[local_index].get("score", 0))
+            score_c2 = int(teams[visitante_index].get("score", 0))
+            siguiente_index = int(emparejamiento.partidos_reportados) + 1
+
+            nuevo_game = GestorSQL.SuizoGame(
+                emparejamiento_id=emparejamiento.id,
+                game_index=siguiente_index,
+                id_partido_bbowl=match_id,
+                score_c1=score_c1,
+                score_c2=score_c2,
+                origen="API",
+                confirmado=True,
+                fecha_registro=datetime.now(),
+            )
+            session.add(nuevo_game)
+
+            emparejamiento.score_final_c1 = int(emparejamiento.score_final_c1 or 0) + score_c1
+            emparejamiento.score_final_c2 = int(emparejamiento.score_final_c2 or 0) + score_c2
+            emparejamiento.partidos_reportados = int(emparejamiento.partidos_reportados or 0) + 1
+            total_insertados += 1
+
+            if emparejamiento.partidos_reportados >= emparejamiento.partidos_requeridos:
+                emparejamiento.estado = "CERRADO"
+                emparejamiento.resultado_origen = "API"
+
+                puntos_win = Decimal(str(torneo.puntos_win))
+                puntos_draw = Decimal(str(torneo.puntos_draw))
+                puntos_loss = Decimal(str(torneo.puntos_loss))
+
+                if emparejamiento.score_final_c1 > emparejamiento.score_final_c2:
+                    emparejamiento.ganador_usuario_id = emparejamiento.coach1_usuario_id
+                    emparejamiento.puntos_c1 = puntos_win
+                    emparejamiento.puntos_c2 = puntos_loss
+                elif emparejamiento.score_final_c1 < emparejamiento.score_final_c2:
+                    emparejamiento.ganador_usuario_id = emparejamiento.coach2_usuario_id
+                    emparejamiento.puntos_c1 = puntos_loss
+                    emparejamiento.puntos_c2 = puntos_win
+                else:
+                    emparejamiento.ganador_usuario_id = None
+                    emparejamiento.puntos_c1 = puntos_draw
+                    emparejamiento.puntos_c2 = puntos_draw
+
+                try:
+                    if emparejamiento.canal_id:
+                        await UtilesDiscord.gestionar_canal_discord(
+                            ctx,
+                            "eliminar",
+                            canal_id=int(emparejamiento.canal_id),
+                        )
+                except Exception:
+                    pass
+
+                nombre1 = (
+                    getattr(emparejamiento.coach1_usuario, "nombreAMostrar", None)
+                    or getattr(emparejamiento.coach1_usuario, "nombre_discord", None)
+                    or f"u{emparejamiento.coach1_usuario_id}"
+                )
+                nombre2 = (
+                    getattr(emparejamiento.coach2_usuario, "nombreAMostrar", None)
+                    or getattr(emparejamiento.coach2_usuario, "nombre_discord", None)
+                    or f"u{emparejamiento.coach2_usuario_id}"
+                )
+                await ctx.send(
+                    f"✅ Resultado registrado (R{ronda_abierta.numero} M{emparejamiento.mesa_numero}): "
+                    f"**{nombre1} {emparejamiento.score_final_c1} - {emparejamiento.score_final_c2} {nombre2}**."
+                )
+                resultados_publicados += 1
+
+            session.commit()
+
+        pendientes = (
+            session.query(GestorSQL.SuizoEmparejamiento)
+            .filter_by(
+                torneo_id=torneo_id,
+                ronda_id=ronda_abierta.id,
+            )
+            .filter(GestorSQL.SuizoEmparejamiento.estado != "CERRADO")
+            .count()
+        )
+
+        if pendientes > 0:
+            await ctx.send(
+                f"⏳ Ronda {ronda_abierta.numero} aún no completa en torneo {torneo_id}. "
+                f"Emparejamientos pendientes: **{pendientes}**."
+            )
+        else:
+            await ctx.send(
+                f"🏁 Ronda {ronda_abierta.numero} completa en torneo {torneo_id}. "
+                "Se dispara cierre automático (tarea 17)."
+            )
+
+        await ctx.send(
+            "📊 Actualización suiza terminada.\n"
+            f"Partidos API insertados: **{total_insertados}**\n"
+            f"Duplicados ignorados: **{total_duplicados}**\n"
+            f"Sin usuario mapeado: **{total_sin_usuario}**\n"
+            f"Sin emparejamiento pendiente: **{total_sin_emparejamiento}**\n"
+            f"Resultados publicados: **{resultados_publicados}**"
+        )
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo actualizar el suizo: {e}")
+    finally:
+        session.close()
+
 # Estructura: { "Día": {"Hora": [lista_de_funciones]} }
 # tareas_programadas = {
 #     "Monday": {
