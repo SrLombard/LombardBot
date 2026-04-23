@@ -4665,6 +4665,231 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
         await ctx.send(resumen)
 
 
+@bot.command(name="suizo_regenerar_ronda")
+async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    if numero_ronda < 1:
+        await ctx.send("El número de ronda debe ser mayor o igual a 1.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await ctx.send(f"No existe un torneo suizo con ID `{torneo_id}`.")
+            return
+
+        ronda = (
+            session.query(GestorSQL.SuizoRonda)
+            .filter_by(torneo_id=torneo_id, numero=numero_ronda)
+            .first()
+        )
+        if ronda is None:
+            await ctx.send(f"La ronda `{numero_ronda}` no existe para el torneo `{torneo_id}`.")
+            return
+
+        if ronda.estado != "ABIERTA":
+            await ctx.send(
+                f"No se puede regenerar la ronda `{numero_ronda}` porque su estado es `{ronda.estado}` y debe estar en `ABIERTA`."
+            )
+            return
+
+        emparejamientos_actuales = (
+            session.query(GestorSQL.SuizoEmparejamiento)
+            .filter_by(torneo_id=torneo_id, ronda_id=ronda.id)
+            .all()
+        )
+        if not emparejamientos_actuales:
+            await ctx.send(
+                f"La ronda `{numero_ronda}` no tiene emparejamientos para regenerar en el torneo `{torneo_id}`."
+            )
+            return
+
+        ids_emparejamientos = [int(emp.id) for emp in emparejamientos_actuales]
+        conteo_games = (
+            session.query(GestorSQL.SuizoGame)
+            .filter(GestorSQL.SuizoGame.emparejamiento_id.in_(ids_emparejamientos))
+            .count()
+        )
+        if conteo_games > 0:
+            await ctx.send(
+                f"No se puede regenerar la ronda `{numero_ronda}`: ya hay **{conteo_games}** resultado(s) en `suizo_game`."
+            )
+            return
+
+        conteo_cerradas_admin = (
+            session.query(GestorSQL.SuizoEmparejamiento)
+            .filter(
+                GestorSQL.SuizoEmparejamiento.torneo_id == torneo_id,
+                GestorSQL.SuizoEmparejamiento.ronda_id == ronda.id,
+                GestorSQL.SuizoEmparejamiento.estado.in_(["ADMINISTRADO", "CERRADO"]),
+            )
+            .count()
+        )
+        if conteo_cerradas_admin > 0:
+            await ctx.send(
+                f"No se puede regenerar la ronda `{numero_ronda}`: hay mesas en estado `ADMINISTRADO` o `CERRADO`."
+            )
+            return
+
+        canales_a_borrar = [int(emp.canal_id) for emp in emparejamientos_actuales if emp.canal_id is not None]
+        canales_eliminados = 0
+        canales_no_encontrados = 0
+        canales_error = 0
+        for canal_id in canales_a_borrar:
+            canal = ctx.guild.get_channel(canal_id) if ctx.guild else None
+            if canal is None:
+                canales_no_encontrados += 1
+                continue
+            try:
+                await canal.delete()
+                canales_eliminados += 1
+            except Exception:
+                canales_error += 1
+
+        (
+            session.query(GestorSQL.SuizoEmparejamiento)
+            .filter_by(torneo_id=torneo_id, ronda_id=ronda.id)
+            .delete(synchronize_session=False)
+        )
+        (
+            session.query(GestorSQL.SuizoPairingTrace)
+            .filter_by(torneo_id=torneo_id, ronda_numero=numero_ronda)
+            .delete(synchronize_session=False)
+        )
+        session.flush()
+
+        pairings = generar_pairings_backtracking(session, torneo_id, numero_ronda)
+        if not pairings:
+            session.rollback()
+            await ctx.send(
+                "No se pudieron regenerar emparejamientos para la ronda solicitada "
+                "(sin solución de pairings)."
+            )
+            return
+
+        ids_usuarios = set()
+        for mesa in pairings:
+            ids_usuarios.add(int(mesa["coach1"]))
+            if mesa.get("coach2") is not None:
+                ids_usuarios.add(int(mesa["coach2"]))
+
+        usuarios = (
+            session.query(GestorSQL.Usuario)
+            .filter(GestorSQL.Usuario.idUsuarios.in_(ids_usuarios))
+            .all()
+        )
+        usuarios_por_id = {int(u.idUsuarios): u for u in usuarios}
+        partidos_requeridos = _partidos_requeridos_desde_formato(torneo.formato_serie)
+
+        emparejamientos_db = []
+        for idx, mesa in enumerate(pairings, start=1):
+            coach1_id = int(mesa["coach1"])
+            coach2_raw = mesa.get("coach2")
+            coach2_id = int(coach2_raw) if coach2_raw is not None else None
+            emp = GestorSQL.SuizoEmparejamiento(
+                torneo_id=torneo_id,
+                ronda_id=ronda.id,
+                mesa_numero=idx,
+                coach1_usuario_id=coach1_id,
+                coach2_usuario_id=coach2_id,
+                estado="PENDIENTE",
+                es_bye=bool(mesa.get("es_bye", False)),
+                forfeit_tipo=mesa.get("forfeit_tipo", "NONE"),
+                partidos_requeridos=partidos_requeridos,
+                partidos_reportados=0,
+                score_final_c1=0,
+                score_final_c2=0,
+                puntos_c1=0,
+                puntos_c2=0,
+            )
+            session.add(emp)
+            emparejamientos_db.append(emp)
+        session.flush()
+
+        categoria_destino = getattr(ctx.channel, "category", None)
+        comisario_role = discord.utils.get(ctx.guild.roles, name="Comisario") if ctx.guild else None
+        canales_creados = 0
+        canales_creacion_error = 0
+        mesas_resumen = []
+
+        for emp in emparejamientos_db:
+            jugador1 = usuarios_por_id.get(int(emp.coach1_usuario_id))
+            jugador2 = usuarios_por_id.get(int(emp.coach2_usuario_id)) if emp.coach2_usuario_id else None
+
+            nombre_jugador1 = _normalizar_nombre_canal_suizo(
+                getattr(jugador1, "nombreAMostrar", None) or getattr(jugador1, "nombre_discord", None) or f"u{emp.coach1_usuario_id}"
+            )
+            nombre_jugador2 = _normalizar_nombre_canal_suizo(
+                (getattr(jugador2, "nombreAMostrar", None) or getattr(jugador2, "nombre_discord", None))
+                if jugador2
+                else "bye"
+            )
+            nombre_canal = f"r{numero_ronda}-m{emp.mesa_numero}-{nombre_jugador1}-vs-{nombre_jugador2}"[:100]
+
+            canal_creado = None
+            if ctx.guild:
+                overwrites = {ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False)}
+                if comisario_role:
+                    overwrites[comisario_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+                miembro1 = (
+                    ctx.guild.get_member(int(jugador1.id_discord))
+                    if jugador1 is not None and jugador1.id_discord is not None
+                    else None
+                )
+                miembro2 = (
+                    ctx.guild.get_member(int(jugador2.id_discord))
+                    if jugador2 is not None and jugador2.id_discord is not None
+                    else None
+                )
+                if miembro1:
+                    overwrites[miembro1] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                if miembro2:
+                    overwrites[miembro2] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+                try:
+                    canal_creado = await ctx.guild.create_text_channel(
+                        name=nombre_canal,
+                        category=categoria_destino,
+                        overwrites=overwrites,
+                    )
+                    emp.canal_id = canal_creado.id
+                    canales_creados += 1
+                except Exception:
+                    canales_creacion_error += 1
+
+            nombre_resumen_1 = getattr(jugador1, "nombreAMostrar", None) or getattr(jugador1, "nombre_discord", None) or f"u{emp.coach1_usuario_id}"
+            nombre_resumen_2 = (
+                getattr(jugador2, "nombreAMostrar", None) or getattr(jugador2, "nombre_discord", None) or f"u{emp.coach2_usuario_id}"
+            ) if jugador2 else "BYE"
+            canal_txt = f"<#{emp.canal_id}>" if emp.canal_id else "no creado"
+            mesas_resumen.append(
+                f"Mesa {emp.mesa_numero}: {nombre_resumen_1} vs {nombre_resumen_2} | canal: {canal_txt}"
+            )
+
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo regenerar la ronda suiza: {e}")
+        return
+    finally:
+        session.close()
+
+    await ctx.send(
+        "♻️ Ronda regenerada correctamente.\n"
+        f"Torneo: **{torneo_id}** | Ronda: **{numero_ronda}**\n"
+        f"Emparejamientos regenerados: **{len(mesas_resumen)}**\n"
+        f"Canales borrados: **{canales_eliminados}** | No encontrados: **{canales_no_encontrados}** | Error al borrar: **{canales_error}**\n"
+        f"Canales creados: **{canales_creados}** | Error al crear: **{canales_creacion_error}**\n"
+        + "\n".join(mesas_resumen)
+    )
+
+
 @bot.command(name="actualiza_suizo")
 async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
     if not es_comisario(ctx):
