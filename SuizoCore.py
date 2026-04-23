@@ -6,6 +6,8 @@ from decimal import Decimal
 from functools import cmp_to_key
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import or_
+
 from GestorSQL import (
     SuizoEmparejamiento,
     SuizoPairingTrace,
@@ -387,6 +389,10 @@ def generar_pairings_backtracking(session, torneo_id, ronda_numero):
         .filter(
             SuizoParticipante.torneo_id == torneo_id,
             SuizoParticipante.estado == "ACTIVO",
+            or_(
+                SuizoParticipante.late_join_ronda.is_(None),
+                SuizoParticipante.late_join_ronda <= ronda_numero,
+            ),
         )
         .all()
     )

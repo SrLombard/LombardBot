@@ -47,6 +47,7 @@ import mysql.connector
 import Inscripcion
 import Reformas
 from SuizoCore import (
+    calcular_standings,
     generar_pairings_backtracking,
     procesar_cierre_ronda_si_corresponde,
 )
@@ -4344,6 +4345,104 @@ async def suizo_add_lote(ctx, torneo_id: int, *tokens_usuarios: str):
         f"Altas OK: **{altas_ok}**\n"
         f"Duplicados: **{duplicados}**\n"
         f"No encontrados en `usuarios`: **{no_encontrados}**"
+    )
+
+
+@bot.command(name="suizo_add_tardio")
+async def suizo_add_tardio(ctx, torneo_id: int, usuario: discord.Member, raza_competicion: Optional[str] = None):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await ctx.send(f"No existe un torneo suizo con ID `{torneo_id}`.")
+            return
+
+        if torneo.estado == "FINALIZADO":
+            await ctx.send("No se puede añadir un jugador tardío: el torneo está en estado `FINALIZADO`.")
+            return
+
+        usuario_bd = session.query(GestorSQL.Usuario).filter_by(id_discord=usuario.id).first()
+        if usuario_bd is None:
+            await ctx.send(
+                f"El usuario {usuario.mention} no está registrado en `usuarios` "
+                "(campo `id_discord`)."
+            )
+            return
+
+        participante_existente = (
+            session.query(GestorSQL.SuizoParticipante)
+            .filter_by(torneo_id=torneo_id, usuario_id=usuario_bd.idUsuarios)
+            .first()
+        )
+        if participante_existente is not None:
+            await ctx.send(
+                f"El usuario {usuario.mention} ya está inscrito en el torneo `{torneo_id}`."
+            )
+            return
+
+        ronda_actual = (
+            session.query(func.max(GestorSQL.SuizoRonda.numero))
+            .filter(GestorSQL.SuizoRonda.torneo_id == torneo_id)
+            .scalar()
+        ) or 0
+        late_join_ronda = int(ronda_actual) + 1
+
+        standings_actuales = calcular_standings(session, torneo_id, hasta_ronda=int(ronda_actual) if ronda_actual > 0 else None)
+        participantes_actuales = (
+            session.query(GestorSQL.SuizoParticipante)
+            .filter(
+                GestorSQL.SuizoParticipante.torneo_id == torneo_id,
+                GestorSQL.SuizoParticipante.estado == "ACTIVO",
+                or_(
+                    GestorSQL.SuizoParticipante.late_join_ronda.is_(None),
+                    GestorSQL.SuizoParticipante.late_join_ronda <= int(ronda_actual),
+                ),
+            )
+            .all()
+        )
+        ids_actuales = {int(p.usuario_id) for p in participantes_actuales}
+        puntos_base = [
+            Decimal(str(fila.get("puntos") or 0))
+            for fila in standings_actuales
+            if int(fila.get("usuario_id") or 0) in ids_actuales
+        ]
+        puntos_ajuste_inicial = (sum(puntos_base, Decimal("0")) / Decimal(len(puntos_base))) if puntos_base else Decimal("0")
+        puntos_ajuste_inicial = puntos_ajuste_inicial.quantize(Decimal("0.01"))
+
+        raza_final = raza_competicion if raza_competicion is not None else usuario_bd.raza
+        nuevo_participante = GestorSQL.SuizoParticipante(
+            torneo_id=torneo_id,
+            usuario_id=usuario_bd.idUsuarios,
+            estado="ACTIVO",
+            tiene_bye=0,
+            cantidad_byes=0,
+            late_join_ronda=late_join_ronda,
+            puntos_ajuste_inicial=puntos_ajuste_inicial,
+            raza_competicion=raza_final,
+            created_at=datetime.now(),
+        )
+        session.add(nuevo_participante)
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo añadir el jugador tardío al torneo suizo: {e}")
+        return
+    finally:
+        session.close()
+
+    raza_texto = raza_final if raza_final else "sin raza definida"
+    await ctx.send(
+        "✅ Jugador tardío añadido correctamente al torneo suizo.\n"
+        f"Torneo ID: **{torneo_id}**\n"
+        f"Usuario: {usuario.mention} (idUsuarios: **{usuario_bd.idUsuarios}**)\n"
+        f"Raza competición: **{raza_texto}**\n"
+        f"Puntos ajuste inicial: **{puntos_ajuste_inicial}**\n"
+        f"Entra desde ronda: **{late_join_ronda}**"
     )
 
 
