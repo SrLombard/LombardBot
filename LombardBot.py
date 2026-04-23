@@ -4692,6 +4692,13 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
             await ctx.send(f"La ronda `{numero_ronda}` no existe para el torneo `{torneo_id}`.")
             return
 
+        if ronda.estado == "BLOQUEADA":
+            await ctx.send(
+                f"No se puede regenerar la ronda `{numero_ronda}` porque está **BLOQUEADA**. "
+                f"Usa `!suizo_desbloquear_ronda {torneo_id} {numero_ronda}` para habilitar comandos sensibles."
+            )
+            return
+
         if ronda.estado != "ABIERTA":
             await ctx.send(
                 f"No se puede regenerar la ronda `{numero_ronda}` porque su estado es `{ronda.estado}` y debe estar en `ABIERTA`."
@@ -4887,6 +4894,104 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
         f"Canales borrados: **{canales_eliminados}** | No encontrados: **{canales_no_encontrados}** | Error al borrar: **{canales_error}**\n"
         f"Canales creados: **{canales_creados}** | Error al crear: **{canales_creacion_error}**\n"
         + "\n".join(mesas_resumen)
+    )
+
+
+@bot.command(name="suizo_bloquear_ronda")
+async def suizo_bloquear_ronda(ctx, torneo_id: int, numero_ronda: int):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    if numero_ronda < 1:
+        await ctx.send("El número de ronda debe ser mayor o igual a 1.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        ronda = (
+            session.query(GestorSQL.SuizoRonda)
+            .filter_by(torneo_id=torneo_id, numero=numero_ronda)
+            .first()
+        )
+        if ronda is None:
+            await ctx.send(f"La ronda `{numero_ronda}` no existe para el torneo `{torneo_id}`.")
+            return
+
+        if ronda.estado == "CERRADA":
+            await ctx.send(
+                f"No se puede bloquear la ronda `{numero_ronda}` porque está en estado `CERRADA`."
+            )
+            return
+
+        if ronda.estado == "BLOQUEADA":
+            await ctx.send(
+                f"La ronda `{numero_ronda}` del torneo `{torneo_id}` ya estaba en estado `BLOQUEADA`."
+            )
+            return
+
+        ronda.estado = "BLOQUEADA"
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo bloquear la ronda suiza: {e}")
+        return
+    finally:
+        session.close()
+
+    await ctx.send(
+        f"🔒 Ronda `{numero_ronda}` del torneo `{torneo_id}` bloqueada. "
+        "Se deshabilitan `!suizo_forzar_pairing` y `!suizo_regenerar_ronda`."
+    )
+
+
+@bot.command(name="suizo_desbloquear_ronda")
+async def suizo_desbloquear_ronda(ctx, torneo_id: int, numero_ronda: int):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    if numero_ronda < 1:
+        await ctx.send("El número de ronda debe ser mayor o igual a 1.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        ronda = (
+            session.query(GestorSQL.SuizoRonda)
+            .filter_by(torneo_id=torneo_id, numero=numero_ronda)
+            .first()
+        )
+        if ronda is None:
+            await ctx.send(f"La ronda `{numero_ronda}` no existe para el torneo `{torneo_id}`.")
+            return
+
+        if ronda.estado == "CERRADA":
+            await ctx.send(
+                f"No se puede desbloquear la ronda `{numero_ronda}` porque está en estado `CERRADA`."
+            )
+            return
+
+        if ronda.estado != "BLOQUEADA":
+            await ctx.send(
+                f"La ronda `{numero_ronda}` del torneo `{torneo_id}` no está bloqueada (estado actual: `{ronda.estado}`)."
+            )
+            return
+
+        ronda.estado = "ABIERTA"
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo desbloquear la ronda suiza: {e}")
+        return
+    finally:
+        session.close()
+
+    await ctx.send(
+        f"🔓 Ronda `{numero_ronda}` del torneo `{torneo_id}` desbloqueada. "
+        "Vuelven a estar permitidos `!suizo_forzar_pairing` y `!suizo_regenerar_ronda`."
     )
 
 
