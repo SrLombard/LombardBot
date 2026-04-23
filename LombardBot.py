@@ -4820,6 +4820,145 @@ async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
     finally:
         session.close()
 
+
+@bot.command(name="suizo_admin_resultado")
+async def suizo_admin_resultado(
+    ctx,
+    torneo_id: int,
+    ronda: int,
+    mesa: int,
+    tipo: str,
+    a: Optional[int] = None,
+    b: Optional[int] = None,
+):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    tipo_normalizado = (tipo or "").strip().lower()
+    tipos_validos = {"forfeit_local", "forfeit_visitante", "empate_admin", "doble_forfeit", "manual"}
+    if tipo_normalizado not in tipos_validos:
+        await ctx.send(
+            "Tipo inválido. Usa uno de: `forfeit_local`, `forfeit_visitante`, `empate_admin`, `doble_forfeit`, `manual`."
+        )
+        return
+
+    if tipo_normalizado == "manual":
+        if a is None or b is None:
+            await ctx.send("Para `manual` debes informar score `a b` (ejemplo: `!suizo_admin_resultado 3 2 1 manual 2 1`).")
+            return
+        if int(a) < 0 or int(b) < 0:
+            await ctx.send("El score manual no puede tener valores negativos.")
+            return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await ctx.send(f"No existe un torneo suizo con ID `{torneo_id}`.")
+            return
+
+        ronda_db = (
+            session.query(GestorSQL.SuizoRonda)
+            .filter_by(torneo_id=torneo_id, numero=ronda)
+            .first()
+        )
+        if ronda_db is None:
+            await ctx.send(f"No existe la ronda `{ronda}` para el torneo `{torneo_id}`.")
+            return
+        if ronda_db.estado == "CERRADA":
+            await ctx.send(f"La ronda `{ronda}` ya está cerrada; no se puede administrar la mesa `{mesa}`.")
+            return
+
+        emp = (
+            session.query(GestorSQL.SuizoEmparejamiento)
+            .filter_by(torneo_id=torneo_id, ronda_id=ronda_db.id, mesa_numero=mesa)
+            .first()
+        )
+        if emp is None:
+            await ctx.send(f"No existe la mesa `{mesa}` en la ronda `{ronda}` del torneo `{torneo_id}`.")
+            return
+        if emp.es_bye:
+            await ctx.send("La mesa indicada es un BYE y no requiere administración manual de resultado.")
+            return
+
+        score_c1 = 0
+        score_c2 = 0
+        puntos_c1 = Decimal("0")
+        puntos_c2 = Decimal("0")
+        ganador_usuario_id = None
+        forfeit_tipo = "NONE"
+
+        puntos_win = Decimal(str(torneo.puntos_win))
+        puntos_draw = Decimal(str(torneo.puntos_draw))
+        puntos_loss = Decimal(str(torneo.puntos_loss))
+
+        if tipo_normalizado == "forfeit_local":
+            score_c1, score_c2 = 1, 0
+            puntos_c1, puntos_c2 = Decimal("3"), Decimal("0")
+            ganador_usuario_id = emp.coach1_usuario_id
+            forfeit_tipo = "LOCAL"
+        elif tipo_normalizado == "forfeit_visitante":
+            score_c1, score_c2 = 0, 1
+            puntos_c1, puntos_c2 = Decimal("0"), Decimal("3")
+            ganador_usuario_id = emp.coach2_usuario_id
+            forfeit_tipo = "VISITANTE"
+        elif tipo_normalizado == "empate_admin":
+            score_c1, score_c2 = 0, 0
+            puntos_c1, puntos_c2 = Decimal("1"), Decimal("1")
+        elif tipo_normalizado == "doble_forfeit":
+            score_c1, score_c2 = 0, 0
+            puntos_c1, puntos_c2 = Decimal("0"), Decimal("0")
+            forfeit_tipo = "DOBLE"
+        else:
+            score_c1, score_c2 = int(a), int(b)
+            if score_c1 > score_c2:
+                puntos_c1, puntos_c2 = puntos_win, puntos_loss
+                ganador_usuario_id = emp.coach1_usuario_id
+            elif score_c1 < score_c2:
+                puntos_c1, puntos_c2 = puntos_loss, puntos_win
+                ganador_usuario_id = emp.coach2_usuario_id
+            else:
+                puntos_c1, puntos_c2 = puntos_draw, puntos_draw
+
+        emp.score_final_c1 = score_c1
+        emp.score_final_c2 = score_c2
+        emp.puntos_c1 = puntos_c1
+        emp.puntos_c2 = puntos_c2
+        emp.ganador_usuario_id = ganador_usuario_id
+        emp.forfeit_tipo = forfeit_tipo
+        emp.partidos_reportados = emp.partidos_requeridos
+        emp.estado = "ADMINISTRADO"
+        emp.resultado_origen = "ADMIN"
+
+        cierre = procesar_cierre_ronda_si_corresponde(session, torneo_id, ronda)
+        session.commit()
+
+        await ctx.send(
+            f"✅ Resultado administrado en torneo **{torneo_id}**, ronda **{ronda}**, mesa **{mesa}**.\n"
+            f"Tipo: **{tipo_normalizado}** | Score: **{score_c1}-{score_c2}** | "
+            f"Puntos: **{puntos_c1}-{puntos_c2}**.\n"
+            f"Estado guardado: **ADMINISTRADO** | Origen: **ADMIN**."
+        )
+
+        if cierre.get("cerrada"):
+            await ctx.send(
+                f"🏁 Ronda **{ronda}** cerrada correctamente tras la administración. "
+                f"Snapshot standings: **{cierre.get('snapshot_filas', 0)}** filas."
+            )
+        else:
+            await ctx.send(
+                f"⏳ Ronda **{ronda}** aún abierta tras la administración. "
+                f"Motivo: **{cierre.get('motivo', 'DESCONOCIDO')}** "
+                f"(pendientes: **{cierre.get('pendientes', '?')}**)."
+            )
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo administrar el resultado suizo: {e}")
+    finally:
+        session.close()
+
 # Estructura: { "Día": {"Hora": [lista_de_funciones]} }
 # tareas_programadas = {
 #     "Monday": {
