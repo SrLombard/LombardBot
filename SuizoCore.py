@@ -16,6 +16,68 @@ def _decimal(valor: Any) -> Decimal:
     return Decimal(str(valor or 0))
 
 
+def _get_valor_registro(registro: Any, campo: str, default: Any = None) -> Any:
+    """Obtiene un campo desde dict u objeto."""
+    if isinstance(registro, dict):
+        return registro.get(campo, default)
+    return getattr(registro, campo, default)
+
+
+def calcular_h2h(standings: List[EstadoFila], emparejamientos_cerrados: List[Any]) -> Dict[int, Optional[Decimal]]:
+    """Calcula H2H solo para empates con enfrentamiento directo real.
+
+    Reglas:
+    - Solo se evalúan jugadores empatados en puntos.
+    - Solo se calcula H2H si los jugadores empatados se enfrentaron entre sí.
+    - Si no hay partido directo dentro del empate, H2H es None.
+    - No se aplica transitividad.
+    """
+    h2h_por_usuario: Dict[int, Optional[Decimal]] = {
+        int(fila["usuario_id"]): None for fila in standings
+    }
+
+    empatados_por_puntos: Dict[Decimal, List[int]] = {}
+    for fila in standings:
+        puntos = _decimal(fila.get("puntos"))
+        usuario_id = int(fila["usuario_id"])
+        empatados_por_puntos.setdefault(puntos, []).append(usuario_id)
+
+    for usuarios_empatados in empatados_por_puntos.values():
+        if len(usuarios_empatados) < 2:
+            continue
+
+        set_empatados = set(usuarios_empatados)
+        h2h_acumulado: Dict[int, Decimal] = {u: Decimal("0") for u in usuarios_empatados}
+        tiene_partido_directo: Dict[int, bool] = {u: False for u in usuarios_empatados}
+
+        for emp in emparejamientos_cerrados:
+            c1 = _get_valor_registro(emp, "coach1_usuario_id")
+            c2 = _get_valor_registro(emp, "coach2_usuario_id")
+            es_bye = bool(_get_valor_registro(emp, "es_bye", False))
+
+            if es_bye or c1 is None or c2 is None:
+                continue
+
+            c1 = int(c1)
+            c2 = int(c2)
+            if c1 not in set_empatados or c2 not in set_empatados:
+                continue
+
+            puntos_c1 = _decimal(_get_valor_registro(emp, "puntos_c1"))
+            puntos_c2 = _decimal(_get_valor_registro(emp, "puntos_c2"))
+
+            h2h_acumulado[c1] += puntos_c1
+            h2h_acumulado[c2] += puntos_c2
+            tiene_partido_directo[c1] = True
+            tiene_partido_directo[c2] = True
+
+        for usuario_id in usuarios_empatados:
+            if tiene_partido_directo[usuario_id]:
+                h2h_por_usuario[usuario_id] = h2h_acumulado[usuario_id]
+
+    return h2h_por_usuario
+
+
 def calcular_standings(session, torneo_id, hasta_ronda: Optional[int] = None) -> List[EstadoFila]:
     """Calcula el standing acumulado de un torneo suizo.
 
