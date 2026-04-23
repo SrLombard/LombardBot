@@ -69,6 +69,9 @@ bot = DiscordClientSingleton.initialize(discord_bot_token, intents)
 #Lista de usuarios con permisos
 maestros = ["208239645014753280","681577610010296372","1297346191130103859"]
 
+def es_comisario(ctx):
+    return any(getattr(rol, "name", "") == "Comisario" for rol in getattr(ctx.author, "roles", []))
+
 # Lista de IDs de canales permitidos
 canales_permitidos = ['457740100097540106']
 
