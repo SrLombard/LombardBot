@@ -46,6 +46,7 @@ import inspect
 import mysql.connector
 import Inscripcion
 import Reformas
+from SuizoCore import generar_pairings_backtracking
 
 
 # Cargar las variables de entorno desde .env
@@ -4341,6 +4342,225 @@ async def suizo_add_lote(ctx, torneo_id: int, *tokens_usuarios: str):
         f"Duplicados: **{duplicados}**\n"
         f"No encontrados en `usuarios`: **{no_encontrados}**"
     )
+
+
+def _normalizar_nombre_canal_suizo(nombre: str) -> str:
+    nombre_base = re.sub(r"\s+", "-", (nombre or "").strip().lower())
+    nombre_base = re.sub(r"[^a-z0-9-]", "", nombre_base)
+    nombre_base = re.sub(r"-{2,}", "-", nombre_base).strip("-")
+    return nombre_base or "jugador"
+
+
+def _partidos_requeridos_desde_formato(formato_serie: str) -> int:
+    formato = (formato_serie or "BO1").upper()
+    if formato == "BO3":
+        return 3
+    if formato == "BO5":
+        return 5
+    return 1
+
+
+@bot.command(name="suizo_generar_ronda")
+async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    if numero_ronda < 1:
+        await ctx.send("El número de ronda debe ser mayor o igual a 1.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await ctx.send(f"No existe un torneo suizo con ID `{torneo_id}`.")
+            return
+
+        if numero_ronda > int(torneo.rondas_totales):
+            await ctx.send(
+                f"Ronda inválida: el torneo `{torneo_id}` tiene máximo `{torneo.rondas_totales}` rondas."
+            )
+            return
+
+        ronda_existente = (
+            session.query(GestorSQL.SuizoRonda)
+            .filter_by(torneo_id=torneo_id, numero=numero_ronda)
+            .first()
+        )
+        if ronda_existente is not None:
+            await ctx.send(f"La ronda `{numero_ronda}` ya existe para el torneo `{torneo_id}`.")
+            return
+
+        if numero_ronda > 1:
+            ronda_anterior = (
+                session.query(GestorSQL.SuizoRonda)
+                .filter_by(torneo_id=torneo_id, numero=numero_ronda - 1)
+                .first()
+            )
+            if ronda_anterior is None:
+                await ctx.send(
+                    f"No se puede generar la ronda `{numero_ronda}`: no existe la ronda `{numero_ronda - 1}`."
+                )
+                return
+            if ronda_anterior.estado != "CERRADA":
+                await ctx.send(
+                    f"No se puede generar la ronda `{numero_ronda}`: la ronda `{numero_ronda - 1}` "
+                    f"está en estado `{ronda_anterior.estado}`."
+                )
+                return
+
+        fecha_inicio = datetime.now()
+        fecha_fin = torneo.fecha_fin_ronda1 if numero_ronda == 1 else (fecha_inicio + timedelta(days=7))
+        nueva_ronda = GestorSQL.SuizoRonda(
+            torneo_id=torneo_id,
+            numero=numero_ronda,
+            estado="ABIERTA",
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            generada_por_discord_id=ctx.author.id,
+        )
+        session.add(nueva_ronda)
+        session.flush()
+
+        pairings = generar_pairings_backtracking(session, torneo_id, numero_ronda)
+        if not pairings:
+            session.rollback()
+            await ctx.send(
+                "No se pudieron generar emparejamientos para la ronda solicitada "
+                "(sin solución de pairings)."
+            )
+            return
+
+        ids_usuarios = set()
+        for mesa in pairings:
+            ids_usuarios.add(int(mesa["coach1"]))
+            if mesa.get("coach2") is not None:
+                ids_usuarios.add(int(mesa["coach2"]))
+
+        usuarios = (
+            session.query(GestorSQL.Usuario)
+            .filter(GestorSQL.Usuario.idUsuarios.in_(ids_usuarios))
+            .all()
+        )
+        usuarios_por_id = {int(u.idUsuarios): u for u in usuarios}
+        partidos_requeridos = _partidos_requeridos_desde_formato(torneo.formato_serie)
+
+        emparejamientos_db = []
+        for idx, mesa in enumerate(pairings, start=1):
+            coach1_id = int(mesa["coach1"])
+            coach2_raw = mesa.get("coach2")
+            coach2_id = int(coach2_raw) if coach2_raw is not None else None
+            emp = GestorSQL.SuizoEmparejamiento(
+                torneo_id=torneo_id,
+                ronda_id=nueva_ronda.id,
+                mesa_numero=idx,
+                coach1_usuario_id=coach1_id,
+                coach2_usuario_id=coach2_id,
+                estado="PENDIENTE",
+                es_bye=bool(mesa.get("es_bye", False)),
+                forfeit_tipo=mesa.get("forfeit_tipo", "NONE"),
+                partidos_requeridos=partidos_requeridos,
+                partidos_reportados=0,
+                score_final_c1=0,
+                score_final_c2=0,
+                puntos_c1=0,
+                puntos_c2=0,
+            )
+            session.add(emp)
+            emparejamientos_db.append(emp)
+
+        session.flush()
+
+        categoria_destino = getattr(ctx.channel, "category", None)
+        comisario_role = discord.utils.get(ctx.guild.roles, name="Comisario") if ctx.guild else None
+
+        mesas_resumen = []
+        canales_ok = 0
+        canales_error = 0
+
+        for emp in emparejamientos_db:
+            jugador1 = usuarios_por_id.get(int(emp.coach1_usuario_id))
+            jugador2 = usuarios_por_id.get(int(emp.coach2_usuario_id)) if emp.coach2_usuario_id else None
+
+            nombre_jugador1 = _normalizar_nombre_canal_suizo(
+                getattr(jugador1, "nombreAMostrar", None) or getattr(jugador1, "nombre_discord", None) or f"u{emp.coach1_usuario_id}"
+            )
+            nombre_jugador2 = _normalizar_nombre_canal_suizo(
+                (getattr(jugador2, "nombreAMostrar", None) or getattr(jugador2, "nombre_discord", None))
+                if jugador2
+                else "bye"
+            )
+            nombre_canal = f"r{numero_ronda}-m{emp.mesa_numero}-{nombre_jugador1}-vs-{nombre_jugador2}"[:100]
+
+            canal_creado = None
+            if ctx.guild:
+                overwrites = {ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False)}
+                if comisario_role:
+                    overwrites[comisario_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+                miembro1 = (
+                    ctx.guild.get_member(int(jugador1.id_discord))
+                    if jugador1 is not None and jugador1.id_discord is not None
+                    else None
+                )
+                miembro2 = (
+                    ctx.guild.get_member(int(jugador2.id_discord))
+                    if jugador2 is not None and jugador2.id_discord is not None
+                    else None
+                )
+                if miembro1:
+                    overwrites[miembro1] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                if miembro2:
+                    overwrites[miembro2] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+                try:
+                    canal_creado = await ctx.guild.create_text_channel(
+                        name=nombre_canal,
+                        category=categoria_destino,
+                        overwrites=overwrites,
+                    )
+                    emp.canal_id = canal_creado.id
+                    canales_ok += 1
+                except Exception:
+                    canales_error += 1
+
+            nombre_resumen_1 = getattr(jugador1, "nombreAMostrar", None) or getattr(jugador1, "nombre_discord", None) or f"u{emp.coach1_usuario_id}"
+            nombre_resumen_2 = (
+                getattr(jugador2, "nombreAMostrar", None) or getattr(jugador2, "nombre_discord", None) or f"u{emp.coach2_usuario_id}"
+            ) if jugador2 else "BYE"
+            canal_txt = f"<#{emp.canal_id}>" if emp.canal_id else "no creado"
+            mesas_resumen.append(
+                f"Mesa {emp.mesa_numero}: {nombre_resumen_1} vs {nombre_resumen_2} | canal: {canal_txt}"
+            )
+
+        session.commit()
+        canal_hub_id = int(torneo.canal_hub_id) if torneo.canal_hub_id is not None else None
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo generar la ronda suiza: {e}")
+        return
+    finally:
+        session.close()
+
+    resumen = (
+        "✅ Ronda suiza generada.\n"
+        f"Torneo: **{torneo_id}** | Ronda: **{numero_ronda}**\n"
+        f"Estado ronda: **ABIERTA**\n"
+        f"Fecha inicio: **{fecha_inicio.strftime('%Y-%m-%d %H:%M')}**\n"
+        f"Fecha fin: **{fecha_fin.strftime('%Y-%m-%d %H:%M')}**\n"
+        f"Mesas creadas: **{len(mesas_resumen)}**\n"
+        f"Canales creados: **{canales_ok}** | Errores canal: **{canales_error}**\n"
+        + "\n".join(mesas_resumen)
+    )
+
+    canal_hub = ctx.guild.get_channel(canal_hub_id) if ctx.guild and canal_hub_id else None
+    if canal_hub:
+        await canal_hub.send(resumen)
+        await ctx.send(f"Ronda generada y resumen publicado en <#{canal_hub_id}>.")
+    else:
+        await ctx.send(resumen)
 
 # Estructura: { "Día": {"Hora": [lista_de_funciones]} }
 # tareas_programadas = {
