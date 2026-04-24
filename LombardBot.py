@@ -4925,6 +4925,10 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
             generada_por_discord_id=ctx.author.id,
         )
         session.add(nueva_ronda)
+
+        if numero_ronda == 1 and torneo.estado == "CREADO":
+            torneo.estado = "EN_CURSO"
+
         session.flush()
 
         pairings = generar_pairings_backtracking(session, torneo_id, numero_ronda)
