@@ -355,7 +355,7 @@ def procesar_cierre_ronda_si_corresponde(session, torneo_id, ronda_numero):
         }
 
     ronda.estado = RONDA_CERRADA
-    ronda.cerrada_en = datetime.now()
+    ronda.cerrada_en = datetime.utcnow()
 
     standings = calcular_standings(session, torneo_id, hasta_ronda=ronda_numero)
     snapshot_filas = guardar_snapshot_ronda(session, torneo_id, ronda_numero, standings)
