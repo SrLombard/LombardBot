@@ -4528,6 +4528,30 @@ def _partidos_requeridos_desde_formato(formato_serie: str) -> int:
     return 1
 
 
+SUIZO_CATEGORIAS_CANALES_PARTIDOS = [
+    1497290792241205460,
+    1497290892002857082,
+    1497290952530727013,
+]
+SUIZO_MAX_CANALES_POR_CATEGORIA = 25
+
+
+def _seleccionar_categoria_suizo_para_partido(guild, conteo_nuevos_canales):
+    if guild is None:
+        return None
+
+    for categoria_id in SUIZO_CATEGORIAS_CANALES_PARTIDOS:
+        categoria = guild.get_channel(int(categoria_id))
+        if categoria is None:
+            continue
+        existentes = len(getattr(categoria, "channels", []) or [])
+        nuevos = conteo_nuevos_canales.get(int(categoria_id), 0)
+        if existentes + nuevos < SUIZO_MAX_CANALES_POR_CATEGORIA:
+            conteo_nuevos_canales[int(categoria_id)] = nuevos + 1
+            return categoria
+    return None
+
+
 def _nombre_usuario_suizo(usuario) -> str:
     if usuario is None:
         return "N/D"
@@ -4991,8 +5015,8 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
 
         session.flush()
 
-        categoria_destino = getattr(ctx.channel, "category", None)
         comisario_role = discord.utils.get(ctx.guild.roles, name="Comisario") if ctx.guild else None
+        conteo_nuevos_canales_por_categoria = {}
 
         mesas_resumen = []
         canales_ok = 0
@@ -5034,6 +5058,11 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
                     overwrites[miembro2] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
                 try:
+                    categoria_destino = _seleccionar_categoria_suizo_para_partido(
+                        ctx.guild, conteo_nuevos_canales_por_categoria
+                    )
+                    if categoria_destino is None:
+                        raise RuntimeError("No hay categorías suizas con hueco disponible para crear más canales.")
                     canal_creado = await ctx.guild.create_text_channel(
                         name=nombre_canal,
                         category=categoria_destino,
@@ -5236,8 +5265,8 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
             emparejamientos_db.append(emp)
         session.flush()
 
-        categoria_destino = getattr(ctx.channel, "category", None)
         comisario_role = discord.utils.get(ctx.guild.roles, name="Comisario") if ctx.guild else None
+        conteo_nuevos_canales_por_categoria = {}
         canales_creados = 0
         canales_creacion_error = 0
         mesas_resumen = []
@@ -5278,6 +5307,11 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
                     overwrites[miembro2] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
                 try:
+                    categoria_destino = _seleccionar_categoria_suizo_para_partido(
+                        ctx.guild, conteo_nuevos_canales_por_categoria
+                    )
+                    if categoria_destino is None:
+                        raise RuntimeError("No hay categorías suizas con hueco disponible para crear más canales.")
                     canal_creado = await ctx.guild.create_text_channel(
                         name=nombre_canal,
                         category=categoria_destino,
