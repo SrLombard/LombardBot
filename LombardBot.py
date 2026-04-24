@@ -4914,9 +4914,19 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
                     f"está en estado `{ronda_anterior.estado}`."
                 )
                 return
+            if ronda_anterior.fecha_fin is None:
+                await ctx.send(
+                    f"No se puede generar la ronda `{numero_ronda}`: la ronda `{numero_ronda - 1}` "
+                    "no tiene `fecha_fin` definida. Corrige la ronda anterior para evitar fechas inconsistentes."
+                )
+                return
 
         fecha_inicio = datetime.utcnow()
-        fecha_fin = torneo.fecha_fin_ronda1 if numero_ronda == 1 else (fecha_inicio + timedelta(days=7))
+        fecha_fin = (
+            torneo.fecha_fin_ronda1
+            if numero_ronda == 1
+            else (ronda_anterior.fecha_fin + timedelta(days=7))
+        )
         nueva_ronda = GestorSQL.SuizoRonda(
             torneo_id=torneo_id,
             numero=numero_ronda,
