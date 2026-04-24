@@ -2135,7 +2135,7 @@ async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int
     session = Session()
     
     # Calcular el momento de tiempo desde el cual queremos obtener los registros
-    tiempo_desde = datetime.now() - timedelta(minutes=minutos)
+    tiempo_desde = datetime.utcnow() - timedelta(minutes=minutos)
     
     try:
         # Realizar la consulta filtrando por fecha
@@ -2144,9 +2144,10 @@ async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int
             all()
         
         # Formatear los resultados en Markdown
-        tabla_markdown = "```| Fecha                | Usuario | Acción |\n|---------------------|---------|--------|"
+        tabla_markdown = "```| Fecha (Europe/Madrid) | Usuario | Acción |\n|----------------------|---------|--------|"
         for fecha, usuario, tipo in resultados:
-            tabla_markdown += f"\n| {fecha.strftime('%Y-%m-%d %H:%M:%S')} | {usuario} | {tipo} |"
+            fecha_madrid = fecha.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('Europe/Madrid')) if fecha.tzinfo is None else fecha.astimezone(ZoneInfo('Europe/Madrid'))
+            tabla_markdown += f"\n| {fecha_madrid.strftime('%Y-%m-%d %H:%M:%S')} | {usuario} | {tipo} |"
         
         tabla_markdown += "```"
         
@@ -4156,7 +4157,7 @@ async def suizo_crear(
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
     try:
-        ahora = datetime.now()
+        ahora = datetime.utcnow()
         nuevo_torneo = GestorSQL.SuizoTorneo(
             nombre=nombre,
             activo=1,
@@ -4239,7 +4240,7 @@ async def suizo_set_puntos(ctx, torneo_id: int, win: str, draw: str, loss: str, 
         torneo.puntos_draw = puntos_draw
         torneo.puntos_loss = puntos_loss
         torneo.puntos_bye = puntos_bye
-        torneo.updated_at = datetime.now()
+        torneo.updated_at = datetime.utcnow()
 
         session.commit()
         session.refresh(torneo)
@@ -4301,7 +4302,7 @@ async def suizo_add_jugador(ctx, torneo_id: int, usuario: discord.Member, raza_c
             late_join_ronda=None,
             puntos_ajuste_inicial=0,
             raza_competicion=raza_final,
-            created_at=datetime.now(),
+            created_at=datetime.utcnow(),
         )
         session.add(nuevo_participante)
         session.commit()
@@ -4390,7 +4391,7 @@ async def suizo_add_lote(ctx, torneo_id: int, *tokens_usuarios: str):
                 late_join_ronda=None,
                 puntos_ajuste_inicial=0,
                 raza_competicion=raza_final,
-                created_at=datetime.now(),
+                created_at=datetime.utcnow(),
             )
             session.add(nuevo_participante)
             altas_ok += 1
@@ -4489,7 +4490,7 @@ async def suizo_add_tardio(ctx, torneo_id: int, usuario: discord.Member, raza_co
             late_join_ronda=late_join_ronda,
             puntos_ajuste_inicial=puntos_ajuste_inicial,
             raza_competicion=raza_final,
-            created_at=datetime.now(),
+            created_at=datetime.utcnow(),
         )
         session.add(nuevo_participante)
         session.commit()
@@ -4914,7 +4915,7 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
                 )
                 return
 
-        fecha_inicio = datetime.now()
+        fecha_inicio = datetime.utcnow()
         fecha_fin = torneo.fecha_fin_ronda1 if numero_ronda == 1 else (fecha_inicio + timedelta(days=7))
         nueva_ronda = GestorSQL.SuizoRonda(
             torneo_id=torneo_id,
@@ -5573,7 +5574,7 @@ async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
                 score_c2=score_c2,
                 origen="API",
                 confirmado=True,
-                fecha_registro=datetime.now(),
+                fecha_registro=datetime.utcnow(),
             )
             session.add(nuevo_game)
 
