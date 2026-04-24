@@ -181,6 +181,45 @@ def test_bye_suma_puntos_y_no_pj():
     assert standings[1]["pj"] == 0
 
 
+def test_h2h_rompe_empate_por_encima_de_buchholz():
+    session = _build_session()
+    _crear_torneo_base(session, torneo_id=25)
+    for uid in (1, 2, 3, 4):
+        _crear_usuario_y_participante(session, 25, uid)
+
+    participante_3 = session.query(SuizoParticipante).filter_by(torneo_id=25, usuario_id=3).one()
+    participante_4 = session.query(SuizoParticipante).filter_by(torneo_id=25, usuario_id=4).one()
+    participante_3.puntos_ajuste_inicial = Decimal("3")
+    participante_4.puntos_ajuste_inicial = Decimal("-3")
+
+    r1 = _crear_ronda(session, 25, 1)
+    _crear_emparejamiento(
+        session, 25, r1.id, 1, 1, 2, score1=1, score2=0, puntos1=Decimal("3"), puntos2=Decimal("0")
+    )
+    _crear_emparejamiento(
+        session, 25, r1.id, 2, 3, 4, score1=1, score2=0, puntos1=Decimal("3"), puntos2=Decimal("0")
+    )
+
+    r2 = _crear_ronda(session, 25, 2)
+    _crear_emparejamiento(
+        session, 25, r2.id, 1, 4, 1, score1=1, score2=0, puntos1=Decimal("3"), puntos2=Decimal("0")
+    )
+    _crear_emparejamiento(
+        session, 25, r2.id, 2, 2, 3, score1=1, score2=0, puntos1=Decimal("3"), puntos2=Decimal("0")
+    )
+    session.commit()
+
+    standings = calcular_standings(session, 25)
+    fila_1 = next(f for f in standings if f["usuario_id"] == 1)
+    fila_2 = next(f for f in standings if f["usuario_id"] == 2)
+
+    assert fila_1["puntos"] == fila_2["puntos"] == Decimal("3")
+    assert fila_2["buchholz_cut"] > fila_1["buchholz_cut"]
+    assert fila_1["h2h_valor"] == Decimal("3")
+    assert fila_2["h2h_valor"] == Decimal("0")
+    assert fila_1["rank"] < fila_2["rank"]
+
+
 def test_fallback_a_repetidos_cuando_no_hay_solucion():
     session = _build_session()
     _crear_torneo_base(session, torneo_id=30)

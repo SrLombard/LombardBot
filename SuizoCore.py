@@ -185,7 +185,9 @@ def calcular_standings(session, torneo_id, hasta_ronda: Optional[int] = None) ->
     if hasta_ronda is not None:
         emparejamientos_q = emparejamientos_q.filter(SuizoRonda.numero <= hasta_ronda)
 
-    for emp in emparejamientos_q.all():
+    emparejamientos_cerrados = emparejamientos_q.all()
+
+    for emp in emparejamientos_cerrados:
         c1 = emp.coach1_usuario_id
         c2 = emp.coach2_usuario_id
 
@@ -235,7 +237,12 @@ def calcular_standings(session, torneo_id, hasta_ronda: Optional[int] = None) ->
             suma_rivales = sum(puntos_rivales, Decimal("0"))
             fila["buchholz_cut"] = suma_rivales - min(puntos_rivales)
 
-    return ordenar_standings(list(filas.values()))
+    standings_intermedios = list(filas.values())
+    h2h_por_usuario = calcular_h2h(standings_intermedios, emparejamientos_cerrados)
+    for fila in standings_intermedios:
+        fila["h2h_valor"] = h2h_por_usuario.get(int(fila["usuario_id"]))
+
+    return ordenar_standings(standings_intermedios)
 
 
 def _normalizar_json_detalle_tiebreak(fila: EstadoFila) -> Dict[str, Any]:
