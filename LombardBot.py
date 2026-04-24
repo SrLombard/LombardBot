@@ -3690,6 +3690,71 @@ Si no quieres recibir más notificaciones mías, escribe a **SrLombard** para qu
         except discord.HTTPException:
             await ctx.send(f"Hubo un error al intentar enviar un mensaje a {member.name}.")
 
+@bot.command(name="comunicaciones_inscritos")
+@commands.has_permissions(administrator=True)
+async def comunicaciones_inscritos(ctx, solo_objetivo: Optional[int] = None):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+
+    role_name = "Butter Cup"
+    guild = ctx.guild
+
+    if guild is None:
+        await ctx.send("Este comando solo se puede ejecutar en un servidor (guild), no en mensajes privados.")
+        session.close()
+        return
+
+    butter_role = discord.utils.get(guild.roles, name=role_name)
+    if butter_role is None:
+        await ctx.send(f"No se encontró el rol `{role_name}` en este servidor.")
+        session.close()
+        return
+
+    TARGET_REMINDER_IDS = {
+        681577610010296372,
+        208239645014753280,
+    }
+
+    solo_ids_objetivo = str(solo_objetivo) == "1"
+
+    miembros_con_rol = butter_role.members
+    if solo_ids_objetivo:
+        miembros_con_rol = [member for member in miembros_con_rol if member.id in TARGET_REMINDER_IDS]
+
+    inscritos_con_rol = []
+    for member in miembros_con_rol:
+        registro = session.query(GestorSQL.Inscripcion).filter_by(id_usuario_discord=member.id).first()
+        if registro:
+            inscritos_con_rol.append(member)
+
+    if not inscritos_con_rol:
+        await ctx.send(f"No hay miembros inscritos con el rol '{role_name}'.")
+        session.close()
+        return
+
+    for member in inscritos_con_rol:
+        try:
+            await member.send(
+"""
+📣 **Normas para inscritos - Butter Cup**
+
+Gracias por inscribirte. Te compartimos un recordatorio rápido de normas:
+
+1) Revisa siempre el canal de anuncios y respeta las fechas de cada jornada.
+2) Contacta con tu rival con antelación y proponed horario.
+3) Juega con deportividad y comunica cualquier incidencia a la organización.
+4) Si vas a abandonar o no puedes jugar, avisa cuanto antes.
+
+Este texto es provisional y se puede ajustar cuando quieras.
+"""
+            )
+            await ctx.send(f"Comunicación enviada a {member.name}")
+        except discord.Forbidden:
+            await ctx.send(f"No se pudo enviar un mensaje privado a {member.name}. Puede que tenga los mensajes privados desactivados.")
+        except discord.HTTPException:
+            await ctx.send(f"Hubo un error al intentar enviar un mensaje a {member.name}.")
+    session.close()
+
 @bot.command(name='comprueba_quedadas')
 async def comprueba_quedadas(ctx, enviar_mensaje: int = 0):
     await func_comprueba_quedadas(enviar_mensaje)
