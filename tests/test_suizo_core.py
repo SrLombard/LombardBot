@@ -280,6 +280,58 @@ def test_drop_genera_forfeit_1_0_con_3_puntos():
     assert actualizado.puntos_c2 == Decimal("3")
 
 
+def test_admin_forfeit_respeta_configuracion_2_1_0():
+    session = _build_session()
+    _crear_torneo_base(session, torneo_id=41, rondas_totales=1)
+    torneo = session.query(SuizoTorneo).filter_by(id=41).one()
+    torneo.puntos_win = Decimal("2")
+    torneo.puntos_draw = Decimal("1")
+    torneo.puntos_loss = Decimal("0")
+    _crear_usuario_y_participante(session, 41, 1)
+    _crear_usuario_y_participante(session, 41, 2)
+
+    r1 = _crear_ronda(session, 41, 1, estado="ABIERTA")
+    _crear_emparejamiento(session, 41, r1.id, 1, 1, 2, estado="PENDIENTE")
+    session.flush()
+
+    emp = session.query(SuizoEmparejamiento).filter_by(torneo_id=41, ronda_id=r1.id).one()
+    puntos_win = Decimal(str(torneo.puntos_win))
+    puntos_draw = Decimal(str(torneo.puntos_draw))
+    puntos_loss = Decimal(str(torneo.puntos_loss))
+
+    # Simula las reglas de suizo_admin_resultado para tipos administrativos.
+    emp.score_final_c1 = 1
+    emp.score_final_c2 = 0
+    emp.puntos_c1 = puntos_win
+    emp.puntos_c2 = puntos_loss
+    session.flush()
+    assert emp.puntos_c1 == Decimal("2")
+    assert emp.puntos_c2 == Decimal("0")
+
+    emp.score_final_c1 = 0
+    emp.score_final_c2 = 1
+    emp.puntos_c1 = puntos_loss
+    emp.puntos_c2 = puntos_win
+    session.flush()
+    assert emp.puntos_c1 == Decimal("0")
+    assert emp.puntos_c2 == Decimal("2")
+
+    emp.score_final_c1 = 0
+    emp.score_final_c2 = 0
+    emp.puntos_c1 = puntos_draw
+    emp.puntos_c2 = puntos_draw
+    session.flush()
+    assert emp.puntos_c1 == Decimal("1")
+    assert emp.puntos_c2 == Decimal("1")
+
+    # Regla explícita: doble forfait mantiene 0/0.
+    emp.puntos_c1 = Decimal("0")
+    emp.puntos_c2 = Decimal("0")
+    session.flush()
+    assert emp.puntos_c1 == Decimal("0")
+    assert emp.puntos_c2 == Decimal("0")
+
+
 def test_cierre_de_ronda_solo_cuando_todo_esta_resuelto():
     session = _build_session()
     _crear_torneo_base(session, torneo_id=50, rondas_totales=1)

@@ -100,6 +100,12 @@ Cuando un partido no se ha jugado en plazo, administra el resultado manualmente.
 !suizo_admin_resultado 12 2 7 doble_forfeit
 ```
 
+Regla de puntuación administrativa (consistente en todo el sistema):
+- `forfeit_local` asigna `puntos_win / puntos_loss` según configuración del torneo.
+- `forfeit_visitante` asigna `puntos_loss / puntos_win` según configuración del torneo.
+- `empate_admin` asigna `puntos_draw / puntos_draw` según configuración del torneo.
+- `doble_forfeit` mantiene `0 / 0` como regla fija.
+
 ### Comando `!` (marcador manual)
 ```txt
 !suizo_admin_resultado 12 2 8 manual 2 1

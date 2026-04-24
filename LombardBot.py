@@ -5726,19 +5726,22 @@ async def suizo_admin_resultado(
         puntos_draw = Decimal(str(torneo.puntos_draw))
         puntos_loss = Decimal(str(torneo.puntos_loss))
 
+        # Los forfaits administrativos respetan la configuración de puntos del torneo.
+        # Regla vigente: forfeit_local => win/loss, forfeit_visitante => loss/win,
+        # empate_admin => draw/draw y doble_forfeit => 0/0.
         if tipo_normalizado == "forfeit_local":
             score_c1, score_c2 = 1, 0
-            puntos_c1, puntos_c2 = Decimal("3"), Decimal("0")
+            puntos_c1, puntos_c2 = puntos_win, puntos_loss
             ganador_usuario_id = emp.coach1_usuario_id
             forfeit_tipo = "LOCAL"
         elif tipo_normalizado == "forfeit_visitante":
             score_c1, score_c2 = 0, 1
-            puntos_c1, puntos_c2 = Decimal("0"), Decimal("3")
+            puntos_c1, puntos_c2 = puntos_loss, puntos_win
             ganador_usuario_id = emp.coach2_usuario_id
             forfeit_tipo = "VISITANTE"
         elif tipo_normalizado == "empate_admin":
             score_c1, score_c2 = 0, 0
-            puntos_c1, puntos_c2 = Decimal("1"), Decimal("1")
+            puntos_c1, puntos_c2 = puntos_draw, puntos_draw
         elif tipo_normalizado == "doble_forfeit":
             score_c1, score_c2 = 0, 0
             puntos_c1, puntos_c2 = Decimal("0"), Decimal("0")
@@ -5853,18 +5856,20 @@ async def suizo_drop(ctx, torneo_id: int, usuario: discord.Member, *, motivo: st
             )
 
         if emp_actualizado is not None and not emp_actualizado.es_bye:
+            puntos_win = Decimal(str(torneo.puntos_win))
+            puntos_loss = Decimal(str(torneo.puntos_loss))
             if int(emp_actualizado.coach1_usuario_id) == int(usuario_bd.idUsuarios):
                 emp_actualizado.score_final_c1 = 0
                 emp_actualizado.score_final_c2 = 1
-                emp_actualizado.puntos_c1 = Decimal("0")
-                emp_actualizado.puntos_c2 = Decimal("3")
+                emp_actualizado.puntos_c1 = puntos_loss
+                emp_actualizado.puntos_c2 = puntos_win
                 emp_actualizado.ganador_usuario_id = emp_actualizado.coach2_usuario_id
                 emp_actualizado.forfeit_tipo = "VISITANTE"
             else:
                 emp_actualizado.score_final_c1 = 1
                 emp_actualizado.score_final_c2 = 0
-                emp_actualizado.puntos_c1 = Decimal("3")
-                emp_actualizado.puntos_c2 = Decimal("0")
+                emp_actualizado.puntos_c1 = puntos_win
+                emp_actualizado.puntos_c2 = puntos_loss
                 emp_actualizado.ganador_usuario_id = emp_actualizado.coach1_usuario_id
                 emp_actualizado.forfeit_tipo = "LOCAL"
 
