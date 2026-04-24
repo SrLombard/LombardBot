@@ -359,3 +359,32 @@ def test_cierre_de_ronda_solo_cuando_todo_esta_resuelto():
     assert cierre_final["cerrada"] is True
     assert cierre_final["motivo"] == "CERRADA"
     assert cierre_final["snapshot_filas"] == 4
+
+
+def test_cierre_ronda_no_final_devuelve_siguiente_ronda():
+    session = _build_session()
+    _crear_torneo_base(session, torneo_id=51, rondas_totales=2)
+    for uid in (1, 2):
+        _crear_usuario_y_participante(session, 51, uid)
+
+    r1 = _crear_ronda(session, 51, 1, estado="ABIERTA")
+    _crear_emparejamiento(
+        session,
+        51,
+        r1.id,
+        1,
+        1,
+        2,
+        estado="ADMINISTRADO",
+        score1=1,
+        score2=0,
+        puntos1=Decimal("3"),
+        puntos2=Decimal("0"),
+    )
+    session.commit()
+
+    cierre = procesar_cierre_ronda_si_corresponde(session, 51, 1)
+    assert cierre["cerrada"] is True
+    assert cierre["es_ultima_ronda"] is False
+    assert cierre["siguiente_ronda_numero"] == 2
+    assert cierre["ronda_numero"] == 1

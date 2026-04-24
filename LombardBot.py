@@ -5402,6 +5402,55 @@ async def suizo_desbloquear_ronda(ctx, torneo_id: int, numero_ronda: int):
     )
 
 
+async def post_cierre_suizo(ctx, session, torneo_id: int, cierre: dict):
+    if not cierre.get("cerrada"):
+        ronda_numero = cierre.get("ronda_numero", "?")
+        await ctx.send(
+            f"⏳ Ronda **{ronda_numero}** aún abierta en torneo **{torneo_id}**. "
+            f"Motivo: **{cierre.get('motivo', 'DESCONOCIDO')}** "
+            f"(pendientes: **{cierre.get('pendientes', '?')}**)."
+        )
+        return
+
+    ronda_numero = cierre.get("ronda_numero", "?")
+    await ctx.send(
+        f"🏁 Ronda **{ronda_numero}** cerrada en torneo **{torneo_id}**. "
+        f"Snapshot standings: **{cierre.get('snapshot_filas', 0)}** filas."
+    )
+
+    if not cierre.get("es_ultima_ronda"):
+        siguiente_ronda = int(cierre.get("siguiente_ronda_numero"))
+        await ctx.send(
+            f"➡️ Se generará automáticamente la ronda **{siguiente_ronda}** "
+            f"del torneo **{torneo_id}**."
+        )
+        await suizo_generar_ronda(ctx, torneo_id, siguiente_ronda)
+        return
+
+    clasificacion = cierre.get("standings") or []
+    top = []
+    for fila in clasificacion[:16]:
+        usuario_id = int(fila.get("usuario_id"))
+        usuario = session.query(GestorSQL.Usuario).filter_by(idUsuarios=usuario_id).first()
+        nombre = (
+            getattr(usuario, "nombreAMostrar", None)
+            or getattr(usuario, "nombre_discord", None)
+            or f"u{usuario_id}"
+        )
+        top.append(
+            f"**#{fila.get('rank')}** {nombre} — "
+            f"{fila.get('puntos')} pts | "
+            f"PJ {fila.get('pj')} | "
+            f"Dif {fila.get('diff_score')}"
+        )
+
+    await ctx.send(
+        f"🏆 Torneo **{torneo_id}** finalizado.\n"
+        "Clasificación final:\n"
+        + ("\n".join(top) if top else "_Sin datos de clasificación._")
+    )
+
+
 @bot.command(name="actualiza_suizo")
 async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
     if not es_comisario(ctx):
@@ -5599,48 +5648,8 @@ async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
             )
         else:
             cierre = procesar_cierre_ronda_si_corresponde(session, torneo_id, ronda_abierta.numero)
-            if not cierre.get("cerrada"):
-                await ctx.send(
-                    f"⏳ Ronda {ronda_abierta.numero} aún no se puede cerrar en torneo {torneo_id}. "
-                    f"Motivo: **{cierre.get('motivo', 'DESCONOCIDO')}**."
-                )
-            else:
-                session.commit()
-                await ctx.send(
-                    f"🏁 Ronda {ronda_abierta.numero} cerrada en torneo {torneo_id}. "
-                    f"Snapshot de standings guardado: **{cierre.get('snapshot_filas', 0)}** filas."
-                )
-
-                if cierre.get("es_ultima_ronda"):
-                    clasificacion = cierre.get("standings") or []
-                    top = []
-                    for fila in clasificacion[:16]:
-                        usuario_id = int(fila.get("usuario_id"))
-                        usuario = session.query(GestorSQL.Usuario).filter_by(idUsuarios=usuario_id).first()
-                        nombre = (
-                            getattr(usuario, "nombreAMostrar", None)
-                            or getattr(usuario, "nombre_discord", None)
-                            or f"u{usuario_id}"
-                        )
-                        top.append(
-                            f"**#{fila.get('rank')}** {nombre} — "
-                            f"{fila.get('puntos')} pts | "
-                            f"PJ {fila.get('pj')} | "
-                            f"Dif {fila.get('diff_score')}"
-                        )
-
-                    await ctx.send(
-                        f"🏆 Torneo **{torneo_id}** finalizado.\n"
-                        "Clasificación final:\n"
-                        + ("\n".join(top) if top else "_Sin datos de clasificación._")
-                    )
-                else:
-                    siguiente_ronda = int(cierre.get("siguiente_ronda_numero"))
-                    await ctx.send(
-                        f"➡️ Se generará automáticamente la ronda **{siguiente_ronda}** "
-                        f"del torneo **{torneo_id}**."
-                    )
-                    await suizo_generar_ronda(ctx, torneo_id, siguiente_ronda)
+            session.commit()
+            await post_cierre_suizo(ctx, session, torneo_id, cierre)
 
         await ctx.send(
             "📊 Actualización suiza terminada.\n"
@@ -5781,17 +5790,7 @@ async def suizo_admin_resultado(
             f"Estado guardado: **ADMINISTRADO** | Origen: **ADMIN**."
         )
 
-        if cierre.get("cerrada"):
-            await ctx.send(
-                f"🏁 Ronda **{ronda}** cerrada correctamente tras la administración. "
-                f"Snapshot standings: **{cierre.get('snapshot_filas', 0)}** filas."
-            )
-        else:
-            await ctx.send(
-                f"⏳ Ronda **{ronda}** aún abierta tras la administración. "
-                f"Motivo: **{cierre.get('motivo', 'DESCONOCIDO')}** "
-                f"(pendientes: **{cierre.get('pendientes', '?')}**)."
-            )
+        await post_cierre_suizo(ctx, session, torneo_id, cierre)
     except Exception as e:
         session.rollback()
         await ctx.send(f"No se pudo administrar el resultado suizo: {e}")
@@ -5918,17 +5917,7 @@ async def suizo_drop(ctx, torneo_id: int, usuario: discord.Member, *, motivo: st
             )
 
         if cierre is not None:
-            if cierre.get("cerrada"):
-                await ctx.send(
-                    f"🏁 Ronda **{ronda_abierta.numero}** cerrada tras el drop. "
-                    f"Snapshot standings: **{cierre.get('snapshot_filas', 0)}** filas."
-                )
-            else:
-                await ctx.send(
-                    f"⏳ Ronda **{ronda_abierta.numero}** sigue abierta tras el drop. "
-                    f"Motivo: **{cierre.get('motivo', 'DESCONOCIDO')}** "
-                    f"(pendientes: **{cierre.get('pendientes', '?')}**)."
-                )
+            await post_cierre_suizo(ctx, session, torneo_id, cierre)
     except Exception as e:
         session.rollback()
         await ctx.send(f"No se pudo aplicar el drop suizo: {e}")

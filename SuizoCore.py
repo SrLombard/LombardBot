@@ -324,7 +324,7 @@ def procesar_cierre_ronda_si_corresponde(session, torneo_id, ronda_numero):
     """
     torneo = session.query(SuizoTorneo).filter(SuizoTorneo.id == torneo_id).one_or_none()
     if torneo is None:
-        return {"cerrada": False, "motivo": "TORNEO_NO_EXISTE", "pendientes": None}
+        return {"cerrada": False, "motivo": "TORNEO_NO_EXISTE", "pendientes": None, "ronda_numero": int(ronda_numero)}
 
     ronda = (
         session.query(SuizoRonda)
@@ -335,7 +335,7 @@ def procesar_cierre_ronda_si_corresponde(session, torneo_id, ronda_numero):
         .one_or_none()
     )
     if ronda is None:
-        return {"cerrada": False, "motivo": "RONDA_NO_EXISTE", "pendientes": None}
+        return {"cerrada": False, "motivo": "RONDA_NO_EXISTE", "pendientes": None, "ronda_numero": int(ronda_numero)}
 
     pendientes = (
         session.query(SuizoEmparejamiento)
@@ -347,7 +347,12 @@ def procesar_cierre_ronda_si_corresponde(session, torneo_id, ronda_numero):
         .count()
     )
     if pendientes > 0:
-        return {"cerrada": False, "motivo": "HAY_PENDIENTES", "pendientes": int(pendientes)}
+        return {
+            "cerrada": False,
+            "motivo": "HAY_PENDIENTES",
+            "pendientes": int(pendientes),
+            "ronda_numero": int(ronda_numero),
+        }
 
     ronda.estado = RONDA_CERRADA
     ronda.cerrada_en = datetime.now()
@@ -368,6 +373,7 @@ def procesar_cierre_ronda_si_corresponde(session, torneo_id, ronda_numero):
         "siguiente_ronda_numero": None if es_ultima_ronda else int(ronda_numero) + 1,
         "snapshot_filas": int(snapshot_filas),
         "standings": standings,
+        "ronda_numero": int(ronda_numero),
     }
 
 
