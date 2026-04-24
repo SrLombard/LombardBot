@@ -5584,7 +5584,7 @@ async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
                 torneo_id=torneo_id,
                 ronda_id=ronda_abierta.id,
             )
-            .filter(GestorSQL.SuizoEmparejamiento.estado != "CERRADO")
+            .filter(GestorSQL.SuizoEmparejamiento.estado == "PENDIENTE")
             .count()
         )
 
