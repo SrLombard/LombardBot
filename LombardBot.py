@@ -5166,7 +5166,9 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
         )
         (
             session.query(GestorSQL.SuizoPairingTrace)
-            .filter_by(torneo_id=torneo_id, ronda_numero=numero_ronda)
+            # Usamos `ronda.id` (PK de `suizo_ronda`) en lugar de `numero_ronda`
+            # porque el trace se relaciona por FK con la ronda concreta.
+            .filter_by(torneo_id=torneo_id, ronda_id=ronda.id)
             .delete(synchronize_session=False)
         )
         session.flush()
