@@ -43,13 +43,13 @@ racesConEmojiIniciales = [
     "👴🏻Alianza del viejo mundo👴🏻","🏹Amazonas🏹", "🐐Caos Elegido🐐", "⛏Enanos⛏","🎠Enanos del Caos🎠", "🔮Elfos oscuros🔮",
     "🌲Elfos silvanos🌲", "🦎Hombres lagarto🦎", "🐺Horror nigromántico🐺", "🙎🏻‍Humanos🙎🏻‍",
     "🤢Inframundo🤢","🩸Khrone🩸", "💀No muertos💀", "👲🏻Nobleza Imperial👲🏻","❄Nordicos❄", "🤮Nurgle🤮",
-    "🐸Orcos🐸", "👹Orcos negros👹", "👨‍👧‍👦Renegados👨‍👨‍👧", "🐀Skaven🐀", "🤾🏻‍Unión elfica🤾","🦇Vampiros🦇","🧚🏻‍♂️Stunty🌜","🤷🏻‍Nuevo🤷🏻‍"
+    "🐸Orcos🐸", "👹Orcos negros👹", "👨‍👧‍👦Renegados👨‍👨‍👧", "🐀Skaven🐀", "🤾🏻‍Unión elfica🤾","🦇Vampiros🦇","🧚🏻‍♂️Stunty🌜"
 ]
 racesIniciales = [
     "Alianza del viejo mundo","Amazonas", "Caos Elegido", "Enanos","Enanos del Caos", "Elfos oscuros",
     "Elfos silvanos", "Hombres lagarto", "Horror nigromántico", "Humanos",
     "Inframundo","Khorne", "No muertos", "Nobleza Imperial", "Nordicos","Nurgle",
-    "Orcos", "Orcos negros", "Renegados", "Skaven", "Unión elfica","Vampiros","Stunty","Nuevo"
+    "Orcos", "Orcos negros", "Renegados", "Skaven", "Unión elfica","Vampiros","Stunty"
 ]
 
 tipoPreferenciaOptions = [
@@ -76,14 +76,14 @@ async def handle_registration(user):
             nueva_inscripcion = GestorSQL.Inscripcion(id_usuario_discord=user.id, nombre_bloodbowl=usuario.nombre_bloodbowl)
             session.add(nueva_inscripcion)
             session.commit()
-            await user.send(f"Gracias por inscribirte en la Séptima edición de la Butter Cup, {usuario.nombre_bloodbowl}!")
+            await user.send(f"Gracias por inscribirte en la Séptima edición de Suizo entre comunidades, {usuario.nombre_bloodbowl}!")
             await seleccionar_tipo_preferencia(user)
         else:
             await user.send(f"Ya tiene un registro comenzado {usuario.nombre_bloodbowl}, si continua sus datos se sobreescribirán")
             await seleccionar_tipo_preferencia(user)
     else:
         view = WelcomeView(user.id)
-        await user.send("""Bienvenido a la Séptima edición de la BUTTER CUP.
+        await user.send("""Bienvenido a la Séptima edición de Suizo entre comunidades.
                         
 Estamos emocionados por contar contigo. Vamos a empezar tu inscripción.
 
@@ -140,9 +140,9 @@ class TipoPreferenciaView(discord.ui.View):
             session.close()
 
 async def registroEquipoNuevo(user):
-    await user.send("""Para crear un nuevo equipo en la Butter Cup primero te tenemos que adjudicar una raza por __**sorteo**__.
+    await user.send("""Para crear un nuevo equipo en Suizo entre comunidades primero te tenemos que adjudicar una raza por __**sorteo**__.
                     
- El sorteo se realizará en directo aproximadamente el <t:1777143600:F> en canal de twitch de SrLombard.
+ El sorteo se realizará en directo aproximadamente el 1 de mayo en canal de twitch de SrLombard.
                     
 Para que te podamos asignar una raza deberás elegir __5 favoritas__ y __banear otras 5__.
 Intentaremos asignarte una de tus razas favoritas, pero hay un número limitado de plazas por raza. Si no se pudiera se te asignaría cualquier otra raza pero nunca una de las baneadas asi que... ¡elige sabiamente!""")
@@ -228,9 +228,9 @@ class EquiposView(discord.ui.View):
                 if self.next_step == 'preferencias':
                     await registroPreferencias(interaction.user)
                 else:
-                    await interaction.followup.send("Ha terminado la inscripción para la Séptima edición de la Butter Cup. ¡Nos vemos el 26 de Abril!. Te avisaré de todo por mp 😉")
+                    await interaction.followup.send("Ha terminado la inscripción para la Séptima edición de Suizo entre comunidades. ¡Nos vemos el 4 de mayo!. Te avisaré de todo por mp 😉")
                     await asyncio.sleep(60)
-                    await interaction.followup.send("¡Se me olvidaba! La Butter Cup tiene premios y sorteos alucinantes, Es totalmente opcional y sirve para financiar los premios físicos. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo!")
+                    # await interaction.followup.send("¡Se me olvidaba! Suizo entre comunidades tiene premios y sorteos alucinantes, Es totalmente opcional y sirve para financiar los premios físicos. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo!")
         except Exception as e:
             session.rollback()
             await interaction.followup.send("Error al registrar el equipo.", ephemeral=True)
@@ -284,9 +284,9 @@ class RazasView(discord.ui.View):
                 mensaje = f"Sus bans son: {', '.join(self.seleccionados)}"
                 guardar_preferencias_bans(self.usuario_id,self.preferencias,self.seleccionados)
                 await interaction.followup.send(mensaje)
-                await interaction.followup.send("Ha terminado la inscripción para la Séptima edición de la Butter Cup. ¡Nos vemos el 26 de abril!. Te avisaré de todo por mp 😉")
+                await interaction.followup.send("Ha terminado la inscripción para la Séptima edición de Suizo entre comunidades. ¡Nos vemos el 4 de mayo!. Te avisaré de todo por mp 😉")
                 await asyncio.sleep(60)
-                await interaction.followup.send("¡Se me olvidaba! La Butter Cup tiene premios y sorteos alucinantes, Es totalmente opcional y sirve para financiar los premios físicos. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo!")
+                # await interaction.followup.send("¡Se me olvidaba! Suizo entre comunidades tiene premios y sorteos alucinantes, Es totalmente opcional y sirve para financiar los premios físicos. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo!")
         
 def guardar_preferencias_bans(usuario_id, preferencias, bans):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
@@ -344,7 +344,6 @@ class DivisionView(discord.ui.View):
             await interaction.followup.send_message("Error al guardar la división.", ephemeral=True)
         finally:
             session.close()
-
 
 
 
