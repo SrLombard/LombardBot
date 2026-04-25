@@ -2090,6 +2090,53 @@ async def preferencias_horario(interaction: discord.Interaction, horario: str):
         else:
             await interaction.response.send_message("No se pudo encontrar tu usuario en la base de datos.", ephemeral=True)            
 
+@bot.tree.command(
+    name='consulta_inscripcion',
+    description='Consulta tus preferencias y bans de inscripción por mensaje privado'
+)
+async def consulta_inscripcion(interaction: discord.Interaction):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    with Session() as session:
+        inscripcion = (
+            session.query(GestorSQL.Inscripcion)
+            .filter_by(id_usuario_discord=interaction.user.id)
+            .first()
+        )
+
+        if not inscripcion:
+            await interaction.response.send_message(
+                "No estás inscrito en este momento.",
+                ephemeral=True
+            )
+            return
+
+        preferencias = [
+            pref for pref in [
+                inscripcion.pref1,
+                inscripcion.pref2,
+                inscripcion.pref3,
+                inscripcion.pref4,
+                inscripcion.pref5
+            ] if pref
+        ]
+        bans = [
+            ban for ban in [
+                inscripcion.ban1,
+                inscripcion.ban2,
+                inscripcion.ban3,
+                inscripcion.ban4,
+                inscripcion.ban5
+            ] if ban
+        ]
+
+        texto_preferencias = ", ".join(preferencias) if preferencias else "Sin preferencias registradas."
+        texto_bans = ", ".join(bans) if bans else "Sin bans registrados."
+
+        await interaction.response.send_message(
+            f"**Tus preferencias:** {texto_preferencias}\n**Tus bans:** {texto_bans}",
+            ephemeral=True
+        )
+
 @bot.command(name="PruebaBD")
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
 async def PruebaBD(ctx):
