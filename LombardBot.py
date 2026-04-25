@@ -4416,6 +4416,99 @@ async def suizo_add_lote(ctx, torneo_id: int, *tokens_usuarios: str):
     )
 
 
+@bot.command(name="suizo_importar_inscripcion")
+async def suizo_importar_inscripcion(ctx, torneo_id: int):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
+        if torneo is None:
+            await ctx.send(f"No existe un torneo suizo con ID `{torneo_id}`.")
+            return
+
+        inscripciones = session.query(GestorSQL.Inscripcion).all()
+        total_inscripciones = len(inscripciones)
+        altas_ok = 0
+        duplicados = 0
+        no_encontrados = 0
+        errores = 0
+        ids_discord_procesados = set()
+        ejemplos_error = []
+
+        for inscripcion in inscripciones:
+            id_discord = inscripcion.id_usuario_discord
+            if id_discord is None:
+                no_encontrados += 1
+                continue
+
+            if id_discord in ids_discord_procesados:
+                duplicados += 1
+                continue
+            ids_discord_procesados.add(id_discord)
+
+            try:
+                usuario_bd = session.query(GestorSQL.Usuario).filter_by(id_discord=id_discord).first()
+                if usuario_bd is None:
+                    no_encontrados += 1
+                    continue
+
+                participante_existente = (
+                    session.query(GestorSQL.SuizoParticipante)
+                    .filter_by(torneo_id=torneo_id, usuario_id=usuario_bd.idUsuarios)
+                    .first()
+                )
+                if participante_existente is not None:
+                    duplicados += 1
+                    continue
+
+                raza_competicion = inscripcion.pref1
+                nuevo_participante = GestorSQL.SuizoParticipante(
+                    torneo_id=torneo_id,
+                    usuario_id=usuario_bd.idUsuarios,
+                    estado="ACTIVO",
+                    tiene_bye=0,
+                    cantidad_byes=0,
+                    late_join_ronda=None,
+                    puntos_ajuste_inicial=0,
+                    raza_competicion=raza_competicion,
+                    created_at=datetime.utcnow(),
+                )
+                session.add(nuevo_participante)
+                session.flush()
+                altas_ok += 1
+            except Exception as e:
+                session.rollback()
+                errores += 1
+                if len(ejemplos_error) < 10:
+                    ejemplos_error.append(f"- ID Discord `{id_discord}`: {e}")
+                continue
+
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        await ctx.send(f"No se pudo importar inscripciones al torneo suizo: {e}")
+        return
+    finally:
+        session.close()
+
+    mensaje = (
+        "📥 Resultado de importación desde `Inscripcion` a torneo suizo:\n"
+        f"Torneo ID: **{torneo_id}**\n"
+        f"Total inscripciones leídas: **{total_inscripciones}**\n"
+        f"Altas OK: **{altas_ok}**\n"
+        f"Duplicados (en lote o ya en suizo): **{duplicados}**\n"
+        f"No encontrados en `usuarios`: **{no_encontrados}**\n"
+        f"Errores: **{errores}**"
+    )
+    if ejemplos_error:
+        mensaje += "\n\n⚠️ Ejemplos de errores (máx. 10):\n" + "\n".join(ejemplos_error)
+    await ctx.send(mensaje)
+
+
 @bot.command(name="suizo_add_tardio")
 async def suizo_add_tardio(ctx, torneo_id: int, usuario: discord.Member, raza_competicion: Optional[str] = None):
     if not es_comisario(ctx):
