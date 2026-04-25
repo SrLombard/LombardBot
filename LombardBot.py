@@ -3730,7 +3730,6 @@ por cambios de reglas y de equipos.
 🏁 **Temporada regular**
 
 La temporada **2025-2026 queda cerrada** con la última liga ya disputada.
-
 La siguiente temporada regular, **2026-2027**, comenzará en **septiembre**, ya con las nuevas reglas.
 
 🏆 **Nueva competición temporal**
@@ -3748,13 +3747,11 @@ La competición se retrasa una semana.
 
 📆 **Empezamos el lunes 4 de mayo.**
 
-📝 **Si ya estás inscrito**
-
-Tienes tres opciones:
+📝 Tienes estás opciones para tu **inscripción**
 
 ✅ **Mantener tu inscripción**
 Si quieres seguir participando con la inscripción que ya hiciste, **no tienes que hacer nada**.
-Sigue siendo válida.
+Sigue siendo válida. pero recuerda que ¡__**NO**__ habrá raza nueva! Si la pusiste, rehaz la inscripción!
 
 🔁 **Cambiar tu inscripción**
 Quita la reacción del mensaje de inscripción y vuelve a reaccionar. El bot te enviará de nuevo el
