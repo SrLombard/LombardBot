@@ -76,14 +76,14 @@ async def handle_registration(user):
             nueva_inscripcion = GestorSQL.Inscripcion(id_usuario_discord=user.id, nombre_bloodbowl=usuario.nombre_bloodbowl)
             session.add(nueva_inscripcion)
             session.commit()
-            await user.send(f"Gracias por inscribirte en la Séptima edición de Suizo entre comunidades, {usuario.nombre_bloodbowl}!")
+            await user.send(f"Gracias por inscribirte en el Suizo entre comunidades, {usuario.nombre_bloodbowl}!")
             await seleccionar_tipo_preferencia(user)
         else:
             await user.send(f"Ya tiene un registro comenzado {usuario.nombre_bloodbowl}, si continua sus datos se sobreescribirán")
             await seleccionar_tipo_preferencia(user)
     else:
         view = WelcomeView(user.id)
-        await user.send("""Bienvenido a la Séptima edición de Suizo entre comunidades.
+        await user.send("""Bienvenido al Suizo entre comunidades.
                         
 Estamos emocionados por contar contigo. Vamos a empezar tu inscripción.
 
