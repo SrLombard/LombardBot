@@ -420,6 +420,7 @@ def generar_pairings_backtracking(session, torneo_id, ronda_numero):
         activos_por_puntos.setdefault(puntos, []).append(int(fila["usuario_id"]))
 
     usuarios_ordenados = [int(f["usuario_id"]) for f in activos]
+    puntos_por_usuario = {int(f["usuario_id"]): _decimal(f["puntos"]) for f in activos}
     grupo_por_usuario = {}
     for idx, (_, usuarios) in enumerate(
         sorted(activos_por_puntos.items(), key=lambda item: Decimal(item[0]), reverse=True)
@@ -459,17 +460,17 @@ def generar_pairings_backtracking(session, torneo_id, ronda_numero):
         return bool(raza1 and raza2 and raza1 == raza2)
 
     def elegir_bye(disponibles):
-        elegibles = [u for u in disponibles if byes_previos.get(u, 0) == 0]
-        pool = elegibles if elegibles else list(disponibles)
-        return sorted(
+        elegibles_sin_bye = [u for u in disponibles if byes_previos.get(u, 0) == 0]
+        pool = elegibles_sin_bye if elegibles_sin_bye else list(disponibles)
+        orden_peor_a_mejor = sorted(
             pool,
             key=lambda u: (
-                grupo_por_usuario.get(u, 10**6),
-                _decimal(next(f["puntos"] for f in activos if int(f["usuario_id"]) == u)),
+                -grupo_por_usuario.get(u, -1),
+                puntos_por_usuario.get(u, Decimal("0")),
                 u,
             ),
-            reverse=True,
-        )[-1]
+        )
+        return orden_peor_a_mejor[0]
 
     def resolver(allow_repeat, allow_mirror):
         conflictos = {"repetido": 0, "mirror": 0, "sin_rival": 0}

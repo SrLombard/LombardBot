@@ -249,6 +249,35 @@ def test_fallback_a_repetidos_cuando_no_hay_solucion():
     assert ultima_traza.resultado == "FALLBACK_REPETIDO"
 
 
+def test_bye_se_asigna_al_peor_elegible_sin_bye_previo():
+    session = _build_session()
+    _crear_torneo_base(session, torneo_id=31)
+    for uid, raza in ((1, "A"), (2, "B"), (3, "C"), (4, "D"), (5, "E")):
+        _crear_usuario_y_participante(session, 31, uid, raza=raza)
+
+    # Ronda 1: líder claro (1), dos jugadores con bye previo (4 y 5).
+    r1 = _crear_ronda(session, 31, 1)
+    _crear_emparejamiento(session, 31, r1.id, 1, 1, 2, score1=1, score2=0, puntos1=Decimal("3"), puntos2=Decimal("0"))
+    _crear_emparejamiento(session, 31, r1.id, 2, 3, 4, score1=1, score2=0, puntos1=Decimal("3"), puntos2=Decimal("0"))
+    _crear_emparejamiento(session, 31, r1.id, 3, 5, None, es_bye=True)
+
+    # Ronda 2: nuevo bye a jugador 4 para que 4 y 5 queden con bye previo.
+    r2 = _crear_ronda(session, 31, 2)
+    _crear_emparejamiento(session, 31, r2.id, 1, 1, 3, score1=1, score2=0, puntos1=Decimal("3"), puntos2=Decimal("0"))
+    _crear_emparejamiento(session, 31, r2.id, 2, 2, 5, score1=1, score2=0, puntos1=Decimal("3"), puntos2=Decimal("0"))
+    _crear_emparejamiento(session, 31, r2.id, 3, 4, None, es_bye=True)
+
+    _crear_ronda(session, 31, 3, estado="ABIERTA")
+    session.commit()
+
+    pairings = generar_pairings_backtracking(session, 31, 3)
+    bye_r3 = next(p for p in pairings if p["es_bye"])
+
+    # Elegibles sin bye previo en R3: 1,2,3. El peor clasificado es 3 (frente a 1 y 2).
+    assert bye_r3["coach1"] == 3
+    assert bye_r3["coach1"] != 1
+
+
 def test_drop_genera_forfeit_1_0_con_3_puntos():
     session = _build_session()
     _crear_torneo_base(session, torneo_id=40, rondas_totales=1)
