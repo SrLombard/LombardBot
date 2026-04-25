@@ -4996,21 +4996,27 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
             coach1_id = int(mesa["coach1"])
             coach2_raw = mesa.get("coach2")
             coach2_id = int(coach2_raw) if coach2_raw is not None else None
+            es_bye = bool(mesa.get("es_bye", False))
+            estado_inicial = "ADMINISTRADO" if es_bye else "PENDIENTE"
+            partidos_reportados = partidos_requeridos if es_bye else 0
+            puntos_c1 = Decimal(str(torneo.puntos_bye)) if es_bye else Decimal("0")
+            resultado_origen = "BYE" if es_bye else None
             emp = GestorSQL.SuizoEmparejamiento(
                 torneo_id=torneo_id,
                 ronda_id=nueva_ronda.id,
                 mesa_numero=idx,
                 coach1_usuario_id=coach1_id,
                 coach2_usuario_id=coach2_id,
-                estado="PENDIENTE",
-                es_bye=bool(mesa.get("es_bye", False)),
+                estado=estado_inicial,
+                es_bye=es_bye,
                 forfeit_tipo=mesa.get("forfeit_tipo", "NONE"),
                 partidos_requeridos=partidos_requeridos,
-                partidos_reportados=0,
+                partidos_reportados=partidos_reportados,
                 score_final_c1=0,
                 score_final_c2=0,
-                puntos_c1=0,
+                puntos_c1=puntos_c1,
                 puntos_c2=0,
+                resultado_origen=resultado_origen,
             )
             session.add(emp)
             emparejamientos_db.append(emp)
@@ -5247,21 +5253,27 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
             coach1_id = int(mesa["coach1"])
             coach2_raw = mesa.get("coach2")
             coach2_id = int(coach2_raw) if coach2_raw is not None else None
+            es_bye = bool(mesa.get("es_bye", False))
+            estado_inicial = "ADMINISTRADO" if es_bye else "PENDIENTE"
+            partidos_reportados = partidos_requeridos if es_bye else 0
+            puntos_c1 = Decimal(str(torneo.puntos_bye)) if es_bye else Decimal("0")
+            resultado_origen = "BYE" if es_bye else None
             emp = GestorSQL.SuizoEmparejamiento(
                 torneo_id=torneo_id,
                 ronda_id=ronda.id,
                 mesa_numero=idx,
                 coach1_usuario_id=coach1_id,
                 coach2_usuario_id=coach2_id,
-                estado="PENDIENTE",
-                es_bye=bool(mesa.get("es_bye", False)),
+                estado=estado_inicial,
+                es_bye=es_bye,
                 forfeit_tipo=mesa.get("forfeit_tipo", "NONE"),
                 partidos_requeridos=partidos_requeridos,
-                partidos_reportados=0,
+                partidos_reportados=partidos_reportados,
                 score_final_c1=0,
                 score_final_c2=0,
-                puntos_c1=0,
+                puntos_c1=puntos_c1,
                 puntos_c2=0,
+                resultado_origen=resultado_origen,
             )
             session.add(emp)
             emparejamientos_db.append(emp)
