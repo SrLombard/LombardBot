@@ -273,7 +273,8 @@ def test_bye_se_asigna_al_peor_elegible_sin_bye_previo():
     pairings = generar_pairings_backtracking(session, 31, 3)
     bye_r3 = next(p for p in pairings if p["es_bye"])
 
-    # Elegibles sin bye previo en R3: 1,2,3. El peor clasificado es 3 (frente a 1 y 2).
+    # Elegibles sin bye previo en R3: 1,2,3. Entre 2 y 3 empatan en puntos y grupo;
+    # el desempate determinista por id deja peor a 3 (id mayor), nunca al líder 1.
     assert bye_r3["coach1"] == 3
     assert bye_r3["coach1"] != 1
 

@@ -467,7 +467,7 @@ def generar_pairings_backtracking(session, torneo_id, ronda_numero):
             key=lambda u: (
                 -grupo_por_usuario.get(u, -1),
                 puntos_por_usuario.get(u, Decimal("0")),
-                u,
+                -u,
             ),
         )
         return orden_peor_a_mejor[0]
