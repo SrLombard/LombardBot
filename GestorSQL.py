@@ -272,6 +272,7 @@ class SuizoTorneo(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     nombre = Column(String(120), nullable=False)
+    idCompBbowl = Column(String(45), nullable=True)
     activo = Column(Boolean, nullable=False, default=True)
     estado = Column(Enum('CREADO', 'EN_CURSO', 'FINALIZADO', name='suizo_torneo_estado'), nullable=False, default='CREADO')
     rondas_totales = Column(Integer, nullable=False)

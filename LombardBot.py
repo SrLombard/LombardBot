@@ -5522,7 +5522,13 @@ async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
             await ctx.send(f"No hay ronda ABIERTA para el torneo `{torneo_id}`.")
             return
 
-        matches = APIBbowl.obtener_partidos(bbowl_API_token, torneo_id)
+        if not torneo.idCompBbowl:
+            await ctx.send(
+                f"El torneo `{torneo_id}` no tiene configurado `idCompBbowl` en `suizo_torneo`."
+            )
+            return
+
+        matches = APIBbowl.obtener_partidos(bbowl_API_token, torneo.idCompBbowl)
         if not matches:
             await ctx.send("No se encontraron partidos en la API para el torneo indicado.")
             return
