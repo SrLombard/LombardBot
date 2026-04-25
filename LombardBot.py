@@ -5465,6 +5465,51 @@ async def post_cierre_suizo(ctx, session, torneo_id: int, cierre: dict):
         f"Snapshot standings: **{cierre.get('snapshot_filas', 0)}** filas."
     )
 
+    # Al cerrar la ronda, se eliminan los canales asociados a sus mesas.
+    ronda_db = None
+    try:
+        ronda_numero_int = int(ronda_numero)
+    except (TypeError, ValueError):
+        ronda_numero_int = None
+    if ronda_numero_int is not None:
+        ronda_db = (
+            session.query(GestorSQL.SuizoRonda)
+            .filter_by(torneo_id=torneo_id, numero=ronda_numero_int)
+            .first()
+        )
+    if ronda_db is not None:
+        emparejamientos_ronda = (
+            session.query(GestorSQL.SuizoEmparejamiento)
+            .filter_by(torneo_id=torneo_id, ronda_id=ronda_db.id)
+            .all()
+        )
+        canales_a_borrar = [
+            int(emp.canal_id)
+            for emp in emparejamientos_ronda
+            if getattr(emp, "canal_id", None) is not None
+        ]
+        canales_eliminados = 0
+        canales_no_encontrados = 0
+        canales_error = 0
+
+        for canal_id in canales_a_borrar:
+            canal = (ctx.guild.get_channel(canal_id) if ctx.guild else None) or bot.get_channel(canal_id)
+            if canal is None:
+                canales_no_encontrados += 1
+                continue
+            try:
+                await canal.delete()
+                canales_eliminados += 1
+            except Exception:
+                canales_error += 1
+
+        await ctx.send(
+            "🧹 Limpieza de canales de la ronda cerrada:\n"
+            f"Eliminados: **{canales_eliminados}** | "
+            f"No encontrados: **{canales_no_encontrados}** | "
+            f"Errores: **{canales_error}**."
+        )
+
     if not cierre.get("es_ultima_ronda"):
         siguiente_ronda = int(cierre.get("siguiente_ronda_numero"))
         await ctx.send(
@@ -5496,6 +5541,101 @@ async def post_cierre_suizo(ctx, session, torneo_id: int, cierre: dict):
         "Clasificación final:\n"
         + ("\n".join(top) if top else "_Sin datos de clasificación._")
     )
+
+
+async def publicar_resultado_suizo_en_foro(
+    ctx,
+    torneo,
+    ronda_numero: int,
+    emparejamiento,
+    match: dict,
+    local_index: int,
+    visitante_index: int,
+):
+    foro_resultados_id = 1223765590146158653
+    canal_foro = discord.utils.get(getattr(ctx.guild, "channels", []), id=foro_resultados_id)
+    if not canal_foro or not isinstance(canal_foro, discord.ForumChannel):
+        return
+
+    titulo_hilo = f"{torneo.nombre} J{ronda_numero}"
+    hilo = None
+    for h in canal_foro.threads:
+        if h.name == titulo_hilo:
+            hilo = h
+            break
+    if hilo is None:
+        nuevo_hilo = await canal_foro.create_thread(
+            name=titulo_hilo,
+            content=f"Resultados de {titulo_hilo}",
+        )
+        hilo = nuevo_hilo.thread
+
+    teams = match.get("teams", [])
+    team_local = teams[local_index] if len(teams) > local_index else {}
+    team_visitante = teams[visitante_index] if len(teams) > visitante_index else {}
+
+    nombre1 = (
+        getattr(emparejamiento.coach1_usuario, "nombreAMostrar", None)
+        or getattr(emparejamiento.coach1_usuario, "nombre_discord", None)
+        or f"u{emparejamiento.coach1_usuario_id}"
+    )
+    nombre2 = (
+        getattr(emparejamiento.coach2_usuario, "nombreAMostrar", None)
+        or getattr(emparejamiento.coach2_usuario, "nombre_discord", None)
+        or f"u{emparejamiento.coach2_usuario_id}"
+    )
+
+    logo_local = str(team_local.get("teamlogo") or "").replace(".png", "")
+    logo_visitante = str(team_visitante.get("teamlogo") or "").replace(".png", "")
+
+    score_c1 = int(emparejamiento.score_final_c1 or 0)
+    score_c2 = int(emparejamiento.score_final_c2 or 0)
+    if score_c1 > score_c2:
+        ganador = {"ruta": "./plantillas/Victoria_Izquierda.png", "x": 50, "y": 220}
+    elif score_c1 < score_c2:
+        ganador = {"ruta": "./plantillas/Victoria_Derecha.png", "x": 1400, "y": 220}
+    else:
+        ganador = {"ruta": "./plantillas/Empate.png", "x": 729, "y": 241}
+
+    ruta_imagen = Imagenes.crear_imagen(
+        "resultado",
+        "",
+        entrenadores={"0": nombre1, "1": nombre2},
+        resultados={"0": score_c1, "1": score_c2},
+        escudos={"0": f"Logos/{logo_local}", "1": f"Logos/{logo_visitante}"},
+        razas={
+            "0": getattr(emparejamiento.coach1_usuario, "raza", "") or "",
+            "1": getattr(emparejamiento.coach2_usuario, "raza", "") or "",
+        },
+        nombre_equipos={
+            "0": str(team_local.get("teamname") or "-"),
+            "1": str(team_visitante.get("teamname") or "-"),
+        },
+        kos={
+            "0": int(team_visitante.get("inflictedko") or 0),
+            "1": int(team_local.get("inflictedko") or 0),
+        },
+        heridos={
+            "0": max(0, int(team_visitante.get("inflictedcasualties") or 0) - int(team_local.get("sustaineddead") or 0)),
+            "1": max(0, int(team_local.get("inflictedcasualties") or 0) - int(team_visitante.get("sustaineddead") or 0)),
+        },
+        muertos={
+            "0": int(team_local.get("sustaineddead") or 0),
+            "1": int(team_visitante.get("sustaineddead") or 0),
+        },
+        ganador=ganador,
+        grupo={"0": getattr(emparejamiento.coach1_usuario, "grupo", 1) or 1},
+        lado={
+            "izquierdo": getattr(emparejamiento.coach1_usuario, "color", "#5f8dd3") or "#5f8dd3",
+            "derecho": getattr(emparejamiento.coach2_usuario, "color", "#c95f5f") or "#c95f5f",
+        },
+    )
+    if not ruta_imagen:
+        return
+
+    with open(ruta_imagen, "rb") as img:
+        await hilo.send(file=File(img))
+    threading.Timer(10, lambda: Imagenes.eliminar_imagen(ruta_imagen)).start()
 
 
 @bot.command(name="actualiza_suizo")
@@ -5657,16 +5797,6 @@ async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
                     emparejamiento.puntos_c1 = puntos_draw
                     emparejamiento.puntos_c2 = puntos_draw
 
-                try:
-                    if emparejamiento.canal_id:
-                        await UtilesDiscord.gestionar_canal_discord(
-                            ctx,
-                            "eliminar",
-                            canal_id=int(emparejamiento.canal_id),
-                        )
-                except Exception:
-                    pass
-
                 nombre1 = (
                     getattr(emparejamiento.coach1_usuario, "nombreAMostrar", None)
                     or getattr(emparejamiento.coach1_usuario, "nombre_discord", None)
@@ -5681,6 +5811,36 @@ async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
                     f"✅ Resultado registrado (R{ronda_abierta.numero} M{emparejamiento.mesa_numero}): "
                     f"**{nombre1} {emparejamiento.score_final_c1} - {emparejamiento.score_final_c2} {nombre2}**."
                 )
+                if emparejamiento.canal_id:
+                    canal_partido = (
+                        ctx.guild.get_channel(int(emparejamiento.canal_id))
+                        if ctx.guild
+                        else None
+                    ) or bot.get_channel(int(emparejamiento.canal_id))
+                    if canal_partido is not None:
+                        try:
+                            await canal_partido.send(
+                                f"✅ Resultado registrado (R{ronda_abierta.numero} M{emparejamiento.mesa_numero}): "
+                                f"**{nombre1} {emparejamiento.score_final_c1} - {emparejamiento.score_final_c2} {nombre2}**."
+                            )
+                        except Exception:
+                            await ctx.send(
+                                f"⚠️ No se pudo publicar el resultado en el canal de mesa `{emparejamiento.canal_id}`."
+                            )
+                try:
+                    await publicar_resultado_suizo_en_foro(
+                        ctx,
+                        torneo,
+                        ronda_abierta.numero,
+                        emparejamiento,
+                        match,
+                        local_index,
+                        visitante_index,
+                    )
+                except Exception:
+                    await ctx.send(
+                        f"⚠️ No se pudo publicar la imagen del resultado en el foro para la mesa `{emparejamiento.mesa_numero}`."
+                    )
                 resultados_publicados += 1
 
             session.commit()
