@@ -6214,7 +6214,6 @@ actualizacion_peticiones = (
 
 tareas_programadas = {
     dia: {
-        "09": [aviso_playoffs],
         "10": [actualizacion_peticiones],
         "22": [actualizacion_peticiones],
     }
