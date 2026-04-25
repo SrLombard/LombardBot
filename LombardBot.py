@@ -4267,6 +4267,7 @@ async def suizo_add_jugador(ctx, torneo_id: int, usuario: discord.Member, raza_c
 
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
+    usuario_id_db = None
     try:
         torneo = session.query(GestorSQL.SuizoTorneo).filter_by(id=torneo_id).first()
         if torneo is None:
@@ -4293,9 +4294,10 @@ async def suizo_add_jugador(ctx, torneo_id: int, usuario: discord.Member, raza_c
             return
 
         raza_final = raza_competicion if raza_competicion is not None else usuario_bd.raza
+        usuario_id_db = usuario_bd.idUsuarios
         nuevo_participante = GestorSQL.SuizoParticipante(
             torneo_id=torneo_id,
-            usuario_id=usuario_bd.idUsuarios,
+            usuario_id=usuario_id_db,
             estado="ACTIVO",
             tiene_bye=0,
             cantidad_byes=0,
@@ -4317,7 +4319,7 @@ async def suizo_add_jugador(ctx, torneo_id: int, usuario: discord.Member, raza_c
     await ctx.send(
         "✅ Jugador añadido correctamente al torneo suizo.\n"
         f"Torneo ID: **{torneo_id}**\n"
-        f"Usuario: {usuario.mention} (idUsuarios: **{usuario_bd.idUsuarios}**)\n"
+        f"Usuario: {usuario.mention} (idUsuarios: **{usuario_id_db}**)\n"
         f"Raza competición: **{raza_texto}**"
     )
 
