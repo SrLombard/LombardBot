@@ -5608,7 +5608,8 @@ async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
                 total_sin_emparejamiento += 1
                 continue
 
-            local_index = 0 if int(emparejamiento.coach1_usuario.id_bloodbowl) == int(coach_ids[0]) else 1
+            coach1_bbowl_id = str(emparejamiento.coach1_usuario.id_bloodbowl)
+            local_index = 0 if coach1_bbowl_id == str(coach_ids[0]) else 1
             visitante_index = 1 - local_index
             teams = match.get("teams", [])
             if len(teams) < 2:
