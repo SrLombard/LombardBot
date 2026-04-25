@@ -3808,6 +3808,8 @@ formulario para rehacerla desde cero. Puedes hacerlo las veces que necesites.
 Si este formato no te convence, es totalmente comprensible. No tenemos una baja automática, así que
 escríbeme directamente y te borraré la inscripción manualmente sin problema.
 
+Consulta el estado de tu inscripción con /consulta_inscripcion
+
 Sentimos el cambio, pero creemos que es la mejor forma de seguir jugando estos meses sin arriesgar
 una liga larga justo antes de una actualización importante.
 """
