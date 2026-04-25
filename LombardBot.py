@@ -3697,20 +3697,6 @@ async def comunicaciones_inscritos(ctx, solo_objetivo: Optional[int] = None):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
 
-    role_name = "Butter Cup"
-    guild = ctx.guild
-
-    if guild is None:
-        await ctx.send("Este comando solo se puede ejecutar en un servidor (guild), no en mensajes privados.")
-        session.close()
-        return
-
-    butter_role = discord.utils.get(guild.roles, name=role_name)
-    if butter_role is None:
-        await ctx.send(f"No se encontró el rol `{role_name}` en este servidor.")
-        session.close()
-        return
-
     TARGET_REMINDER_IDS = {
         681577610010296372,
         208239645014753280,
@@ -3718,42 +3704,77 @@ async def comunicaciones_inscritos(ctx, solo_objetivo: Optional[int] = None):
 
     solo_ids_objetivo = str(solo_objetivo) == "1"
 
-    miembros_con_rol = butter_role.members
+    inscritos = session.query(GestorSQL.Inscripcion).all()
     if solo_ids_objetivo:
-        miembros_con_rol = [member for member in miembros_con_rol if member.id in TARGET_REMINDER_IDS]
+        inscritos = [i for i in inscritos if i.id_usuario_discord in TARGET_REMINDER_IDS]
 
-    inscritos_con_rol = []
-    for member in miembros_con_rol:
-        registro = session.query(GestorSQL.Inscripcion).filter_by(id_usuario_discord=member.id).first()
-        if registro:
-            inscritos_con_rol.append(member)
-
-    if not inscritos_con_rol:
-        await ctx.send(f"No hay miembros inscritos con el rol '{role_name}'.")
+    if not inscritos:
+        await ctx.send("No hay usuarios en la tabla de inscripción para enviar la comunicación.")
         session.close()
         return
 
-    for member in inscritos_con_rol:
+    for inscripcion in inscritos:
         try:
-            await member.send(
+            user = await bot.fetch_user(inscripcion.id_usuario_discord)
+            await user.send(
 """
-📣 **Normas para inscritos - Butter Cup**
+📢 **Cambio importante en la competición**
 
-Gracias por inscribirte. Te compartimos un recordatorio rápido de normas:
+Tenemos que modificar el plan previsto para la liga.
 
-1) Revisa siempre el canal de anuncios y respeta las fechas de cada jornada.
-2) Contacta con tu rival con antelación y proponed horario.
-3) Juega con deportividad y comunica cualquier incidencia a la organización.
-4) Si vas a abandonar o no puedes jugar, avisa cuanto antes.
+Se esperaba una **actualización importante de reglas** que finalmente no ha llegado y que,
+previsiblemente, llegará dentro de unos tres meses. Como nuestra liga regular dura más que ese plazo,
+no tiene sentido empezar ahora una competición larga que podría quedar afectada a mitad de temporada
+por cambios de reglas y de equipos.
 
-Este texto es provisional y se puede ajustar cuando quieras.
+🏁 **Temporada regular**
+
+La temporada **2025-2026 queda cerrada** con la última liga ya disputada.
+
+La siguiente temporada regular, **2026-2027**, comenzará en **septiembre**, ya con las nuevas reglas.
+
+🏆 **Nueva competición temporal**
+
+Mientras tanto, haremos un **torneo suizo de 5 rondas**, con una ronda por semana, en conjunto con
+otras comunidades.
+
+Los ganadores representarán a sus comunidades en un **playoff por equipos entre comunidades**.
+
+📌 Las reglas del playoff estarán publicadas claramente en anuncios.
+
+🗓️ **Nueva fecha de inicio**
+
+La competición se retrasa una semana.
+
+📆 **Empezamos el lunes 4 de mayo.**
+
+📝 **Si ya estás inscrito**
+
+Tienes tres opciones:
+
+✅ **Mantener tu inscripción**
+Si quieres seguir participando con la inscripción que ya hiciste, **no tienes que hacer nada**.
+Sigue siendo válida.
+
+🔁 **Cambiar tu inscripción**
+Quita la reacción del mensaje de inscripción y vuelve a reaccionar. El bot te enviará de nuevo el
+formulario para rehacerla desde cero. Puedes hacerlo las veces que necesites.
+
+❌ **Darte de baja**
+Si este formato no te convence, es totalmente comprensible. No tenemos una baja automática, así que
+escríbeme directamente y te borraré la inscripción manualmente sin problema.
+
+Sentimos el cambio, pero creemos que es la mejor forma de seguir jugando estos meses sin arriesgar
+una liga larga justo antes de una actualización importante.
 """
             )
-            await ctx.send(f"Comunicación enviada a {member.name}")
+            await ctx.send(f"Comunicación enviada a <@{inscripcion.id_usuario_discord}>")
+        except discord.NotFound:
+            await ctx.send(f"No se encontró usuario de Discord para el ID {inscripcion.id_usuario_discord}.")
         except discord.Forbidden:
-            await ctx.send(f"No se pudo enviar un mensaje privado a {member.name}. Puede que tenga los mensajes privados desactivados.")
+            await ctx.send(f"No se pudo enviar un mensaje privado a <@{inscripcion.id_usuario_discord}>. Puede que tenga los mensajes privados desactivados.")
         except discord.HTTPException:
-            await ctx.send(f"Hubo un error al intentar enviar un mensaje a {member.name}.")
+            await ctx.send(f"Hubo un error al intentar enviar un mensaje a <@{inscripcion.id_usuario_discord}>.")
     session.close()
 
 @bot.command(name='comprueba_quedadas')
