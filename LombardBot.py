@@ -1038,11 +1038,10 @@ async def CreaCanalesTicket(ctx, jornada):
 
 
 
-            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs que pueden llevaros a conseguir un 🎟**TICKET**🎟. El primero se llevará un Ticket directo para el mundial y el segundo un Ticket de play-in.
+            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs que pueden llevaros a conseguir un 🎟**TICKET**🎟. El primero se llevará un Ticket directo para el mundial.
             
-Ahora debéis elegir uno de los equipos con los que habéis jugado la ButterCup para inscribirlo en la competición Ticket ButterCup contraseña TicketButtercup2025.
-Si el equipo está actualmente jugando los playoffs de la Cuarta Edición de la Butter Cup debéis hacer una copia del equipo. Contáis con la ayuda de los comisarios para ello.
-Si el equipo lleva 20 partidos sin hacer reforma deberéis hacerla ANTES de empezar vuestro pirmer partido.\n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
+Ahora debéis elegir uno de los equipos con los que habéis jugado la ButterCup para inscribirlo en la competición ButterTicket2026 contraseña ButterTicket2026.
+Podéis usar cualquier de los equipos que hayan jugado las dos últimas Butter Cup. Contáis con la ayuda de los comisarios para ello por lo que si tenéis dudas o lo habéis borrado mencionadles en este canal.\n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
 Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España.{fecha}
             
         -------------------------------------------
