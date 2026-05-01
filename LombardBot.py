@@ -6554,20 +6554,21 @@ actualizacion_peticiones = (
 
 tareas_programadas = {
     dia: {
+        "09": [aviso_playoffs],
         "10": [actualizacion_peticiones],
         "22": [actualizacion_peticiones],
     }
     for dia in dias_semana
 }
 
-tareas_programadas["Wednesday"]["15"] = [
-    (
-        func_comprueba_quedadas,
-        {
-            "enviar_mensaje": 1
-        }
-    )
-]
+# tareas_programadas["Wednesday"]["15"] = [
+#     (
+#         func_comprueba_quedadas,
+#         {
+#             "enviar_mensaje": 1
+#         }
+#     )
+# ]
 
         
 # Ejecutar el bot con el token correspondiente
