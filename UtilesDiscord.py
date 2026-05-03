@@ -1,4 +1,4 @@
-﻿import discord
+import discord
 from discord.ext import commands
 from discord import app_commands
 from threading import Thread
@@ -27,6 +27,91 @@ idMensajeSpin = 1224072683097030698
 def get_int_value(dictionary, key):
     value = dictionary.get(key)
     return 0 if value is None else value
+
+
+# Discord limita los mensajes de texto normales a 2000 caracteres.
+# Usamos un margen de seguridad para no rozar el límite al añadir cabeceras,
+# bloques de código o pequeñas variaciones de formato.
+DISCORD_MAX_MESSAGE_CHARS = 2000
+DISCORD_SAFE_MESSAGE_CHARS = 1900
+
+
+def dividir_mensaje_discord(mensaje, limite=DISCORD_SAFE_MESSAGE_CHARS):
+    """Divide un mensaje en partes válidas para Discord sin perder contenido.
+
+    Prioriza cortar por líneas para mantener tablas y listados legibles. Si una
+    sola línea supera el límite, la parte en trozos de tamaño seguro.
+    """
+    if mensaje is None:
+        return []
+
+    texto = str(mensaje)
+    if texto == "":
+        return []
+
+    limite = int(limite or DISCORD_SAFE_MESSAGE_CHARS)
+    if limite <= 0:
+        limite = DISCORD_SAFE_MESSAGE_CHARS
+    limite = min(limite, DISCORD_MAX_MESSAGE_CHARS)
+
+    if len(texto) <= limite:
+        return [texto]
+
+    partes = []
+    actual = ""
+
+    for linea in texto.splitlines(keepends=True):
+        if len(linea) > limite:
+            if actual:
+                partes.append(actual.rstrip("\n"))
+                actual = ""
+            inicio = 0
+            while inicio < len(linea):
+                trozo = linea[inicio:inicio + limite]
+                inicio += limite
+                if inicio < len(linea):
+                    partes.append(trozo.rstrip("\n"))
+                else:
+                    actual = trozo
+            continue
+
+        if len(actual) + len(linea) > limite:
+            partes.append(actual.rstrip("\n"))
+            actual = linea
+        else:
+            actual += linea
+
+    if actual:
+        partes.append(actual.rstrip("\n"))
+
+    return [parte if parte else "\u200b" for parte in partes]
+
+
+async def enviar_mensaje_largo(destino, mensaje, limite=DISCORD_SAFE_MESSAGE_CHARS, **kwargs):
+    """Envía un texto a un canal/contexto dividiéndolo si supera el límite."""
+    enviados = []
+    partes = dividir_mensaje_discord(mensaje, limite=limite)
+    for parte in partes:
+        enviados.append(await destino.send(parte, **kwargs))
+    return enviados
+
+
+async def responder_interaction_largo(interaction, mensaje, ephemeral=False, limite=DISCORD_SAFE_MESSAGE_CHARS):
+    """Responde a una slash command dividiendo el mensaje en response + followups."""
+    partes = dividir_mensaje_discord(mensaje, limite=limite)
+    if not partes:
+        partes = ["\u200b"]
+
+    enviados = []
+    primera = partes[0]
+    if interaction.response.is_done():
+        enviados.append(await interaction.followup.send(primera, ephemeral=ephemeral))
+    else:
+        await interaction.response.send_message(primera, ephemeral=ephemeral)
+
+    for parte in partes[1:]:
+        enviados.append(await interaction.followup.send(parte, ephemeral=ephemeral))
+    return enviados
 
 
 def crearEmbedPartido(coach, coachVisitante, match, propietario):
@@ -132,7 +217,7 @@ async def publicar(ctx, titulo, mensaje=None, embed=None,id_foro=None,idPartido=
 async def mensaje_administradores(mensaje):
     bot = DiscordClientSingleton.get_bot_instance()
     channel = bot.get_channel(457740100097540106)  # Asegúrate de que la ID del canal sea correcta
-    await channel.send(mensaje)
+    await enviar_mensaje_largo(channel, mensaje)
 
 
 async def gestionar_canal_discord(ctx, accion, nombre_canal=None, coach1_id_discord=None, coach2_id_discord=None, categoria_id=1325620233104527463, mensaje="", quedada=False, canal_id=None,raza1='',raza2='',fechalimite=0,preferencias1=['',''],preferencias2=['',''],bbname1='',bbname2=''):

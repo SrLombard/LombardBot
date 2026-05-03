@@ -4264,7 +4264,8 @@ async def suizo_crear(
     ida_vuelta_texto = "idavuelta (1)" if ida_vuelta_valor == 1 else "ida (0)"
     canal_hub_texto = canal_hub_id if canal_hub_id is not None else "sin canal"
 
-    await ctx.send(
+    await UtilesDiscord.enviar_mensaje_largo(
+        ctx,
         "✅ Torneo suizo creado correctamente.\n"
         f"ID torneo: **{nuevo_torneo.id}**\n"
         f"Nombre: **{nombre}**\n"
@@ -4748,6 +4749,36 @@ def _tabla_compacta(columnas, filas) -> str:
     return "\n".join([cabecera, separador, *cuerpo]) if cuerpo else "\n".join([cabecera, separador, "(sin filas)"])
 
 
+async def _responder_interaction_bloque_codigo_largo(
+    interaction: discord.Interaction,
+    encabezado: str,
+    contenido: str,
+    ephemeral: bool = False,
+):
+    """Envía una tabla/listado de slash command en varios mensajes seguros."""
+    contenido = str(contenido or "(sin contenido)")
+    partes = UtilesDiscord.dividir_mensaje_discord(contenido, limite=1700)
+    if not partes:
+        partes = ["(sin contenido)"]
+
+    total = len(partes)
+    for indice, parte in enumerate(partes, start=1):
+        etiqueta = f" (parte {indice}/{total})" if total > 1 else ""
+        mensaje = f"{encabezado}{etiqueta}\n```{parte}```"
+        if indice == 1 and not interaction.response.is_done():
+            await interaction.response.send_message(mensaje, ephemeral=ephemeral)
+        else:
+            await interaction.followup.send(mensaje, ephemeral=ephemeral)
+
+
+async def _responder_interaction_largo(
+    interaction: discord.Interaction,
+    mensaje: str,
+    ephemeral: bool = False,
+):
+    await UtilesDiscord.responder_interaction_largo(interaction, mensaje, ephemeral=ephemeral)
+
+
 def _resolver_ronda_suizo(session, torneo_id: int, ronda: Optional[int]):
     if ronda is not None:
         return (
@@ -4806,8 +4837,10 @@ async def suizo_consulta_clasificacion(interaction: discord.Interaction, torneo_
             filas,
         )
         ronda_label = ronda if ronda is not None else "actual"
-        await interaction.response.send_message(
-            f"**Clasificación suizo** torneo `{torneo_id}` (ronda: {ronda_label})\n```{tabla}```"
+        await _responder_interaction_bloque_codigo_largo(
+            interaction,
+            f"**Clasificación suizo** torneo `{torneo_id}` (ronda: {ronda_label})",
+            tabla,
         )
     except Exception as e:
         if interaction.response.is_done():
@@ -4903,8 +4936,10 @@ async def suizo_consulta_jugador(interaction: discord.Interaction, torneo_id: in
             filas.append([ronda_db.numero, emp.mesa_numero, rival_nombre, emp.estado, score, emp.puntos_c1 if es_c1 else emp.puntos_c2])
 
         tabla = _tabla_compacta(["R", "Mesa", "Rival", "Estado", "Score", "Pts"], filas)
-        await interaction.response.send_message(
-            f"**Jugador:** `{_nombre_usuario_suizo(usuario)}` | Estado: **{participante.estado}**\n```{tabla}```"
+        await _responder_interaction_bloque_codigo_largo(
+            interaction,
+            f"**Jugador:** `{_nombre_usuario_suizo(usuario)}` | Estado: **{participante.estado}**",
+            tabla,
         )
     except Exception as e:
         if interaction.response.is_done():
@@ -4950,8 +4985,10 @@ async def suizo_consulta_ronda(interaction: discord.Interaction, torneo_id: int,
             filas.append([emp.mesa_numero, n1, n2, emp.estado, f"{emp.score_final_c1}-{emp.score_final_c2}"])
 
         tabla = _tabla_compacta(["Mesa", "Coach1", "Coach2", "Estado", "Score"], filas)
-        await interaction.response.send_message(
-            f"**Ronda {ronda_db.numero}** (estado `{ronda_db.estado}`) torneo `{torneo_id}`\n```{tabla}```"
+        await _responder_interaction_bloque_codigo_largo(
+            interaction,
+            f"**Ronda {ronda_db.numero}** (estado `{ronda_db.estado}`) torneo `{torneo_id}`",
+            tabla,
         )
     except Exception as e:
         if interaction.response.is_done():
@@ -4991,9 +5028,13 @@ async def suizo_consulta_desempates(interaction: discord.Interaction, torneo_id:
 
         tabla = _tabla_compacta(["#", "Jugador", "Estado", "PTS", "H2H", "BH", "DIF"], filas)
         ronda_txt = ronda if ronda is not None else "actual"
-        await interaction.response.send_message(
-            f"**Desempates** torneo `{torneo_id}` (ronda: {ronda_txt})\n```{tabla}```\n"
-            "Orden: puntos > H2H (si aplica) > Buchholz Cut > diferencia de score."
+        await _responder_interaction_bloque_codigo_largo(
+            interaction,
+            (
+                f"**Desempates** torneo `{torneo_id}` (ronda: {ronda_txt})\n"
+                "Orden: puntos > H2H (si aplica) > Buchholz Cut > diferencia de score."
+            ),
+            tabla,
         )
     except Exception as e:
         if interaction.response.is_done():
@@ -5046,8 +5087,10 @@ async def suizo_consulta_estado_canales(interaction: discord.Interaction, torneo
             filas.append([emp.mesa_numero, n1, n2, canal, estado_canal, emp.estado])
 
         tabla = _tabla_compacta(["Mesa", "Coach1", "Coach2", "Canal", "EstadoCanal", "EstadoEmp"], filas)
-        await interaction.response.send_message(
-            f"**Estado de canales** torneo `{torneo_id}`, ronda `{ronda_db.numero}`\n```{tabla}```"
+        await _responder_interaction_bloque_codigo_largo(
+            interaction,
+            f"**Estado de canales** torneo `{torneo_id}`, ronda `{ronda_db.numero}`",
+            tabla,
         )
     except Exception as e:
         if interaction.response.is_done():
@@ -5266,7 +5309,7 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
                         raza_por_usuario.get(int(emp.coach2_usuario_id), "") if emp.coach2_usuario_id else "",
                     )
                     if mensaje_canal:
-                        await canal_creado.send(mensaje_canal)
+                        await UtilesDiscord.enviar_mensaje_largo(canal_creado, mensaje_canal)
                     emp.canal_id = canal_creado.id
                     canales_ok += 1
                 except Exception:
@@ -5303,10 +5346,10 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
 
     canal_hub = ctx.guild.get_channel(canal_hub_id) if ctx.guild and canal_hub_id else None
     if canal_hub:
-        await canal_hub.send(resumen)
+        await UtilesDiscord.enviar_mensaje_largo(canal_hub, resumen)
         await ctx.send(f"Ronda generada y resumen publicado en <#{canal_hub_id}>.")
     else:
-        await ctx.send(resumen)
+        await UtilesDiscord.enviar_mensaje_largo(ctx, resumen)
 
 
 @bot.command(name="suizo_regenerar_ronda")
@@ -5544,7 +5587,7 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
                         raza_por_usuario.get(int(emp.coach2_usuario_id), "") if emp.coach2_usuario_id else "",
                     )
                     if mensaje_canal:
-                        await canal_creado.send(mensaje_canal)
+                        await UtilesDiscord.enviar_mensaje_largo(canal_creado, mensaje_canal)
                     emp.canal_id = canal_creado.id
                     canales_creados += 1
                 except Exception:
@@ -5567,7 +5610,7 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
     finally:
         session.close()
 
-    await ctx.send(
+    resumen = (
         "♻️ Ronda regenerada correctamente.\n"
         f"Torneo: **{torneo_id}** | Ronda: **{numero_ronda}**\n"
         f"Emparejamientos regenerados: **{len(mesas_resumen)}**\n"
@@ -5575,6 +5618,7 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
         f"Canales creados: **{canales_creados}** | Error al crear: **{canales_creacion_error}**\n"
         + "\n".join(mesas_resumen)
     )
+    await UtilesDiscord.enviar_mensaje_largo(ctx, resumen)
 
 
 @bot.command(name="suizo_bloquear_ronda")
@@ -5678,7 +5722,8 @@ async def suizo_desbloquear_ronda(ctx, torneo_id: int, numero_ronda: int):
 async def post_cierre_suizo(ctx, session, torneo_id: int, cierre: dict):
     if not cierre.get("cerrada"):
         ronda_numero = cierre.get("ronda_numero", "?")
-        await ctx.send(
+        await UtilesDiscord.enviar_mensaje_largo(
+            ctx,
             f"⏳ Ronda **{ronda_numero}** aún abierta en torneo **{torneo_id}**. "
             f"Motivo: **{cierre.get('motivo', 'DESCONOCIDO')}** "
             f"(pendientes: **{cierre.get('pendientes', '?')}**)."
@@ -5686,7 +5731,8 @@ async def post_cierre_suizo(ctx, session, torneo_id: int, cierre: dict):
         return
 
     ronda_numero = cierre.get("ronda_numero", "?")
-    await ctx.send(
+    await UtilesDiscord.enviar_mensaje_largo(
+        ctx,
         f"🏁 Ronda **{ronda_numero}** cerrada en torneo **{torneo_id}**. "
         f"Snapshot standings: **{cierre.get('snapshot_filas', 0)}** filas."
     )
@@ -5729,7 +5775,8 @@ async def post_cierre_suizo(ctx, session, torneo_id: int, cierre: dict):
             except Exception:
                 canales_error += 1
 
-        await ctx.send(
+        await UtilesDiscord.enviar_mensaje_largo(
+            ctx,
             "🧹 Limpieza de canales de la ronda cerrada:\n"
             f"Eliminados: **{canales_eliminados}** | "
             f"No encontrados: **{canales_no_encontrados}** | "
@@ -5738,7 +5785,8 @@ async def post_cierre_suizo(ctx, session, torneo_id: int, cierre: dict):
 
     if not cierre.get("es_ultima_ronda"):
         siguiente_ronda = int(cierre.get("siguiente_ronda_numero"))
-        await ctx.send(
+        await UtilesDiscord.enviar_mensaje_largo(
+            ctx,
             f"➡️ Se generará automáticamente la ronda **{siguiente_ronda}** "
             f"del torneo **{torneo_id}**."
         )
@@ -5762,7 +5810,8 @@ async def post_cierre_suizo(ctx, session, torneo_id: int, cierre: dict):
             f"Dif {fila.get('diff_score')}"
         )
 
-    await ctx.send(
+    await UtilesDiscord.enviar_mensaje_largo(
+        ctx,
         f"🏆 Torneo **{torneo_id}** finalizado.\n"
         "Clasificación final:\n"
         + ("\n".join(top) if top else "_Sin datos de clasificación._")
@@ -6121,7 +6170,8 @@ async def actualiza_suizo(ctx, torneo_id: int, todos: int = 0):
             session.commit()
             await post_cierre_suizo(ctx, session, torneo_id, cierre)
 
-        await ctx.send(
+        await UtilesDiscord.enviar_mensaje_largo(
+            ctx,
             "📊 Actualización suiza terminada.\n"
             f"Partidos API insertados: **{total_insertados}**\n"
             f"Duplicados ignorados: **{total_duplicados}**\n"
