@@ -2017,6 +2017,7 @@ async def fecha(interaction: discord.Interaction, dia: int, mes: int, hora: int,
     
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     with Session() as session:
+        es_suizo = False
         registro = session.query(GestorSQL.Calendario).filter(GestorSQL.Calendario.canalAsociado == id_canal).first()
 
         if registro is None:
@@ -2028,17 +2029,25 @@ async def fecha(interaction: discord.Interaction, dia: int, mes: int, hora: int,
                     if registro is None:
                         registro = session.query(GestorSQL.Ticket).filter(GestorSQL.Ticket.canalAsociado == id_canal).first()
                         if registro is None:
-                            await interaction.response.send_message("Este no es un canal de quedadas 😡", ephemeral=True)
-                            return
+                            registro = session.query(GestorSQL.SuizoEmparejamiento).filter(GestorSQL.SuizoEmparejamiento.canal_id == id_canal).first()
+                            if registro is None:
+                                await interaction.response.send_message("Este no es un canal de quedadas 😡", ephemeral=True)
+                                return
+                            es_suizo = True
 
         try:
             punto = ""
             tz = tzlocal.get_localzone()
             fecha_nueva = datetime(year=datetime.now().year, month=mes, day=dia, hour=hora, minute=minuto, tzinfo=tz)
-            if registro.fechaFinal:
-                fecha_final =registro.fechaFinal.astimezone(tz)
+            if es_suizo:
+                fecha_final_base = registro.ronda.fecha_fin if registro.ronda else None
+            else:
+                fecha_final_base = registro.fechaFinal
+
+            if fecha_final_base:
+                fecha_final = fecha_final_base.astimezone(tz)
             # Comprueba si la fecha es menor que fechaFinal, si existe fechaFinal
-            if registro.fechaFinal and fecha_nueva >= fecha_final:
+            if fecha_final_base and fecha_nueva >= fecha_final:
                 # Encuentra el rol de 'Comisario'
                 comisario_role = discord.utils.find(lambda r: r.name == 'Comisario', interaction.guild.roles)
                 if comisario_role:
