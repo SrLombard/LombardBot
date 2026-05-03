@@ -5234,6 +5234,9 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
                         category=categoria_destino,
                         overwrites=overwrites,
                     )
+                    mensaje_canal = _mensaje_suizo_canal(torneo, True, jugador1, jugador2, nueva_ronda)
+                    if mensaje_canal:
+                        await canal_creado.send(mensaje_canal)
                     emp.canal_id = canal_creado.id
                     canales_ok += 1
                 except Exception:
@@ -5489,6 +5492,9 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
                         category=categoria_destino,
                         overwrites=overwrites,
                     )
+                    mensaje_canal = _mensaje_suizo_canal(torneo, False, jugador1, jugador2, ronda)
+                    if mensaje_canal:
+                        await canal_creado.send(mensaje_canal)
                     emp.canal_id = canal_creado.id
                     canales_creados += 1
                 except Exception:
@@ -5806,6 +5812,36 @@ async def publicar_resultado_suizo_en_foro(
     with open(ruta_imagen, "rb") as img:
         await hilo.send(file=File(img))
     threading.Timer(10, lambda: Imagenes.eliminar_imagen(ruta_imagen)).start()
+
+
+def _mensaje_suizo_canal(torneo, es_mensaje_inicial, jugador1, jugador2, ronda):
+    plantilla = torneo.mensajeInicial if es_mensaje_inicial else torneo.mensajesSubsiguientes
+    if not plantilla:
+        return ""
+    mention1 = f"<@{jugador1.id_discord}>" if jugador1 and jugador1.id_discord else ""
+    mention2 = f"<@{jugador2.id_discord}>" if jugador2 and jugador2.id_discord else ""
+    raza1 = (getattr(jugador1, "raza", "") or "").strip()
+    raza2 = (getattr(jugador2, "raza", "") or "").strip()
+    mensajePreferencias1 = ""
+    mensajePreferencias2 = ""
+    pref1 = getattr(getattr(jugador1, "preferencias_fecha", None), "preferencia", "") if jugador1 else ""
+    pref2 = getattr(getattr(jugador2, "preferencias_fecha", None), "preferencia", "") if jugador2 else ""
+    if jugador1 and jugador1.id_discord and pref1:
+        mensajePreferencias1 = f"\n<@{jugador1.id_discord}> suele poder jugar {pref1}"
+    if jugador2 and jugador2.id_discord and pref2:
+        mensajePreferencias2 = f"\n<@{jugador2.id_discord}> suele poder jugar {pref2}"
+    fecha = ""
+    if ronda and getattr(ronda, "fecha_fin", None):
+        fecha = f"\n\nLa Fecha límite para jugar el partido es el <t:{int(ronda.fecha_fin.timestamp())}:f>"
+    return plantilla.format(
+        mention1=mention1,
+        mention2=mention2,
+        raza1=raza1,
+        raza2=raza2,
+        mensajePreferencias1=mensajePreferencias1,
+        mensajePreferencias2=mensajePreferencias2,
+        fecha=fecha,
+    )
 
 
 @bot.command(name="actualiza_suizo")

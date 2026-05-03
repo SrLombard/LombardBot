@@ -285,6 +285,8 @@ class SuizoTorneo(Base):
     fecha_fin_ronda1 = Column(DateTime, nullable=False)
     dias_por_ronda = Column(Integer, nullable=False, default=7)
     canal_hub_id = Column(BigInteger, nullable=True)
+    mensajeInicial = Column(Text, nullable=True)
+    mensajesSubsiguientes = Column(Text, nullable=True)
     creado_por_discord_id = Column(BigInteger, nullable=True)
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False)
