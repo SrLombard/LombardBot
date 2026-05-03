@@ -3088,13 +3088,16 @@ async def actualizar_ticket(ctx, session, obtener_partidos_func, categoria_id, t
             if preferencias2[0] and preferencias2[1]:
                 mensajePreferencias2 = f"\n<@{preferencias2[0]}> suele poder jugar {preferencias2[1]}"
 
-            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs que pueden llevaros a conseguir un 🎟**TICKET**🎟. El primero se llevará un Ticket directo para el mundial.""" + mensajePreferencias1 + mensajePreferencias2 +"""
-            
+            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs que pueden llevaros a conseguir un 🎟**TICKET**🎟. El primero se llevará un Ticket directo para el mundial y el segundo un Ticket de play-in.
+
+Ahora debéis elegir uno de los equipos con los que habéis jugado la ButterCup para inscribirlo en la competición Ticket ButterCup contraseña TicketButtercup2025.
+Si el equipo está actualmente jugando los playoffs de la Cuarta Edición de la Butter Cup debéis hacer una copia del equipo. Contáis con la ayuda de los comisarios para ello.
+Si el equipo lleva 20 partidos sin hacer reforma deberéis hacerla ANTES de empezar vuestro pirmer partido.\n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
 Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España.{fecha}
 
         -------------------------------------------
 
-Antes de jugar tendréis que **USAR EL CANAL** https://discord.com/channels/405763002768424970/1224128423929315468 y **LIBERARLO** al encontrar partido.
+Antes de jugar tendréis que **USAR EL CANAL** #spin y **LIBERADLO** al encontrar partido.
 
 Si hubiera cualquier problema mencionad a los comisarios.
                 """
@@ -3711,24 +3714,22 @@ async def recordar_inscripciones(ctx, solo_objetivo: Optional[int] = None):
         try:
             await member.send(
 """
-Si te llega este mensaje es que **NO** estás apuntado al increible...
+🏆 **BUTTER CUP VII**   
+Última temporada hacia los **tickets del Mundial 2026**: de las **3 ediciones** (invierno 2025, primavera 2026 y verano 2026) y todo culminará en un **playoff veraniego**.
 
-🏆 **BUTTER SUIZO**   
+⚙️ **Formato**  
+• **3 divisiones**: Oro, Plata y Bronce.  
+• Los mejores **ascienden de división** cada edición.  
+• Los grupos se crean en **packs de 6**.
 
-Donde los ganadores representarán a la Butter en el increiblemente prestigioso Torneo intercomunidades donde nos enfrentaremos a la Hispana y Piel de minotauro.
-
-Vamos a jugar un suizo un poco loco durante 5 semanitas para darle salsa a este "entretiempo" que nos han metido nuestros amigos de cyanide.
-
-📅 **Cierre de inscripciones y sorteo: Domingo 3 de mayo**  
+📅 **Cierre de inscripciones: viernes 24 de Abril**  
 No te quedes sin plaza: apúntate en <#1280102673059680316>, **consulta las reglas** y pregunta lo que necesites.
-
-Si me pediste que te borrase la inscripción esto te confirma que lo hice :P.
 
 Si solo tienes el rol para estar atento de la copa, no necesitas hacer nada.
 
-Si no quieres recibir más notificaciones mías, escribe a **SrLombard** para que no te moleste más. Pero ya no escribiré más hasta septiembre ;).
+Si no quieres recibir más notificaciones mías, escribe a **SrLombard** para que no te moleste más, Pero solo escribiré una vez más antes de ese sábado ;).
 
-¡Te esperamos en la **BUTTER SUIZO**! 🏉✨"""
+¡Te esperamos en la **BUTTER CUP VII**! 🏉✨"""
             )
             await ctx.send(f"Recordatorio enviado a {member.name}")
         except discord.Forbidden:
@@ -5147,6 +5148,18 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
             .all()
         )
         usuarios_por_id = {int(u.idUsuarios): u for u in usuarios}
+        participantes_torneo = (
+            session.query(GestorSQL.SuizoParticipante)
+            .filter(
+                GestorSQL.SuizoParticipante.torneo_id == torneo_id,
+                GestorSQL.SuizoParticipante.usuario_id.in_(ids_usuarios),
+            )
+            .all()
+        )
+        raza_por_usuario = {
+            int(p.usuario_id): (p.raza_competicion or "").strip()
+            for p in participantes_torneo
+        }
         partidos_requeridos = _partidos_requeridos_desde_formato(torneo.formato_serie)
 
         emparejamientos_db = []
@@ -5234,7 +5247,15 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
                         category=categoria_destino,
                         overwrites=overwrites,
                     )
-                    mensaje_canal = _mensaje_suizo_canal(torneo, True, jugador1, jugador2, nueva_ronda)
+                    mensaje_canal = _mensaje_suizo_canal(
+                        torneo,
+                        True,
+                        jugador1,
+                        jugador2,
+                        nueva_ronda,
+                        raza_por_usuario.get(int(emp.coach1_usuario_id), ""),
+                        raza_por_usuario.get(int(emp.coach2_usuario_id), "") if emp.coach2_usuario_id else "",
+                    )
                     if mensaje_canal:
                         await canal_creado.send(mensaje_canal)
                     emp.canal_id = canal_creado.id
@@ -5407,6 +5428,18 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
             .all()
         )
         usuarios_por_id = {int(u.idUsuarios): u for u in usuarios}
+        participantes_torneo = (
+            session.query(GestorSQL.SuizoParticipante)
+            .filter(
+                GestorSQL.SuizoParticipante.torneo_id == torneo_id,
+                GestorSQL.SuizoParticipante.usuario_id.in_(ids_usuarios),
+            )
+            .all()
+        )
+        raza_por_usuario = {
+            int(p.usuario_id): (p.raza_competicion or "").strip()
+            for p in participantes_torneo
+        }
         partidos_requeridos = _partidos_requeridos_desde_formato(torneo.formato_serie)
 
         emparejamientos_db = []
@@ -5492,7 +5525,15 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
                         category=categoria_destino,
                         overwrites=overwrites,
                     )
-                    mensaje_canal = _mensaje_suizo_canal(torneo, False, jugador1, jugador2, ronda)
+                    mensaje_canal = _mensaje_suizo_canal(
+                        torneo,
+                        False,
+                        jugador1,
+                        jugador2,
+                        ronda,
+                        raza_por_usuario.get(int(emp.coach1_usuario_id), ""),
+                        raza_por_usuario.get(int(emp.coach2_usuario_id), "") if emp.coach2_usuario_id else "",
+                    )
                     if mensaje_canal:
                         await canal_creado.send(mensaje_canal)
                     emp.canal_id = canal_creado.id
@@ -5814,14 +5855,14 @@ async def publicar_resultado_suizo_en_foro(
     threading.Timer(10, lambda: Imagenes.eliminar_imagen(ruta_imagen)).start()
 
 
-def _mensaje_suizo_canal(torneo, es_mensaje_inicial, jugador1, jugador2, ronda):
+def _mensaje_suizo_canal(torneo, es_mensaje_inicial, jugador1, jugador2, ronda, raza1="", raza2=""):
     plantilla = torneo.mensajeInicial if es_mensaje_inicial else torneo.mensajesSubsiguientes
     if not plantilla:
         return ""
     mention1 = f"<@{jugador1.id_discord}>" if jugador1 and jugador1.id_discord else ""
     mention2 = f"<@{jugador2.id_discord}>" if jugador2 and jugador2.id_discord else ""
-    raza1 = (getattr(jugador1, "raza", "") or "").strip()
-    raza2 = (getattr(jugador2, "raza", "") or "").strip()
+    raza1 = (raza1 or getattr(jugador1, "raza", "") or "").strip()
+    raza2 = (raza2 or getattr(jugador2, "raza", "") or "").strip()
     mensajePreferencias1 = ""
     mensajePreferencias2 = ""
     pref1 = getattr(getattr(jugador1, "preferencias_fecha", None), "preferencia", "") if jugador1 else ""
