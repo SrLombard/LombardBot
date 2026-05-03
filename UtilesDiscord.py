@@ -357,7 +357,24 @@ class SpinButtonsView(discord.ui.View):
             GestorSQL.Ticket.canalAsociado != None,
             GestorSQL.Ticket.partidos_idPartidos == None
         ).order_by(GestorSQL.Ticket.fecha).first()
-        partidos = [partidos_calendario, partidos_playoffs_oro, partidos_playoffs_plata, partidos_playoffs_bronce, partidos_ticket]
+        participantes_suizo = session.query(GestorSQL.SuizoParticipante).filter(
+            GestorSQL.SuizoParticipante.usuario_id == usuario_db.idUsuarios,
+            GestorSQL.SuizoParticipante.estado == "ACTIVO"
+        ).all()
+        torneos_suizo_ids = [p.torneo_id for p in participantes_suizo]
+        partido_suizo = None
+        if torneos_suizo_ids:
+            partido_suizo = session.query(GestorSQL.SuizoEmparejamiento).filter(
+                GestorSQL.SuizoEmparejamiento.torneo_id.in_(torneos_suizo_ids),
+                or_(
+                    GestorSQL.SuizoEmparejamiento.coach1_usuario_id == usuario_db.idUsuarios,
+                    GestorSQL.SuizoEmparejamiento.coach2_usuario_id == usuario_db.idUsuarios
+                ),
+                GestorSQL.SuizoEmparejamiento.canal_id != None,
+                GestorSQL.SuizoEmparejamiento.estado == "PENDIENTE"
+            ).order_by(GestorSQL.SuizoEmparejamiento.fecha).first()
+
+        partidos = [partidos_calendario, partidos_playoffs_oro, partidos_playoffs_plata, partidos_playoffs_bronce, partidos_ticket, partido_suizo]
         partidos = [p for p in partidos if p is not None]
 
         if not partidos:
@@ -374,9 +391,20 @@ class SpinButtonsView(discord.ui.View):
 
         partido = min(partidos, key=proximidad)
         
-        self.canal_partido = interaction.guild.get_channel(partido.canalAsociado)
+        canal_partido_id = getattr(partido, "canalAsociado", None)
+        if canal_partido_id is None:
+            canal_partido_id = getattr(partido, "canal_id", None)
+
+        if hasattr(partido, "usuario_coach1"):
+            coach1_id_discord = partido.usuario_coach1.id_discord
+            coach2_id_discord = partido.usuario_coach2.id_discord
+        else:
+            coach1_id_discord = partido.coach1_usuario.id_discord
+            coach2_id_discord = partido.coach2_usuario.id_discord if partido.coach2_usuario else partido.coach1_usuario.id_discord
+
+        self.canal_partido = interaction.guild.get_channel(canal_partido_id) if canal_partido_id else None
         if self.canal_partido:
-            await self.canal_partido.send(f'<@{partido.usuario_coach1.id_discord}> y <@{partido.usuario_coach2.id_discord}> podéis spinear')
+            await self.canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
 
         encontrado_button = None
         for child in self.children:
@@ -389,7 +417,7 @@ class SpinButtonsView(discord.ui.View):
         await interaction.message.edit(view=self)
 
         primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
-        await primer_mensaje.edit(content=f'<@{partido.usuario_coach1.id_discord}> y <@{partido.usuario_coach2.id_discord}> pueden buscar partido')
+        await primer_mensaje.edit(content=f'<@{coach1_id_discord}> y <@{coach2_id_discord}> pueden buscar partido')
 
         await interaction.followup.send("Ahora puedes buscar partido.", ephemeral=True)
 

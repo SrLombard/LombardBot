@@ -340,6 +340,7 @@ class SuizoEmparejamiento(Base):
     coach1_usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios'), nullable=False)
     coach2_usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios'), nullable=True)
     canal_id = Column(BigInteger, nullable=True)
+    fecha = Column(DateTime, nullable=True)
     estado = Column(Enum('PENDIENTE', 'REPORTADO', 'ADMINISTRADO', 'CERRADO', name='suizo_emparejamiento_estado'), nullable=False, default='PENDIENTE')
     es_bye = Column(Boolean, nullable=False, default=False)
     forfeit_tipo = Column(Enum('NONE', 'LOCAL', 'VISITANTE', 'DOBLE', name='suizo_emparejamiento_forfeit_tipo'), nullable=False, default='NONE')
