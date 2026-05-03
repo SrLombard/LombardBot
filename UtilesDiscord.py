@@ -320,7 +320,7 @@ class SpinButtonsView(discord.ui.View):
             ),
             GestorSQL.Calendario.canalAsociado != None,
             GestorSQL.Calendario.partidos_idPartidos == None
-        ).order_by(GestorSQL.Calendario.fecha).first()
+        ).all()
         
         partidos_playoffs_oro = session.query(GestorSQL.PlayOffsOro).filter(
             or_(
@@ -329,7 +329,7 @@ class SpinButtonsView(discord.ui.View):
             ),
             GestorSQL.PlayOffsOro.canalAsociado != None,
             GestorSQL.PlayOffsOro.partidos_idPartidos == None
-        ).order_by(GestorSQL.PlayOffsOro.fecha).first()
+        ).all()
         
         partidos_playoffs_plata = session.query(GestorSQL.PlayOffsPlata).filter(
             or_(
@@ -338,7 +338,7 @@ class SpinButtonsView(discord.ui.View):
             ),
             GestorSQL.PlayOffsPlata.canalAsociado != None,
             GestorSQL.PlayOffsPlata.partidos_idPartidos == None
-        ).order_by(GestorSQL.PlayOffsPlata.fecha).first()
+        ).all()
         
         partidos_playoffs_bronce = session.query(GestorSQL.PlayOffsBronce).filter(
             or_(
@@ -347,7 +347,7 @@ class SpinButtonsView(discord.ui.View):
             ),
             GestorSQL.PlayOffsBronce.canalAsociado != None,
             GestorSQL.PlayOffsBronce.partidos_idPartidos == None
-        ).order_by(GestorSQL.PlayOffsBronce.fecha).first()
+        ).all()
 
         partidos_ticket = session.query(GestorSQL.Ticket).filter(
             or_(
@@ -356,15 +356,15 @@ class SpinButtonsView(discord.ui.View):
             ),
             GestorSQL.Ticket.canalAsociado != None,
             GestorSQL.Ticket.partidos_idPartidos == None
-        ).order_by(GestorSQL.Ticket.fecha).first()
+        ).all()
         participantes_suizo = session.query(GestorSQL.SuizoParticipante).filter(
             GestorSQL.SuizoParticipante.usuario_id == usuario_db.idUsuarios,
             GestorSQL.SuizoParticipante.estado == "ACTIVO"
         ).all()
         torneos_suizo_ids = [p.torneo_id for p in participantes_suizo]
-        partido_suizo = None
+        partidos_suizo = []
         if torneos_suizo_ids:
-            partido_suizo = session.query(GestorSQL.SuizoEmparejamiento).filter(
+            partidos_suizo = session.query(GestorSQL.SuizoEmparejamiento).filter(
                 GestorSQL.SuizoEmparejamiento.torneo_id.in_(torneos_suizo_ids),
                 or_(
                     GestorSQL.SuizoEmparejamiento.coach1_usuario_id == usuario_db.idUsuarios,
@@ -372,10 +372,16 @@ class SpinButtonsView(discord.ui.View):
                 ),
                 GestorSQL.SuizoEmparejamiento.canal_id != None,
                 GestorSQL.SuizoEmparejamiento.estado == "PENDIENTE"
-            ).order_by(GestorSQL.SuizoEmparejamiento.fecha).first()
+            ).all()
 
-        partidos = [partidos_calendario, partidos_playoffs_oro, partidos_playoffs_plata, partidos_playoffs_bronce, partidos_ticket, partido_suizo]
-        partidos = [p for p in partidos if p is not None]
+        partidos = (
+            partidos_calendario
+            + partidos_playoffs_oro
+            + partidos_playoffs_plata
+            + partidos_playoffs_bronce
+            + partidos_ticket
+            + partidos_suizo
+        )
 
         if not partidos:
             UsuarioSpin = None
