@@ -23,7 +23,7 @@ def obtener_partido_ButterCup(api_token):
 
 def obtener_partido_PlayOfTicket(api_token):
     # competition_id = '41f8600b-eeaa-11ee-a745-02000090a64f'
-    competition_id = '5f00f26f-65ab-11f0-a124-bc2411305479'
+    competition_id = '3de1c176-40f1-11f1-a124-bc2411305479'
     return obtener_partidos(api_token, competition_id)
 
 def obtener_partido_PlayOff(api_token):

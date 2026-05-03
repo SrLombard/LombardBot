@@ -3088,16 +3088,13 @@ async def actualizar_ticket(ctx, session, obtener_partidos_func, categoria_id, t
             if preferencias2[0] and preferencias2[1]:
                 mensajePreferencias2 = f"\n<@{preferencias2[0]}> suele poder jugar {preferencias2[1]}"
 
-            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs que pueden llevaros a conseguir un 🎟**TICKET**🎟. El primero se llevará un Ticket directo para el mundial y el segundo un Ticket de play-in.
-
-Ahora debéis elegir uno de los equipos con los que habéis jugado la ButterCup para inscribirlo en la competición Ticket ButterCup contraseña TicketButtercup2025.
-Si el equipo está actualmente jugando los playoffs de la Cuarta Edición de la Butter Cup debéis hacer una copia del equipo. Contáis con la ayuda de los comisarios para ello.
-Si el equipo lleva 20 partidos sin hacer reforma deberéis hacerla ANTES de empezar vuestro pirmer partido.\n\n-------------------------------------------""" + mensajePreferencias1 + mensajePreferencias2 +"""
+            mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! Estáis en los Play-Offs que pueden llevaros a conseguir un 🎟**TICKET**🎟. El primero se llevará un Ticket directo para el mundial.""" + mensajePreferencias1 + mensajePreferencias2 +"""
+            
 Cuando acordéis una fecha usad el comando /fecha para que el bot pueda registrar vuestro partido con el horario de España.{fecha}
 
         -------------------------------------------
 
-Antes de jugar tendréis que **USAR EL CANAL** #spin y **LIBERADLO** al encontrar partido.
+Antes de jugar tendréis que **USAR EL CANAL** https://discord.com/channels/405763002768424970/1224128423929315468 y **LIBERARLO** al encontrar partido.
 
 Si hubiera cualquier problema mencionad a los comisarios.
                 """
@@ -3714,22 +3711,24 @@ async def recordar_inscripciones(ctx, solo_objetivo: Optional[int] = None):
         try:
             await member.send(
 """
-🏆 **BUTTER CUP VII**   
-Última temporada hacia los **tickets del Mundial 2026**: de las **3 ediciones** (invierno 2025, primavera 2026 y verano 2026) y todo culminará en un **playoff veraniego**.
+Si te llega este mensaje es que **NO** estás apuntado al increible...
 
-⚙️ **Formato**  
-• **3 divisiones**: Oro, Plata y Bronce.  
-• Los mejores **ascienden de división** cada edición.  
-• Los grupos se crean en **packs de 6**.
+🏆 **BUTTER SUIZO**   
 
-📅 **Cierre de inscripciones: viernes 24 de Abril**  
+Donde los ganadores representarán a la Butter en el increiblemente prestigioso Torneo intercomunidades donde nos enfrentaremos a la Hispana y Piel de minotauro.
+
+Vamos a jugar un suizo un poco loco durante 5 semanitas para darle salsa a este "entretiempo" que nos han metido nuestros amigos de cyanide.
+
+📅 **Cierre de inscripciones y sorteo: Domingo 3 de mayo**  
 No te quedes sin plaza: apúntate en <#1280102673059680316>, **consulta las reglas** y pregunta lo que necesites.
+
+Si me pediste que te borrase la inscripción esto te confirma que lo hice :P.
 
 Si solo tienes el rol para estar atento de la copa, no necesitas hacer nada.
 
-Si no quieres recibir más notificaciones mías, escribe a **SrLombard** para que no te moleste más, Pero solo escribiré una vez más antes de ese sábado ;).
+Si no quieres recibir más notificaciones mías, escribe a **SrLombard** para que no te moleste más. Pero ya no escribiré más hasta septiembre ;).
 
-¡Te esperamos en la **BUTTER CUP VII**! 🏉✨"""
+¡Te esperamos en la **BUTTER SUIZO**! 🏉✨"""
             )
             await ctx.send(f"Recordatorio enviado a {member.name}")
         except discord.Forbidden:
