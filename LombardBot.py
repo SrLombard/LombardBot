@@ -6722,7 +6722,7 @@ async def func_proximos_partidos_suizo_emparejamiento(bot, usuario, torneo_id, c
         )
 
     mensaje = (
-        "¿Quienes serán los paladines de la mantequilla? Hoy los siguientes grandes se lo juegan en el Butter Suizo :ButterSuizo:!\n\n"
+        "**¿Quienes serán los paladines de la mantequilla? Hoy los siguientes grandes se lo juegan en el Butter Suizo** :ButterSuizo: !\n\n"
         + "\n".join(partidos)
     )
 
