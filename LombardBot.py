@@ -6660,6 +6660,79 @@ async def suizo_drop(ctx, torneo_id: int, usuario: discord.Member, *, motivo: st
 #     }
 # }
 
+async def func_proximos_partidos_suizo_emparejamiento(bot, usuario, torneo_id, canal_destino_id=None, respuesta_privada=True):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+
+    ahora = datetime.now()
+    fin = (ahora + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
+
+    canal_destino = bot.get_channel(int(canal_destino_id)) if canal_destino_id else None
+
+    if respuesta_privada:
+        try:
+            canal_destino = await usuario.create_dm()
+        except Exception as e:
+            print(f"No se pudo crear un DM con el usuario: {e}")
+            session.close()
+            return
+    else:
+        if not canal_destino:
+            if hasattr(usuario, 'channel'):
+                canal_destino = usuario.channel
+            else:
+                print("No se encontró un canal válido para enviar el mensaje.")
+                session.close()
+                return
+
+    UsuarioCoach1 = aliased(GestorSQL.Usuario)
+    UsuarioCoach2 = aliased(GestorSQL.Usuario)
+
+    eventos = (
+        session.query(
+            GestorSQL.SuizoEmparejamiento,
+            GestorSQL.SuizoRonda.numero.label("ronda_numero"),
+            UsuarioCoach1.nombre_discord.label("nombre_discord1"),
+            UsuarioCoach1.raza.label("raza1"),
+            UsuarioCoach2.nombre_discord.label("nombre_discord2"),
+            UsuarioCoach2.raza.label("raza2"),
+        )
+        .join(GestorSQL.SuizoRonda, GestorSQL.SuizoEmparejamiento.ronda_id == GestorSQL.SuizoRonda.id)
+        .join(UsuarioCoach1, GestorSQL.SuizoEmparejamiento.coach1_usuario_id == UsuarioCoach1.idUsuarios)
+        .join(UsuarioCoach2, GestorSQL.SuizoEmparejamiento.coach2_usuario_id == UsuarioCoach2.idUsuarios)
+        .filter(
+            GestorSQL.SuizoEmparejamiento.torneo_id == torneo_id,
+            GestorSQL.SuizoEmparejamiento.es_bye == False,
+            GestorSQL.SuizoEmparejamiento.fecha.isnot(None),
+            GestorSQL.SuizoEmparejamiento.fecha >= ahora,
+            GestorSQL.SuizoEmparejamiento.fecha <= fin,
+        )
+        .order_by(GestorSQL.SuizoEmparejamiento.fecha)
+        .all()
+    )
+
+    if not eventos:
+        session.close()
+        return
+
+    partidos = []
+    for calendario, ronda_numero, nd1, raza1, nd2, raza2 in eventos:
+        partidos.append(
+            f"Mesa {calendario.mesa_numero} (R{ronda_numero}): **{nd1}** ({raza1}) VS **{nd2}** ({raza2}), <t:{int(calendario.fecha.timestamp())}:f>"
+        )
+
+    mensaje = (
+        "¿Quienes serán los paladines de la mantequilla? Hoy los siguientes grandes se lo juegan en el Butter Suizo :ButterSuizo:!\n\n"
+        + "\n".join(partidos)
+    )
+
+    try:
+        await canal_destino.send(mensaje)
+    except Exception as e:
+        print(f"No se pudo enviar el mensaje de suizo: {e}")
+    finally:
+        session.close()
+
 dias_semana = [
     "Monday",
     "Tuesday",
@@ -6680,6 +6753,17 @@ aviso_playoffs = (
     }
 )
 
+aviso_suizo = (
+    func_proximos_partidos_suizo_emparejamiento,
+    {
+        "bot": bot,
+        "usuario": maestros[0],
+        "torneo_id": 2,
+        "canal_destino_id": 1224689043032506429,
+        "respuesta_privada": False
+    }
+)
+
 actualizacion_peticiones = (
     actualizar_peticiones_razas,
     {
@@ -6690,7 +6774,7 @@ actualizacion_peticiones = (
 tareas_programadas = {
     dia: {
         "09": [aviso_playoffs],
-        "10": [actualizacion_peticiones],
+        "10": [aviso_suizo, actualizacion_peticiones],
         "22": [actualizacion_peticiones],
     }
     for dia in dias_semana
@@ -6705,6 +6789,10 @@ tareas_programadas = {
 #     )
 # ]
 
+
+
+
         
 # Ejecutar el bot con el token correspondiente
 bot.run(discord_bot_token)
+
