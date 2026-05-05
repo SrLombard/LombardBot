@@ -75,10 +75,6 @@ Genera una ronda concreta (normalmente empiezas con la 1).
 ```txt
 !suizo_generar_ronda 12 1
 
-Falta mensaje bienvenida
-Falta capacidad agregar Fecha
-falta agregar comisarios a los canales
-Falta Spin
 ```
 
 Si necesitas rehacer una ronda abierta sin resultados:
@@ -125,6 +121,8 @@ Cuando un partido no se ha jugado en plazo, administra el resultado manualmente.
 !suizo_admin_resultado 1 2 5 forfeit_visitante
 !suizo_admin_resultado 1 2 6 empate_admin
 !suizo_admin_resultado 1 2 7 doble_forfeit
+
+TODO debe informar en el canal
 ```
 
 Regla de puntuación administrativa (consistente en todo el sistema):
