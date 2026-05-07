@@ -6687,19 +6687,35 @@ async def func_proximos_partidos_suizo_emparejamiento(bot, usuario, torneo_id, c
 
     UsuarioCoach1 = aliased(GestorSQL.Usuario)
     UsuarioCoach2 = aliased(GestorSQL.Usuario)
+    ParticipanteCoach1 = aliased(GestorSQL.SuizoParticipante)
+    ParticipanteCoach2 = aliased(GestorSQL.SuizoParticipante)
 
     eventos = (
         session.query(
             GestorSQL.SuizoEmparejamiento,
             GestorSQL.SuizoRonda.numero.label("ronda_numero"),
             UsuarioCoach1.nombre_discord.label("nombre_discord1"),
-            UsuarioCoach1.raza.label("raza1"),
+            ParticipanteCoach1.raza_competicion.label("raza1"),
             UsuarioCoach2.nombre_discord.label("nombre_discord2"),
-            UsuarioCoach2.raza.label("raza2"),
+            ParticipanteCoach2.raza_competicion.label("raza2"),
         )
         .join(GestorSQL.SuizoRonda, GestorSQL.SuizoEmparejamiento.ronda_id == GestorSQL.SuizoRonda.id)
         .join(UsuarioCoach1, GestorSQL.SuizoEmparejamiento.coach1_usuario_id == UsuarioCoach1.idUsuarios)
         .join(UsuarioCoach2, GestorSQL.SuizoEmparejamiento.coach2_usuario_id == UsuarioCoach2.idUsuarios)
+        .join(
+            ParticipanteCoach1,
+            and_(
+                ParticipanteCoach1.torneo_id == GestorSQL.SuizoEmparejamiento.torneo_id,
+                ParticipanteCoach1.usuario_id == GestorSQL.SuizoEmparejamiento.coach1_usuario_id,
+            ),
+        )
+        .join(
+            ParticipanteCoach2,
+            and_(
+                ParticipanteCoach2.torneo_id == GestorSQL.SuizoEmparejamiento.torneo_id,
+                ParticipanteCoach2.usuario_id == GestorSQL.SuizoEmparejamiento.coach2_usuario_id,
+            ),
+        )
         .filter(
             GestorSQL.SuizoEmparejamiento.torneo_id == torneo_id,
             GestorSQL.SuizoEmparejamiento.es_bye == False,
@@ -6815,19 +6831,35 @@ async def func_proximos_partidos_suizo_emparejamiento(bot, usuario, torneo_id, c
 
     UsuarioCoach1 = aliased(GestorSQL.Usuario)
     UsuarioCoach2 = aliased(GestorSQL.Usuario)
+    ParticipanteCoach1 = aliased(GestorSQL.SuizoParticipante)
+    ParticipanteCoach2 = aliased(GestorSQL.SuizoParticipante)
 
     eventos = (
         session.query(
             GestorSQL.SuizoEmparejamiento,
             GestorSQL.SuizoRonda.numero.label("ronda_numero"),
             UsuarioCoach1.nombre_discord.label("nombre_discord1"),
-            UsuarioCoach1.raza.label("raza1"),
+            ParticipanteCoach1.raza_competicion.label("raza1"),
             UsuarioCoach2.nombre_discord.label("nombre_discord2"),
-            UsuarioCoach2.raza.label("raza2"),
+            ParticipanteCoach2.raza_competicion.label("raza2"),
         )
         .join(GestorSQL.SuizoRonda, GestorSQL.SuizoEmparejamiento.ronda_id == GestorSQL.SuizoRonda.id)
         .join(UsuarioCoach1, GestorSQL.SuizoEmparejamiento.coach1_usuario_id == UsuarioCoach1.idUsuarios)
         .join(UsuarioCoach2, GestorSQL.SuizoEmparejamiento.coach2_usuario_id == UsuarioCoach2.idUsuarios)
+        .join(
+            ParticipanteCoach1,
+            and_(
+                ParticipanteCoach1.torneo_id == GestorSQL.SuizoEmparejamiento.torneo_id,
+                ParticipanteCoach1.usuario_id == GestorSQL.SuizoEmparejamiento.coach1_usuario_id,
+            ),
+        )
+        .join(
+            ParticipanteCoach2,
+            and_(
+                ParticipanteCoach2.torneo_id == GestorSQL.SuizoEmparejamiento.torneo_id,
+                ParticipanteCoach2.usuario_id == GestorSQL.SuizoEmparejamiento.coach2_usuario_id,
+            ),
+        )
         .filter(
             GestorSQL.SuizoEmparejamiento.torneo_id == torneo_id,
             GestorSQL.SuizoEmparejamiento.es_bye == False,
