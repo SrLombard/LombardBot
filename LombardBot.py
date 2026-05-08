@@ -84,6 +84,9 @@ canales_permitidos = ['457740100097540106']
 # Lista de comandos a los que el bot reaccionará
 comandos = ['eco', 'otroComando']
 
+# Emoji usado en los avisos del Butter Suizo
+BUTTER_SUIZO_EMOJI = "<:ButterSuizo:1496804851340808284>"
+
 # IDs para la actualización programada de peticiones de razas
 PETICIONES_RAZAS_CANAL_ID = 1280102673059680316
 PETICIONES_RAZAS_HEADER_MESSAGE_ID = 1450467375794094083
@@ -6738,7 +6741,7 @@ async def func_proximos_partidos_suizo_emparejamiento(bot, usuario, torneo_id, c
         )
 
     mensaje = (
-        "**¿Quienes serán los paladines de la mantequilla? Hoy los siguientes grandes se lo juegan en el Butter Suizo** :ButterSuizo: !\n\n"
+        f"**¿Quienes serán los paladines de la mantequilla? Hoy los siguientes grandes se lo juegan en el Butter Suizo** {BUTTER_SUIZO_EMOJI} !\n\n"
         + "\n".join(partidos)
     )
 
@@ -6882,7 +6885,7 @@ async def func_proximos_partidos_suizo_emparejamiento(bot, usuario, torneo_id, c
         )
 
     mensaje = (
-        "¿Quienes serán los paladines de la mantequilla? Hoy los siguientes grandes se lo juegan en el Butter Suizo :ButterSuizo:!\n\n"
+        f"¿Quienes serán los paladines de la mantequilla? Hoy los siguientes grandes se lo juegan en el Butter Suizo {BUTTER_SUIZO_EMOJI}!\n\n"
         + "\n".join(partidos)
     )
 
