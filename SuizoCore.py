@@ -1,6 +1,7 @@
 """Lógica base de standings para torneos suizos."""
 
 import json
+import random
 from datetime import datetime
 from decimal import Decimal
 from functools import cmp_to_key
@@ -377,13 +378,16 @@ def procesar_cierre_ronda_si_corresponde(session, torneo_id, ronda_numero):
     }
 
 
-def generar_pairings_backtracking(session, torneo_id, ronda_numero):
+def generar_pairings_backtracking(session, torneo_id, ronda_numero, rng=None):
     """Genera pairings de ronda usando backtracking con reglas suizas.
 
     Prioridades:
     1) Evitar rivales repetidos.
     2) Evitar mirror de raza.
-    3) Permitir repetidos/mirror como fallback si no hay solución.
+    3) Mantener cercanía de grupo de puntos.
+    4) Resolver empates de orden y múltiples rivales válidos de forma aleatoria,
+       no por id de usuario.
+    5) Permitir repetidos/mirror como fallback si no hay solución.
     """
     ronda = (
         session.query(SuizoRonda)
@@ -395,6 +399,8 @@ def generar_pairings_backtracking(session, torneo_id, ronda_numero):
     )
     if ronda is None:
         return []
+
+    rng = rng or random.SystemRandom()
 
     standings = calcular_standings(session, torneo_id, hasta_ronda=ronda_numero - 1 if ronda_numero > 1 else None)
     participantes = (
@@ -413,6 +419,23 @@ def generar_pairings_backtracking(session, torneo_id, ronda_numero):
     activos = [fila for fila in standings if int(fila["usuario_id"]) in participantes_por_usuario]
     if not activos:
         return []
+
+    def _valor_h2h_para_pairing(fila):
+        valor = fila.get("h2h_valor")
+        # En clasificación solo desempata si ambos tienen H2H; para ordenar el
+        # barrido de pairings, None queda neutro y el empate final lo rompe el azar.
+        return _decimal(valor) if valor is not None else Decimal("0")
+
+    activos = sorted(
+        activos,
+        key=lambda fila: (
+            -_decimal(fila.get("puntos")),
+            -_valor_h2h_para_pairing(fila),
+            -_decimal(fila.get("buchholz_cut")),
+            -int(fila.get("diff_score") or 0),
+            rng.random(),
+        ),
+    )
 
     activos_por_puntos: Dict[str, List[int]] = {}
     for fila in activos:
@@ -467,7 +490,7 @@ def generar_pairings_backtracking(session, torneo_id, ronda_numero):
             key=lambda u: (
                 -grupo_por_usuario.get(u, -1),
                 puntos_por_usuario.get(u, Decimal("0")),
-                -u,
+                rng.random(),
             ),
         )
         return orden_peor_a_mejor[0]
@@ -499,10 +522,10 @@ def generar_pairings_backtracking(session, torneo_id, ronda_numero):
             candidatos = []
             for u2 in pendientes[1:]:
                 delta_grupo = abs(grupo_por_usuario.get(u1, 0) - grupo_por_usuario.get(u2, 0))
-                candidatos.append((delta_grupo, es_mirror(u1, u2), u2))
+                candidatos.append((delta_grupo, es_mirror(u1, u2), rng.random(), u2))
             candidatos.sort(key=lambda x: (x[0], x[1], x[2]))
 
-            for _, mirror_actual, u2 in candidatos:
+            for _, mirror_actual, _, u2 in candidatos:
                 repetido = u2 in rivales_previos.get(u1, set())
                 if repetido and not allow_repeat:
                     conflictos["repetido"] += 1
@@ -530,10 +553,7 @@ def generar_pairings_backtracking(session, torneo_id, ronda_numero):
         ok = backtrack(restantes)
         if not ok:
             return None, conflictos
-        mesas_ordenadas = sorted(
-            mesas,
-            key=lambda m: (0 if not m["es_bye"] else 1, m["coach1"], m["coach2"] if m["coach2"] is not None else 10**9),
-        )
+        mesas_ordenadas = [m for m in mesas if not m["es_bye"]] + [m for m in mesas if m["es_bye"]]
         return mesas_ordenadas, conflictos
 
     seed_snapshot = (
@@ -568,6 +588,7 @@ def generar_pairings_backtracking(session, torneo_id, ronda_numero):
                 "agrupado_por_puntos": True,
                 "allow_repeat": allow_repeat,
                 "allow_mirror": allow_mirror,
+                "desempate_aleatorio": True,
             },
             conflictos=conflictos,
             created_at=datetime.utcnow(),

@@ -1,3 +1,4 @@
+import random
 import sys
 from pathlib import Path
 
@@ -220,6 +221,24 @@ def test_h2h_rompe_empate_por_encima_de_buchholz():
     assert fila_1["rank"] < fila_2["rank"]
 
 
+def test_primera_ronda_desempata_emparejamientos_por_azar_no_por_id():
+    session = _build_session()
+    _crear_torneo_base(session, torneo_id=29)
+    for uid, raza in ((1, "A"), (2, "B"), (3, "C"), (4, "D")):
+        _crear_usuario_y_participante(session, 29, uid, raza=raza)
+
+    _crear_ronda(session, 29, 1, estado="ABIERTA")
+    session.commit()
+
+    pairings = generar_pairings_backtracking(session, 29, 1, rng=random.Random(2))
+    parejas = {frozenset((p["coach1"], p["coach2"])) for p in pairings if not p["es_bye"]}
+
+    assert parejas == {frozenset((1, 3)), frozenset((2, 4))}
+    assert parejas != {frozenset((1, 2)), frozenset((3, 4))}
+
+    ultima_traza = session.query(SuizoPairingTrace).order_by(SuizoPairingTrace.id.desc()).first()
+    assert ultima_traza.reglas_aplicadas["desempate_aleatorio"] is True
+
 def test_fallback_a_repetidos_cuando_no_hay_solucion():
     session = _build_session()
     _crear_torneo_base(session, torneo_id=30)
@@ -270,12 +289,12 @@ def test_bye_se_asigna_al_peor_elegible_sin_bye_previo():
     _crear_ronda(session, 31, 3, estado="ABIERTA")
     session.commit()
 
-    pairings = generar_pairings_backtracking(session, 31, 3)
+    pairings = generar_pairings_backtracking(session, 31, 3, rng=random.Random(0))
     bye_r3 = next(p for p in pairings if p["es_bye"])
 
     # Elegibles sin bye previo en R3: 1,2,3. Entre 2 y 3 empatan en puntos y grupo;
-    # el desempate determinista por id deja peor a 3 (id mayor), nunca al líder 1.
-    assert bye_r3["coach1"] == 3
+    # el desempate se resuelve por azar controlado en el test, nunca por id ni sobre el líder 1.
+    assert bye_r3["coach1"] == 2
     assert bye_r3["coach1"] != 1
 
 
