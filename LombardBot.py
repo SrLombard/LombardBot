@@ -5305,7 +5305,7 @@ async def suizo_generar_ronda(ctx, torneo_id: int, numero_ronda: int):
                     )
                     mensaje_canal = _mensaje_suizo_canal(
                         torneo,
-                        True,
+                        _es_mensaje_inicial_suizo(numero_ronda),
                         jugador1,
                         jugador2,
                         nueva_ronda,
@@ -5583,7 +5583,7 @@ async def suizo_regenerar_ronda(ctx, torneo_id: int, numero_ronda: int):
                     )
                     mensaje_canal = _mensaje_suizo_canal(
                         torneo,
-                        False,
+                        _es_mensaje_inicial_suizo(numero_ronda),
                         jugador1,
                         jugador2,
                         ronda,
@@ -5929,6 +5929,10 @@ async def publicar_resultado_suizo_en_foro(
     with open(ruta_imagen, "rb") as img:
         await hilo.send(file=File(img))
     threading.Timer(10, lambda: Imagenes.eliminar_imagen(ruta_imagen)).start()
+
+
+def _es_mensaje_inicial_suizo(numero_ronda) -> bool:
+    return int(numero_ronda) == 1
 
 
 def _mensaje_suizo_canal(torneo, es_mensaje_inicial, jugador1, jugador2, ronda, raza1="", raza2=""):
