@@ -39,7 +39,7 @@ import math
 from sqlalchemy import BIGINT, create_engine, Column, Integer, String, ForeignKey, false, true,text
 from sqlalchemy import and_, or_ 
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import object_session, sessionmaker, relationship
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql import case,func
 import inspect
@@ -50,6 +50,7 @@ from SuizoCore import (
     calcular_standings,
     generar_pairings_backtracking,
     procesar_cierre_ronda_si_corresponde,
+    obtener_raza_suizo_o_usuario,
 )
 
 
@@ -5875,6 +5876,20 @@ async def publicar_resultado_suizo_en_foro(
     else:
         ganador = {"ruta": "./plantillas/Empate.png", "x": 729, "y": 241}
 
+    db_session = object_session(emparejamiento)
+    raza1 = obtener_raza_suizo_o_usuario(
+        db_session,
+        getattr(torneo, "id", None),
+        emparejamiento.coach1_usuario_id,
+        emparejamiento.coach1_usuario,
+    )
+    raza2 = obtener_raza_suizo_o_usuario(
+        db_session,
+        getattr(torneo, "id", None),
+        emparejamiento.coach2_usuario_id,
+        emparejamiento.coach2_usuario,
+    )
+
     ruta_imagen = Imagenes.crear_imagen(
         "resultado",
         "",
@@ -5882,8 +5897,8 @@ async def publicar_resultado_suizo_en_foro(
         resultados={"0": score_c1, "1": score_c2},
         escudos={"0": f"Logos/{logo_local}", "1": f"Logos/{logo_visitante}"},
         razas={
-            "0": getattr(emparejamiento.coach1_usuario, "raza", "") or "",
-            "1": getattr(emparejamiento.coach2_usuario, "raza", "") or "",
+            "0": raza1,
+            "1": raza2,
         },
         nombre_equipos={
             "0": str(team_local.get("teamname") or "-"),

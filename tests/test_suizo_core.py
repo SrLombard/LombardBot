@@ -23,6 +23,7 @@ from SuizoCore import (
     calcular_h2h,
     calcular_standings,
     generar_pairings_backtracking,
+    obtener_raza_suizo_o_usuario,
     procesar_cierre_ronda_si_corresponde,
 )
 
@@ -113,6 +114,24 @@ def _crear_emparejamiento(session, torneo_id, ronda_id, mesa, c1, c2, estado="AD
             puntos_c2=puntos2,
         )
     )
+
+
+def test_obtener_raza_suizo_prioriza_raza_competicion_y_fallback_habitual():
+    session = _build_session()
+    _crear_torneo_base(session, torneo_id=42)
+    _crear_usuario_y_participante(session, 42, 1, raza="Skaven")
+    usuario = session.query(Usuario).filter_by(idUsuarios=1).first()
+    usuario.raza = "Humano"
+    session.commit()
+
+    assert obtener_raza_suizo_o_usuario(session, 42, 1, usuario) == "Skaven"
+
+    participante = session.query(SuizoParticipante).filter_by(torneo_id=42, usuario_id=1).first()
+    participante.raza_competicion = None
+    session.commit()
+
+    assert obtener_raza_suizo_o_usuario(session, 42, 1, usuario) == "Humano"
+    assert obtener_raza_suizo_o_usuario(None, None, 1, usuario) == "Humano"
 
 
 def test_h2h_aplicable_y_no_aplicable():

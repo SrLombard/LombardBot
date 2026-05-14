@@ -42,6 +42,26 @@ def _get_valor_registro(registro: Any, campo: str, default: Any = None) -> Any:
     return getattr(registro, campo, default)
 
 
+def obtener_raza_suizo_o_usuario(session: Any, torneo_id: Any, usuario_id: Any, usuario: Any = None) -> str:
+    """Obtiene la raza usada en competición suiza, con fallback a la ficha habitual.
+
+    Para torneos suizos la raza oficial del participante vive en
+    ``suizo_participante.raza_competicion``. Si no hay sesión, participante o valor
+    informado, se mantiene el comportamiento habitual usando ``usuarios.raza``.
+    """
+    raza_usuario = (getattr(usuario, "raza", "") or "").strip() if usuario is not None else ""
+    if session is None or torneo_id is None or usuario_id is None:
+        return raza_usuario
+
+    participante = (
+        session.query(SuizoParticipante)
+        .filter_by(torneo_id=torneo_id, usuario_id=usuario_id)
+        .first()
+    )
+    raza_competicion = (getattr(participante, "raza_competicion", "") or "").strip()
+    return raza_competicion or raza_usuario
+
+
 def calcular_h2h(standings: List[EstadoFila], emparejamientos_cerrados: List[Any]) -> Dict[int, Optional[Decimal]]:
     """Calcula H2H solo para empates con enfrentamiento directo real.
 
