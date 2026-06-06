@@ -5025,18 +5025,18 @@ async def suizo_consulta_desempates(interaction: discord.Interaction, torneo_id:
                 _nombre_usuario_suizo(por_id.get(uid)),
                 fila.get("estado_participante"),
                 fila.get("puntos"),
-                fila.get("h2h_valor") if fila.get("h2h_valor") is not None else "-",
                 fila.get("buchholz_cut"),
+                fila.get("h2h_valor") if fila.get("h2h_valor") is not None else "-",
                 fila.get("diff_score"),
             ])
 
-        tabla = _tabla_compacta(["#", "Jugador", "Estado", "PTS", "H2H", "BH", "DIF"], filas)
+        tabla = _tabla_compacta(["#", "Jugador", "Estado", "PTS", "BH", "H2H", "DIF"], filas)
         ronda_txt = ronda if ronda is not None else "actual"
         await _responder_interaction_bloque_codigo_largo(
             interaction,
             (
                 f"**Desempates** torneo `{torneo_id}` (ronda: {ronda_txt})\n"
-                "Orden: puntos > H2H (si aplica) > Buchholz Cut > diferencia de score."
+                "Orden: puntos > Buchholz Cut > H2H (si aplica) > diferencia de TD > ID."
             ),
             tabla,
         )

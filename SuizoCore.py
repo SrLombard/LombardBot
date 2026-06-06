@@ -126,6 +126,11 @@ def ordenar_standings(standings: List[EstadoFila]) -> List[EstadoFila]:
         if puntos_a != puntos_b:
             return -1 if puntos_a > puntos_b else 1
 
+        buchholz_a = _decimal(fila_a.get("buchholz_cut"))
+        buchholz_b = _decimal(fila_b.get("buchholz_cut"))
+        if buchholz_a != buchholz_b:
+            return -1 if buchholz_a > buchholz_b else 1
+
         h2h_a = fila_a.get("h2h_valor")
         h2h_b = fila_b.get("h2h_valor")
         if h2h_a is not None and h2h_b is not None:
@@ -133,11 +138,6 @@ def ordenar_standings(standings: List[EstadoFila]) -> List[EstadoFila]:
             h2h_b_dec = _decimal(h2h_b)
             if h2h_a_dec != h2h_b_dec:
                 return -1 if h2h_a_dec > h2h_b_dec else 1
-
-        buchholz_a = _decimal(fila_a.get("buchholz_cut"))
-        buchholz_b = _decimal(fila_b.get("buchholz_cut"))
-        if buchholz_a != buchholz_b:
-            return -1 if buchholz_a > buchholz_b else 1
 
         diff_a = int(fila_a.get("diff_score") or 0)
         diff_b = int(fila_b.get("diff_score") or 0)
@@ -286,8 +286,8 @@ def _normalizar_json_detalle_tiebreak(fila: EstadoFila) -> Dict[str, Any]:
             "diff_score": int(fila.get("diff_score") or 0),
         },
         "explicacion": (
-            "Orden aplicado: puntos DESC, h2h DESC (si existe), "
-            "buchholz_cut DESC, diff_score DESC y usuario_id ASC."
+            "Orden aplicado: puntos DESC, buchholz_cut DESC, "
+            "h2h DESC (si existe para ambos jugadores), diff_score DESC y usuario_id ASC."
         ),
     }
 
@@ -450,8 +450,8 @@ def generar_pairings_backtracking(session, torneo_id, ronda_numero, rng=None):
         activos,
         key=lambda fila: (
             -_decimal(fila.get("puntos")),
-            -_valor_h2h_para_pairing(fila),
             -_decimal(fila.get("buchholz_cut")),
+            -_valor_h2h_para_pairing(fila),
             -int(fila.get("diff_score") or 0),
             rng.random(),
         ),
