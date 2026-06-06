@@ -1,7 +1,11 @@
 import mysql.connector
 from dotenv import load_dotenv
 import os
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, BigInteger, Text, Numeric, Boolean, Enum, JSON
+from sqlalchemy import (
+    create_engine, Column, Integer, String, ForeignKey, DateTime, BigInteger,
+    Text, Numeric, Boolean, Enum, JSON, SmallInteger, ForeignKeyConstraint, UniqueConstraint,
+    CheckConstraint, Index, text, func,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -418,6 +422,512 @@ class SuizoPairingTrace(Base):
     torneo = relationship("SuizoTorneo")
     ronda = relationship("SuizoRonda")
     seed_snapshot = relationship("SuizoStandingSnapshot")
+
+
+
+_COMUNIDADES_RELATIONSHIP_OVERLAPS = (
+    'torneo,comunidades,equipos,rondas,enfrentamientos,ronda,comunidad,miembros,'
+    'equipo,equipo_a,equipo_b,ganador_equipo,elecciones_atacante,partidos,'
+    'fotografias_estado,transferencias,snapshots_clasificacion,trazas_emparejamiento,'
+    'equipo_local,equipo_visitante,equipo_origen,equipo_destino'
+)
+
+
+def _comunidades_enum(*values, name):
+    """Enum del esquema de comunidades, validado también cuando se usa SQLite."""
+    return Enum(
+        *values,
+        name=name,
+        validate_strings=True,
+        create_constraint=True,
+    )
+
+
+class ComunidadesTorneo(Base):
+    __tablename__ = 'comunidades_torneo'
+    __table_args__ = (
+        CheckConstraint('rondas_totales > 0', name='ck_comunidades_torneo_rondas'),
+        CheckConstraint('dias_por_ronda > 0', name='ck_comunidades_torneo_dias'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(120), nullable=False)
+    estado = Column(_comunidades_enum('CREADO', 'EN_CURSO', 'FINALIZADO', name='comunidades_torneo_estado'), nullable=False, server_default=text("'CREADO'"))
+    rondas_totales = Column(Integer, nullable=False)
+    fecha_fin_ronda1 = Column(DateTime, nullable=False)
+    dias_por_ronda = Column(Integer, nullable=False, server_default=text('7'))
+    id_competicion_bbowl = Column(String(45), nullable=True)
+    canal_hub_id = Column(BigInteger, nullable=True)
+    puntos_clasificacion_victoria = Column(Numeric(6, 2), nullable=False, server_default=text('3.00'))
+    puntos_clasificacion_empate = Column(Numeric(6, 2), nullable=False, server_default=text('1.00'))
+    puntos_clasificacion_derrota = Column(Numeric(6, 2), nullable=False, server_default=text('0.00'))
+    puntos_clasificacion_bye = Column(Numeric(6, 2), nullable=False, server_default=text('1.50'))
+    puntos_individuales_victoria = Column(Numeric(6, 2), nullable=False, server_default=text('3.00'))
+    puntos_individuales_empate = Column(Numeric(6, 2), nullable=False, server_default=text('1.00'))
+    puntos_individuales_derrota = Column(Numeric(6, 2), nullable=False, server_default=text('0.00'))
+    plantilla_mensaje_ronda1 = Column(Text, nullable=False)
+    plantilla_mensaje_rondas_siguientes = Column(Text, nullable=False)
+    creado_por_discord_id = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_at = Column(DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    comunidades = relationship('ComunidadesComunidad', back_populates='torneo', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipos = relationship('ComunidadesEquipo', back_populates='torneo', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    rondas = relationship('ComunidadesRonda', back_populates='torneo', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    enfrentamientos = relationship('ComunidadesEnfrentamiento', back_populates='torneo', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    categorias_enfrentamiento = relationship('ComunidadesCategoriaEnfrentamiento', back_populates='torneo', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    categorias_partido = relationship('ComunidadesCategoriaPartido', back_populates='torneo', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesComunidad(Base):
+    __tablename__ = 'comunidades_comunidad'
+    __table_args__ = (
+        UniqueConstraint('id', 'torneo_id', name='uk_comunidades_comunidad_id_torneo'),
+        UniqueConstraint('torneo_id', 'nombre', name='uk_comunidades_comunidad_torneo_nombre'),
+        CheckConstraint('zombies_matados >= 0', name='ck_comunidades_comunidad_zombies_matados'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    nombre = Column(String(120), nullable=False)
+    puntos_zombificaciones = Column(Numeric(8, 2), nullable=False, server_default=text('0.00'))
+    zombies_matados = Column(Integer, nullable=False, server_default=text('0'))
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_at = Column(DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    torneo = relationship('ComunidadesTorneo', back_populates='comunidades', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipos = relationship('ComunidadesEquipo', back_populates='comunidad', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    fotografias_estado = relationship('ComunidadesFotografiaEstado', back_populates='comunidad', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    transferencias = relationship('ComunidadesHistorialTransferencia', back_populates='comunidad', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    snapshots_clasificacion = relationship('ComunidadesSnapshotClasificacionComunidad', back_populates='comunidad', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesEquipo(Base):
+    __tablename__ = 'comunidades_equipo'
+    __table_args__ = (
+        UniqueConstraint('id', 'torneo_id', name='uk_comunidades_equipo_id_torneo'),
+        UniqueConstraint('torneo_id', 'nombre', name='uk_comunidades_equipo_torneo_nombre'),
+        CheckConstraint('es_zombie IN (0, 1)', name='ck_comunidades_equipo_es_zombie'),
+        CheckConstraint('cantidad_byes >= 0 AND partidos_jugados >= 0 AND victorias >= 0 AND empates >= 0 AND derrotas >= 0', name='ck_comunidades_equipo_contadores'),
+        ForeignKeyConstraint(['comunidad_id', 'torneo_id'], ['comunidades_comunidad.id', 'comunidades_comunidad.torneo_id'], name='fk_comunidades_equipo_comunidad_torneo', ondelete='CASCADE'),
+        Index('idx_comunidades_equipo_torneo_comunidad', 'torneo_id', 'comunidad_id'),
+        Index('idx_comunidades_equipo_comunidad_torneo', 'comunidad_id', 'torneo_id'),
+        Index('idx_comunidades_equipo_clasificacion', 'torneo_id', 'puntos_clasificacion', 'buchholz_cut'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    comunidad_id = Column(Integer, nullable=False)
+    nombre = Column(String(120), nullable=False)
+    es_zombie = Column(Boolean, nullable=False, server_default=text('0'))
+    estado_temporal = Column(_comunidades_enum('NEUTRO', 'CAZADOR', 'CAZADOR_Z', 'HERIDO', name='comunidades_estado_temporal'), nullable=False, server_default=text("'NEUTRO'"))
+    cantidad_byes = Column(Integer, nullable=False, server_default=text('0'))
+    partidos_jugados = Column(Integer, nullable=False, server_default=text('0'))
+    victorias = Column(Integer, nullable=False, server_default=text('0'))
+    empates = Column(Integer, nullable=False, server_default=text('0'))
+    derrotas = Column(Integer, nullable=False, server_default=text('0'))
+    puntos_clasificacion = Column(Numeric(8, 2), nullable=False, server_default=text('0.00'))
+    td_favor = Column(Integer, nullable=False, server_default=text('0'))
+    td_contra = Column(Integer, nullable=False, server_default=text('0'))
+    buchholz_cut = Column(Numeric(10, 2), nullable=False, server_default=text('0.00'))
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_at = Column(DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    torneo = relationship('ComunidadesTorneo', back_populates='equipos', foreign_keys=[torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    comunidad = relationship('ComunidadesComunidad', back_populates='equipos', foreign_keys=[comunidad_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    miembros = relationship('ComunidadesMiembro', back_populates='equipo', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesMiembro(Base):
+    __tablename__ = 'comunidades_miembro'
+    __table_args__ = (
+        UniqueConstraint('equipo_id', 'posicion', name='uk_comunidades_miembro_equipo_posicion'),
+        UniqueConstraint('torneo_id', 'usuario_id', name='uk_comunidades_miembro_torneo_usuario'),
+        CheckConstraint('posicion IN (1, 2)', name='ck_comunidades_miembro_posicion'),
+        ForeignKeyConstraint(['equipo_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_comunidades_miembro_equipo_torneo', ondelete='CASCADE'),
+        Index('idx_comunidades_miembro_equipo_torneo', 'equipo_id', 'torneo_id'),
+        Index('idx_comunidades_miembro_usuario', 'usuario_id'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, nullable=False)
+    equipo_id = Column(Integer, nullable=False)
+    usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios', ondelete='RESTRICT'), nullable=False)
+    raza = Column(String(80), nullable=False)
+    posicion = Column(SmallInteger, nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+
+    equipo = relationship('ComunidadesEquipo', back_populates='miembros', foreign_keys=[equipo_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    usuario = relationship('Usuario', foreign_keys=[usuario_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesRonda(Base):
+    __tablename__ = 'comunidades_ronda'
+    __table_args__ = (
+        UniqueConstraint('id', 'torneo_id', name='uk_comunidades_ronda_id_torneo'),
+        UniqueConstraint('torneo_id', 'numero', name='uk_comunidades_ronda_torneo_numero'),
+        CheckConstraint('numero > 0', name='ck_comunidades_ronda_numero'),
+        CheckConstraint('fecha_fin >= fecha_inicio', name='ck_comunidades_ronda_fechas'),
+        Index('idx_comunidades_ronda_torneo_estado', 'torneo_id', 'estado'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    numero = Column(Integer, nullable=False)
+    estado = Column(_comunidades_enum('ABIERTA', 'BLOQUEADA', 'CERRADA', name='comunidades_ronda_estado'), nullable=False, server_default=text("'ABIERTA'"))
+    fecha_inicio = Column(DateTime, nullable=False)
+    fecha_fin = Column(DateTime, nullable=False)
+    generada_por_discord_id = Column(BigInteger, nullable=False)
+    cerrada_en = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_at = Column(DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    torneo = relationship('ComunidadesTorneo', back_populates='rondas', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    enfrentamientos = relationship('ComunidadesEnfrentamiento', back_populates='ronda', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    trazas_emparejamiento = relationship('ComunidadesTrazaEmparejamiento', back_populates='ronda', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesEnfrentamiento(Base):
+    __tablename__ = 'comunidades_enfrentamiento'
+    __table_args__ = (
+        UniqueConstraint('id', 'torneo_id', name='uk_comunidades_enfrentamiento_id_torneo'),
+        UniqueConstraint('ronda_id', 'mesa_numero', name='uk_comunidades_enfrentamiento_ronda_mesa'),
+        UniqueConstraint('ronda_id', 'equipo_a_id', name='uk_comunidades_enfrentamiento_ronda_equipo_a'),
+        UniqueConstraint('ronda_id', 'equipo_b_id', name='uk_comunidades_enfrentamiento_ronda_equipo_b'),
+        CheckConstraint('mesa_numero > 0', name='ck_comunidades_enfrentamiento_mesa'),
+        CheckConstraint('equipo_a_id <> equipo_b_id', name='ck_comunidades_enfrentamiento_equipos'),
+        CheckConstraint('ganador_equipo_id IS NULL OR ganador_equipo_id IN (equipo_a_id, equipo_b_id)', name='ck_comunidades_enfrentamiento_ganador'),
+        CheckConstraint('es_doble_forfait IN (0, 1)', name='ck_comunidades_enfrentamiento_doble_forfait'),
+        ForeignKeyConstraint(['ronda_id', 'torneo_id'], ['comunidades_ronda.id', 'comunidades_ronda.torneo_id'], name='fk_comunidades_enfrentamiento_ronda_torneo', ondelete='CASCADE'),
+        ForeignKeyConstraint(['equipo_a_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_comunidades_enfrentamiento_equipo_a_torneo', ondelete='CASCADE'),
+        ForeignKeyConstraint(['equipo_b_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_comunidades_enfrentamiento_equipo_b_torneo', ondelete='CASCADE'),
+        ForeignKeyConstraint(['ganador_equipo_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_comunidades_enfrentamiento_ganador_torneo', ondelete='CASCADE'),
+        Index('idx_comunidades_enfrentamiento_torneo_ronda_estado', 'torneo_id', 'ronda_id', 'estado'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    ronda_id = Column(Integer, nullable=False)
+    mesa_numero = Column(Integer, nullable=False)
+    equipo_a_id = Column(Integer, nullable=False)
+    equipo_b_id = Column(Integer, nullable=False)
+    canal_general_discord_id = Column(BigInteger, nullable=True)
+    estado = Column(_comunidades_enum('PENDIENTE_ELECCIONES', 'PARTIDOS_CREADOS', 'EN_CURSO', 'CERRADO', 'ADMINISTRADO', name='comunidades_enfrentamiento_estado'), nullable=False, server_default=text("'PENDIENTE_ELECCIONES'"))
+    puntos_internos_a = Column(Numeric(8, 2), nullable=False, server_default=text('0.00'))
+    puntos_internos_b = Column(Numeric(8, 2), nullable=False, server_default=text('0.00'))
+    td_favor_a = Column(Integer, nullable=False, server_default=text('0'))
+    td_contra_a = Column(Integer, nullable=False, server_default=text('0'))
+    td_favor_b = Column(Integer, nullable=False, server_default=text('0'))
+    td_contra_b = Column(Integer, nullable=False, server_default=text('0'))
+    td_atacante_a = Column(Integer, nullable=False, server_default=text('0'))
+    td_atacante_b = Column(Integer, nullable=False, server_default=text('0'))
+    ganador_equipo_id = Column(Integer, nullable=True)
+    puntos_clasificacion_a = Column(Numeric(8, 2), nullable=False, server_default=text('0.00'))
+    puntos_clasificacion_b = Column(Numeric(8, 2), nullable=False, server_default=text('0.00'))
+    resultado_origen = Column(_comunidades_enum('API', 'ADMIN', name='comunidades_resultado_origen'), nullable=True)
+    es_doble_forfait = Column(Boolean, nullable=False, server_default=text('0'))
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_at = Column(DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    torneo = relationship('ComunidadesTorneo', back_populates='enfrentamientos', foreign_keys=[torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    ronda = relationship('ComunidadesRonda', back_populates='enfrentamientos', foreign_keys=[ronda_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipo_a = relationship('ComunidadesEquipo', foreign_keys=[equipo_a_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipo_b = relationship('ComunidadesEquipo', foreign_keys=[equipo_b_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    ganador_equipo = relationship('ComunidadesEquipo', foreign_keys=[ganador_equipo_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    elecciones_atacante = relationship('ComunidadesEleccionAtacante', back_populates='enfrentamiento', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    partidos = relationship('ComunidadesPartido', back_populates='enfrentamiento', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    fotografias_estado = relationship('ComunidadesFotografiaEstado', back_populates='enfrentamiento', cascade='all, delete-orphan', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesCategoriaEnfrentamiento(Base):
+    __tablename__ = 'comunidades_categoria_enfrentamiento'
+    __table_args__ = (
+        UniqueConstraint('torneo_id', 'categoria_discord_id', name='uk_com_cat_enf_torneo_categoria'),
+        UniqueConstraint('torneo_id', 'orden_alta', name='uk_com_cat_enf_torneo_orden'),
+        CheckConstraint('orden_alta > 0', name='ck_com_cat_enf_orden'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    categoria_discord_id = Column(BigInteger, nullable=False)
+    orden_alta = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+
+    torneo = relationship('ComunidadesTorneo', back_populates='categorias_enfrentamiento', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesCategoriaPartido(Base):
+    __tablename__ = 'comunidades_categoria_partido'
+    __table_args__ = (
+        UniqueConstraint('torneo_id', 'categoria_discord_id', name='uk_com_cat_par_torneo_categoria'),
+        UniqueConstraint('torneo_id', 'orden_alta', name='uk_com_cat_par_torneo_orden'),
+        CheckConstraint('orden_alta > 0', name='ck_com_cat_par_orden'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    categoria_discord_id = Column(BigInteger, nullable=False)
+    orden_alta = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+
+    torneo = relationship('ComunidadesTorneo', back_populates='categorias_partido', overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesEleccionAtacante(Base):
+    __tablename__ = 'comunidades_eleccion_atacante'
+    __table_args__ = (
+        UniqueConstraint('enfrentamiento_id', 'equipo_id', name='uk_com_eleccion_enfrentamiento_equipo'),
+        CheckConstraint('atacante_usuario_id <> defensor_usuario_id', name='ck_com_eleccion_jugadores'),
+        CheckConstraint('bloqueada IN (0, 1)', name='ck_com_eleccion_bloqueada'),
+        ForeignKeyConstraint(['enfrentamiento_id', 'torneo_id'], ['comunidades_enfrentamiento.id', 'comunidades_enfrentamiento.torneo_id'], name='fk_com_eleccion_enfrentamiento', ondelete='CASCADE'),
+        ForeignKeyConstraint(['equipo_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_com_eleccion_equipo_torneo', ondelete='CASCADE'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    enfrentamiento_id = Column(Integer, nullable=False)
+    equipo_id = Column(Integer, nullable=False)
+    atacante_usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios', ondelete='RESTRICT'), nullable=False)
+    defensor_usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios', ondelete='RESTRICT'), nullable=False)
+    elegido_por_discord_id = Column(BigInteger, nullable=False)
+    elegido_en = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+    bloqueada = Column(Boolean, nullable=False, server_default=text('0'))
+
+    enfrentamiento = relationship('ComunidadesEnfrentamiento', back_populates='elecciones_atacante', foreign_keys=[enfrentamiento_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipo = relationship('ComunidadesEquipo', foreign_keys=[equipo_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    atacante_usuario = relationship('Usuario', foreign_keys=[atacante_usuario_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    defensor_usuario = relationship('Usuario', foreign_keys=[defensor_usuario_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesPartido(Base):
+    __tablename__ = 'comunidades_partido'
+    __table_args__ = (
+        UniqueConstraint('enfrentamiento_id', 'indice', name='uk_com_partido_enfrentamiento_indice'),
+        UniqueConstraint('partido_bloodbowl_id', name='uk_com_partido_bloodbowl'),
+        CheckConstraint('indice IN (1, 2)', name='ck_com_partido_indice'),
+        CheckConstraint('equipo_local_id <> equipo_visitante_id', name='ck_com_partido_equipos'),
+        CheckConstraint('usuario_local_id <> usuario_visitante_id', name='ck_com_partido_usuarios'),
+        CheckConstraint('atacante_usuario_id <> defensor_usuario_id', name='ck_com_partido_roles'),
+        CheckConstraint('(td_local IS NULL AND td_visitante IS NULL) OR (td_local >= 0 AND td_visitante >= 0)', name='ck_com_partido_td'),
+        ForeignKeyConstraint(['enfrentamiento_id', 'torneo_id'], ['comunidades_enfrentamiento.id', 'comunidades_enfrentamiento.torneo_id'], name='fk_com_partido_enfrentamiento', ondelete='CASCADE'),
+        ForeignKeyConstraint(['equipo_local_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_com_partido_equipo_local', ondelete='CASCADE'),
+        ForeignKeyConstraint(['equipo_visitante_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_com_partido_equipo_visitante', ondelete='CASCADE'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    enfrentamiento_id = Column(Integer, nullable=False)
+    indice = Column(SmallInteger, nullable=False)
+    equipo_local_id = Column(Integer, nullable=False)
+    equipo_visitante_id = Column(Integer, nullable=False)
+    usuario_local_id = Column(Integer, ForeignKey('usuarios.idUsuarios', ondelete='RESTRICT'), nullable=False)
+    usuario_visitante_id = Column(Integer, ForeignKey('usuarios.idUsuarios', ondelete='RESTRICT'), nullable=False)
+    atacante_usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios', ondelete='RESTRICT'), nullable=False)
+    defensor_usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios', ondelete='RESTRICT'), nullable=False)
+    canal_discord_id = Column(BigInteger, nullable=True)
+    partido_bloodbowl_id = Column(String(45), nullable=True)
+    td_local = Column(Integer, nullable=True)
+    td_visitante = Column(Integer, nullable=True)
+    puntos_internos_local = Column(Numeric(8, 2), nullable=True)
+    puntos_internos_visitante = Column(Numeric(8, 2), nullable=True)
+    estado = Column(_comunidades_enum('PENDIENTE', 'EN_CURSO', 'FINALIZADO', 'ADMINISTRADO', name='comunidades_partido_estado'), nullable=False, server_default=text("'PENDIENTE'"))
+    resultado_origen = Column(_comunidades_enum('API', 'ADMIN', name='comunidades_partido_resultado_origen'), nullable=True)
+    tipo_forfait = Column(_comunidades_enum('LOCAL', 'VISITANTE', 'DOBLE', name='comunidades_partido_tipo_forfait'), nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_at = Column(DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    enfrentamiento = relationship('ComunidadesEnfrentamiento', back_populates='partidos', foreign_keys=[enfrentamiento_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipo_local = relationship('ComunidadesEquipo', foreign_keys=[equipo_local_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipo_visitante = relationship('ComunidadesEquipo', foreign_keys=[equipo_visitante_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    usuario_local = relationship('Usuario', foreign_keys=[usuario_local_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    usuario_visitante = relationship('Usuario', foreign_keys=[usuario_visitante_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    atacante_usuario = relationship('Usuario', foreign_keys=[atacante_usuario_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    defensor_usuario = relationship('Usuario', foreign_keys=[defensor_usuario_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesFotografiaEstado(Base):
+    __tablename__ = 'comunidades_fotografia_estado'
+    __table_args__ = (
+        UniqueConstraint('enfrentamiento_id', 'equipo_id', name='uk_com_foto_enfrentamiento_equipo'),
+        CheckConstraint('es_zombie IN (0, 1)', name='ck_com_foto_zombie'),
+        ForeignKeyConstraint(['ronda_id', 'torneo_id'], ['comunidades_ronda.id', 'comunidades_ronda.torneo_id'], name='fk_com_foto_ronda', ondelete='CASCADE'),
+        ForeignKeyConstraint(['enfrentamiento_id', 'torneo_id'], ['comunidades_enfrentamiento.id', 'comunidades_enfrentamiento.torneo_id'], name='fk_com_foto_enfrentamiento', ondelete='CASCADE'),
+        ForeignKeyConstraint(['equipo_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_com_foto_equipo', ondelete='CASCADE'),
+        ForeignKeyConstraint(['comunidad_id', 'torneo_id'], ['comunidades_comunidad.id', 'comunidades_comunidad.torneo_id'], name='fk_com_foto_comunidad', ondelete='CASCADE'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    ronda_id = Column(Integer, nullable=False)
+    enfrentamiento_id = Column(Integer, nullable=False)
+    equipo_id = Column(Integer, nullable=False)
+    comunidad_id = Column(Integer, nullable=False)
+    es_zombie = Column(Boolean, nullable=False)
+    estado_temporal = Column(_comunidades_enum('NEUTRO', 'CAZADOR', 'CAZADOR_Z', 'HERIDO', name='comunidades_fotografia_estado_temporal'), nullable=False)
+    fotografiado_en = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+
+    ronda = relationship('ComunidadesRonda', foreign_keys=[ronda_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    enfrentamiento = relationship('ComunidadesEnfrentamiento', back_populates='fotografias_estado', foreign_keys=[enfrentamiento_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipo = relationship('ComunidadesEquipo', foreign_keys=[equipo_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    comunidad = relationship('ComunidadesComunidad', back_populates='fotografias_estado', foreign_keys=[comunidad_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesHistorialTransicion(Base):
+    __tablename__ = 'comunidades_historial_transicion'
+    __table_args__ = (
+        CheckConstraint('es_zombie_anterior IN (0, 1)', name='ck_com_transicion_zombie_anterior'),
+        CheckConstraint('es_zombie_posterior IN (0, 1)', name='ck_com_transicion_zombie_posterior'),
+        CheckConstraint('puntos_comunitarios_generados >= 0 AND kills_generadas >= 0', name='ck_com_transicion_contadores'),
+        ForeignKeyConstraint(['ronda_id', 'torneo_id'], ['comunidades_ronda.id', 'comunidades_ronda.torneo_id'], name='fk_com_transicion_ronda', ondelete='CASCADE'),
+        ForeignKeyConstraint(['enfrentamiento_id', 'torneo_id'], ['comunidades_enfrentamiento.id', 'comunidades_enfrentamiento.torneo_id'], name='fk_com_transicion_enfrentamiento', ondelete='CASCADE'),
+        ForeignKeyConstraint(['equipo_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_com_transicion_equipo', ondelete='CASCADE'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    ronda_id = Column(Integer, nullable=False)
+    enfrentamiento_id = Column(Integer, nullable=True)
+    equipo_id = Column(Integer, nullable=False)
+    estado_temporal_anterior = Column(_comunidades_enum('NEUTRO', 'CAZADOR', 'CAZADOR_Z', 'HERIDO', name='comunidades_transicion_estado_anterior'), nullable=False)
+    es_zombie_anterior = Column(Boolean, nullable=False)
+    estado_temporal_posterior = Column(_comunidades_enum('NEUTRO', 'CAZADOR', 'CAZADOR_Z', 'HERIDO', name='comunidades_transicion_estado_posterior'), nullable=False)
+    es_zombie_posterior = Column(Boolean, nullable=False)
+    motivo = Column(_comunidades_enum('VICTORIA', 'DERROTA', 'EMPATE', 'BYE', 'ZOMBIFICACION', 'KILL', 'DOBLE_FORFAIT', 'TRANSFERENCIA', name='comunidades_transicion_motivo'), nullable=False)
+    puntos_comunitarios_generados = Column(Numeric(10, 2), nullable=False, server_default=text('0.00'))
+    kills_generadas = Column(Integer, nullable=False, server_default=text('0'))
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+
+    ronda = relationship('ComunidadesRonda', foreign_keys=[ronda_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    enfrentamiento = relationship('ComunidadesEnfrentamiento', foreign_keys=[enfrentamiento_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipo = relationship('ComunidadesEquipo', foreign_keys=[equipo_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesHistorialTransferencia(Base):
+    __tablename__ = 'comunidades_historial_transferencia'
+    __table_args__ = (
+        CheckConstraint('equipo_origen_id <> equipo_destino_id', name='ck_com_transferencia_equipos'),
+        ForeignKeyConstraint(['comunidad_id', 'torneo_id'], ['comunidades_comunidad.id', 'comunidades_comunidad.torneo_id'], name='fk_com_transferencia_comunidad', ondelete='CASCADE'),
+        ForeignKeyConstraint(['equipo_origen_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_com_transferencia_origen', ondelete='CASCADE'),
+        ForeignKeyConstraint(['equipo_destino_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_com_transferencia_destino', ondelete='CASCADE'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    ronda_id = Column(Integer, nullable=False)
+    comunidad_id = Column(Integer, nullable=False)
+    equipo_origen_id = Column(Integer, nullable=False)
+    equipo_destino_id = Column(Integer, nullable=False)
+    tipo = Column(_comunidades_enum('CAZADOR', 'CAZADOR_Z', name='comunidades_transferencia_tipo'), nullable=False)
+    ejecutada_por_discord_id = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+
+    comunidad = relationship('ComunidadesComunidad', back_populates='transferencias', foreign_keys=[comunidad_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipo_origen = relationship('ComunidadesEquipo', foreign_keys=[equipo_origen_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipo_destino = relationship('ComunidadesEquipo', foreign_keys=[equipo_destino_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesSnapshotClasificacionEquipo(Base):
+    __tablename__ = 'comunidades_snapshot_clasificacion_equipo'
+    __table_args__ = (
+        UniqueConstraint('ronda_id', 'equipo_id', name='uk_com_snap_equipo_ronda_equipo'),
+        CheckConstraint('posicion > 0', name='ck_com_snap_equipo_posicion'),
+        CheckConstraint('td_favor >= 0 AND td_contra >= 0 AND partidos_jugados >= 0 AND victorias >= 0 AND empates >= 0 AND derrotas >= 0 AND cantidad_byes >= 0', name='ck_com_snap_equipo_contadores'),
+        ForeignKeyConstraint(['equipo_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_com_snap_equipo_equipo', ondelete='CASCADE'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    ronda_id = Column(Integer, nullable=False)
+    equipo_id = Column(Integer, nullable=False)
+    posicion = Column(Integer, nullable=False)
+    puntos_clasificacion = Column(Numeric(10, 2), nullable=False)
+    buchholz_cut = Column(Numeric(10, 2), nullable=False)
+    puntos_enfrentamiento_directo = Column(Numeric(10, 2), nullable=True)
+    td_favor = Column(Integer, nullable=False)
+    td_contra = Column(Integer, nullable=False)
+    partidos_jugados = Column(Integer, nullable=False)
+    victorias = Column(Integer, nullable=False)
+    empates = Column(Integer, nullable=False)
+    derrotas = Column(Integer, nullable=False)
+    cantidad_byes = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+
+    equipo = relationship('ComunidadesEquipo', foreign_keys=[equipo_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesSnapshotClasificacionComunidad(Base):
+    __tablename__ = 'comunidades_snapshot_clasificacion_comunidad'
+    __table_args__ = (
+        UniqueConstraint('ronda_id', 'comunidad_id', name='uk_com_snap_comunidad_ronda_comunidad'),
+        CheckConstraint('posicion > 0', name='ck_com_snap_comunidad_posicion'),
+        CheckConstraint('puntos_zombificaciones >= 0 AND zombies_matados >= 0', name='ck_com_snap_comunidad_contadores'),
+        ForeignKeyConstraint(['comunidad_id', 'torneo_id'], ['comunidades_comunidad.id', 'comunidades_comunidad.torneo_id'], name='fk_com_snap_comunidad', ondelete='CASCADE'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    ronda_id = Column(Integer, nullable=False)
+    comunidad_id = Column(Integer, nullable=False)
+    posicion = Column(Integer, nullable=False)
+    puntos_zombificaciones = Column(Numeric(10, 2), nullable=False)
+    zombies_matados = Column(Integer, nullable=False)
+    suma_puntos_equipos = Column(Numeric(10, 2), nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+
+    comunidad = relationship('ComunidadesComunidad', back_populates='snapshots_clasificacion', foreign_keys=[comunidad_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesTrazaEmparejamiento(Base):
+    __tablename__ = 'comunidades_traza_emparejamiento'
+    __table_args__ = (
+        UniqueConstraint('ronda_id', 'secuencia', name='uk_com_traza_ronda_secuencia'),
+        CheckConstraint('secuencia > 0', name='ck_com_traza_secuencia'),
+        CheckConstraint('equipo_a_id IS NULL OR equipo_b_id IS NULL OR equipo_a_id <> equipo_b_id', name='ck_com_traza_equipos'),
+        CheckConstraint('es_mirror IS NULL OR es_mirror IN (0, 1)', name='ck_com_traza_mirror'),
+        CheckConstraint('es_rival_repetido IS NULL OR es_rival_repetido IN (0, 1)', name='ck_com_traza_repetido'),
+        ForeignKeyConstraint(['ronda_id', 'torneo_id'], ['comunidades_ronda.id', 'comunidades_ronda.torneo_id'], name='fk_com_traza_ronda', ondelete='CASCADE'),
+        ForeignKeyConstraint(['equipo_a_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_com_traza_equipo_a', ondelete='CASCADE'),
+        ForeignKeyConstraint(['equipo_b_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_com_traza_equipo_b', ondelete='CASCADE'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    ronda_id = Column(Integer, nullable=False)
+    secuencia = Column(Integer, nullable=False)
+    etapa = Column(_comunidades_enum('BASE', 'PERMITIR_MIRRORS', 'PERMITIR_ESTADOS_NO_DESEADOS', 'PERMITIR_REPETIDOS', 'SELECCION_BYE', 'SELECCION_FINAL', 'CANCELACION', name='comunidades_traza_etapa'), nullable=False)
+    equipo_a_id = Column(Integer, nullable=True)
+    equipo_b_id = Column(Integer, nullable=True)
+    diferencia_puntos = Column(Numeric(10, 2), nullable=True)
+    es_mirror = Column(Boolean, nullable=True)
+    es_rival_repetido = Column(Boolean, nullable=True)
+    prioridad_estado = Column(Integer, nullable=True)
+    desempate_aleatorio = Column(Numeric(18, 17), nullable=True)
+    detalle = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+
+    ronda = relationship('ComunidadesRonda', back_populates='trazas_emparejamiento', foreign_keys=[ronda_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipo_a = relationship('ComunidadesEquipo', foreign_keys=[equipo_a_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+    equipo_b = relationship('ComunidadesEquipo', foreign_keys=[equipo_b_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+# Alias singulares para mantener importaciones directas legibles y compatibles.
+ComunidadTorneo = ComunidadesTorneo
+Comunidad = ComunidadesComunidad
+ComunidadEquipo = ComunidadesEquipo
+ComunidadMiembro = ComunidadesMiembro
+ComunidadRonda = ComunidadesRonda
+ComunidadEnfrentamiento = ComunidadesEnfrentamiento
+ComunidadCategoriaEnfrentamiento = ComunidadesCategoriaEnfrentamiento
+ComunidadCategoriaPartido = ComunidadesCategoriaPartido
+ComunidadEleccionAtacante = ComunidadesEleccionAtacante
+ComunidadPartido = ComunidadesPartido
+ComunidadFotografiaEstado = ComunidadesFotografiaEstado
+ComunidadHistorialTransicion = ComunidadesHistorialTransicion
+ComunidadHistorialTransferencia = ComunidadesHistorialTransferencia
+ComunidadSnapshotClasificacionEquipo = ComunidadesSnapshotClasificacionEquipo
+ComunidadSnapshotClasificacionComunidad = ComunidadesSnapshotClasificacionComunidad
+ComunidadTrazaEmparejamiento = ComunidadesTrazaEmparejamiento
+
 
 def conexionEngine():
     # Conectarse a la base de datos y crear una sesión
