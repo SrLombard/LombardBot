@@ -10,6 +10,13 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Iterable
 
+from ComunidadesConstantes import (
+    ESTADO_TEMPORAL_CAZADOR,
+    ESTADO_TEMPORAL_CAZADOR_Z,
+    ESTADO_TEMPORAL_HERIDO,
+    ESTADO_TEMPORAL_NEUTRO,
+)
+
 
 class Equipo(str, Enum):
     """Lado de un equipo dentro de un enfrentamiento."""
@@ -24,6 +31,89 @@ class ResultadoGlobal(str, Enum):
     VICTORIA_A = "VICTORIA_A"
     VICTORIA_B = "VICTORIA_B"
     EMPATE = "EMPATE"
+
+
+class EstadoTemporal(str, Enum):
+    """Estado temporal canónico fotografiado para un equipo."""
+
+    NEUTRO = ESTADO_TEMPORAL_NEUTRO
+    CAZADOR = ESTADO_TEMPORAL_CAZADOR
+    CAZADOR_Z = ESTADO_TEMPORAL_CAZADOR_Z
+    HERIDO = ESTADO_TEMPORAL_HERIDO
+
+
+class MotivoTransicion(str, Enum):
+    """Motivo persistible que explica la transición de un equipo."""
+
+    VICTORIA = "VICTORIA"
+    DERROTA = "DERROTA"
+    EMPATE = "EMPATE"
+    ZOMBIFICACION = "ZOMBIFICACION"
+    KILL = "KILL"
+    DOBLE_FORFAIT = "DOBLE_FORFAIT"
+
+
+@dataclass(frozen=True)
+class EstadoFotografiado:
+    """Estado inmutable de un equipo al generarse la ronda."""
+
+    estado_temporal: EstadoTemporal
+    es_zombie: bool
+
+    def __post_init__(self) -> None:
+        try:
+            estado = EstadoTemporal(self.estado_temporal)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("estado temporal fotografiado desconocido") from exc
+        if type(self.es_zombie) is not bool:
+            raise TypeError("es_zombie debe ser booleano")
+        object.__setattr__(self, "estado_temporal", estado)
+
+
+@dataclass(frozen=True)
+class EfectoComunitario:
+    """Efecto especial concedido al equipo y comunidad vencedores."""
+
+    equipo: Equipo
+    comunidad: object
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "equipo", Equipo(self.equipo))
+        if self.comunidad is None:
+            raise ValueError("la comunidad beneficiaria no puede ser None")
+
+
+@dataclass(frozen=True)
+class TransicionEstados:
+    """Resultado completo de aplicar la máquina de estados a un cruce."""
+
+    estado_final_a: EstadoFotografiado
+    estado_final_b: EstadoFotografiado
+    cambio_zombie_a: bool
+    cambio_zombie_b: bool
+    punto_zombificacion: EfectoComunitario | None
+    kill: EfectoComunitario | None
+    motivo_a: MotivoTransicion
+    motivo_b: MotivoTransicion
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.estado_final_a, EstadoFotografiado):
+            raise TypeError("estado_final_a debe ser EstadoFotografiado")
+        if not isinstance(self.estado_final_b, EstadoFotografiado):
+            raise TypeError("estado_final_b debe ser EstadoFotografiado")
+        if (
+            type(self.cambio_zombie_a) is not bool
+            or type(self.cambio_zombie_b) is not bool
+        ):
+            raise TypeError("los cambios zombie deben ser booleanos")
+        if self.punto_zombificacion is not None and not isinstance(
+            self.punto_zombificacion, EfectoComunitario
+        ):
+            raise TypeError("punto_zombificacion debe ser EfectoComunitario o None")
+        if self.kill is not None and not isinstance(self.kill, EfectoComunitario):
+            raise TypeError("kill debe ser EfectoComunitario o None")
+        object.__setattr__(self, "motivo_a", MotivoTransicion(self.motivo_a))
+        object.__setattr__(self, "motivo_b", MotivoTransicion(self.motivo_b))
 
 
 class CriterioDesempate(str, Enum):
@@ -330,3 +420,229 @@ def calcular_resultado_enfrentamiento(
         puntos_clasificacion_a=clasificacion_a,
         puntos_clasificacion_b=clasificacion_b,
     )
+
+
+def resolver_transicion_estados(
+    estado_inicial_a: EstadoFotografiado,
+    estado_inicial_b: EstadoFotografiado,
+    resultado_global: ResultadoGlobal,
+    doble_forfait: bool,
+    comunidad_a: object,
+    comunidad_b: object,
+) -> TransicionEstados:
+    """Resuelve exhaustivamente la sección 12 desde la fotografía inicial.
+
+    La función no consulta estados vivos: tanto las transiciones ordinarias como
+    los efectos especiales se calculan exclusivamente con los dos estados
+    fotografiados recibidos.
+    """
+    _validar_entrada_transicion(
+        estado_inicial_a,
+        estado_inicial_b,
+        resultado_global,
+        doble_forfait,
+        comunidad_a,
+        comunidad_b,
+    )
+    resultado = ResultadoGlobal(resultado_global)
+
+    if doble_forfait:
+        transicion = TransicionEstados(
+            estado_final_a=estado_inicial_a,
+            estado_final_b=estado_inicial_b,
+            cambio_zombie_a=False,
+            cambio_zombie_b=False,
+            punto_zombificacion=None,
+            kill=None,
+            motivo_a=MotivoTransicion.DOBLE_FORFAIT,
+            motivo_b=MotivoTransicion.DOBLE_FORFAIT,
+        )
+    elif resultado is ResultadoGlobal.EMPATE:
+        transicion = TransicionEstados(
+            estado_final_a=EstadoFotografiado(
+                EstadoTemporal.NEUTRO, estado_inicial_a.es_zombie
+            ),
+            estado_final_b=EstadoFotografiado(
+                EstadoTemporal.NEUTRO, estado_inicial_b.es_zombie
+            ),
+            cambio_zombie_a=False,
+            cambio_zombie_b=False,
+            punto_zombificacion=None,
+            kill=None,
+            motivo_a=MotivoTransicion.EMPATE,
+            motivo_b=MotivoTransicion.EMPATE,
+        )
+    else:
+        ganador = Equipo.A if resultado is ResultadoGlobal.VICTORIA_A else Equipo.B
+        if ganador is Equipo.A:
+            transicion = _resolver_victoria(
+                ganador=Equipo.A,
+                estado_ganador=estado_inicial_a,
+                estado_perdedor=estado_inicial_b,
+                comunidad_ganador=comunidad_a,
+            )
+        else:
+            invertida = _resolver_victoria(
+                ganador=Equipo.B,
+                estado_ganador=estado_inicial_b,
+                estado_perdedor=estado_inicial_a,
+                comunidad_ganador=comunidad_b,
+            )
+            transicion = TransicionEstados(
+                estado_final_a=invertida.estado_final_b,
+                estado_final_b=invertida.estado_final_a,
+                cambio_zombie_a=invertida.cambio_zombie_b,
+                cambio_zombie_b=invertida.cambio_zombie_a,
+                punto_zombificacion=invertida.punto_zombificacion,
+                kill=invertida.kill,
+                motivo_a=invertida.motivo_b,
+                motivo_b=invertida.motivo_a,
+            )
+
+    _validar_salida_transicion(
+        estado_inicial_a,
+        estado_inicial_b,
+        resultado,
+        doble_forfait,
+        comunidad_a,
+        comunidad_b,
+        transicion,
+    )
+    return transicion
+
+
+def _resolver_victoria(
+    *,
+    ganador: Equipo,
+    estado_ganador: EstadoFotografiado,
+    estado_perdedor: EstadoFotografiado,
+    comunidad_ganador: object,
+) -> TransicionEstados:
+    """Resuelve una victoria colocando al ganador en la primera posición."""
+    punto = None
+    kill = None
+    motivo_ganador = MotivoTransicion.VICTORIA
+    motivo_perdedor = MotivoTransicion.DERROTA
+
+    if estado_perdedor.estado_temporal is EstadoTemporal.HERIDO:
+        estado_final_ganador = EstadoFotografiado(
+            EstadoTemporal.NEUTRO, estado_ganador.es_zombie
+        )
+        estado_final_perdedor = EstadoFotografiado(EstadoTemporal.NEUTRO, True)
+        cambio_zombie_perdedor = not estado_perdedor.es_zombie
+
+        if not estado_perdedor.es_zombie:
+            motivo_perdedor = MotivoTransicion.ZOMBIFICACION
+            if estado_ganador.estado_temporal is EstadoTemporal.CAZADOR:
+                punto = EfectoComunitario(ganador, comunidad_ganador)
+        elif estado_ganador.estado_temporal is EstadoTemporal.CAZADOR_Z:
+            motivo_ganador = MotivoTransicion.KILL
+            kill = EfectoComunitario(ganador, comunidad_ganador)
+    else:
+        estado_final_ganador = EstadoFotografiado(
+            (
+                EstadoTemporal.CAZADOR_Z
+                if estado_perdedor.es_zombie
+                else EstadoTemporal.CAZADOR
+            ),
+            estado_ganador.es_zombie,
+        )
+        estado_final_perdedor = EstadoFotografiado(
+            EstadoTemporal.HERIDO, estado_perdedor.es_zombie
+        )
+        cambio_zombie_perdedor = False
+
+    return TransicionEstados(
+        estado_final_a=estado_final_ganador,
+        estado_final_b=estado_final_perdedor,
+        cambio_zombie_a=False,
+        cambio_zombie_b=cambio_zombie_perdedor,
+        punto_zombificacion=punto,
+        kill=kill,
+        motivo_a=motivo_ganador,
+        motivo_b=motivo_perdedor,
+    )
+
+
+def _validar_entrada_transicion(
+    estado_a: object,
+    estado_b: object,
+    resultado: object,
+    doble_forfait: object,
+    comunidad_a: object,
+    comunidad_b: object,
+) -> None:
+    if not isinstance(estado_a, EstadoFotografiado) or not isinstance(
+        estado_b, EstadoFotografiado
+    ):
+        raise TypeError("los estados iniciales deben ser EstadoFotografiado")
+    try:
+        resultado = ResultadoGlobal(resultado)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("resultado global desconocido") from exc
+    if type(doble_forfait) is not bool:
+        raise TypeError("doble_forfait debe ser booleano")
+    if doble_forfait and resultado is not ResultadoGlobal.EMPATE:
+        raise ValueError("un doble forfait global debe tener resultado EMPATE")
+    if comunidad_a is None or comunidad_b is None:
+        raise ValueError("ambas comunidades son obligatorias")
+    if comunidad_a == comunidad_b:
+        raise ValueError(
+            "los equipos enfrentados deben pertenecer a comunidades distintas"
+        )
+
+
+def _validar_salida_transicion(
+    estado_inicial_a: EstadoFotografiado,
+    estado_inicial_b: EstadoFotografiado,
+    resultado: ResultadoGlobal,
+    doble_forfait: bool,
+    comunidad_a: object,
+    comunidad_b: object,
+    transicion: TransicionEstados,
+) -> None:
+    for inicial, final, cambio in (
+        (estado_inicial_a, transicion.estado_final_a, transicion.cambio_zombie_a),
+        (estado_inicial_b, transicion.estado_final_b, transicion.cambio_zombie_b),
+    ):
+        if inicial.es_zombie and not final.es_zombie:
+            raise AssertionError("la condición zombie no puede desaparecer")
+        if cambio != (not inicial.es_zombie and final.es_zombie):
+            raise AssertionError(
+                "el indicador de cambio zombie no coincide con los estados"
+            )
+
+    if transicion.punto_zombificacion and transicion.kill:
+        raise AssertionError("una transición no puede conceder punto y kill a la vez")
+
+    if doble_forfait or resultado is ResultadoGlobal.EMPATE:
+        if transicion.punto_zombificacion or transicion.kill:
+            raise AssertionError("un empate no puede generar efectos comunitarios")
+        return
+
+    if resultado is ResultadoGlobal.VICTORIA_A:
+        ganador = estado_inicial_a
+        perdedor = estado_inicial_b
+        equipo_ganador = Equipo.A
+        comunidad_ganador = comunidad_a
+    else:
+        ganador = estado_inicial_b
+        perdedor = estado_inicial_a
+        equipo_ganador = Equipo.B
+        comunidad_ganador = comunidad_b
+
+    punto_esperado = (
+        ganador.estado_temporal is EstadoTemporal.CAZADOR
+        and perdedor.estado_temporal is EstadoTemporal.HERIDO
+        and not perdedor.es_zombie
+    )
+    kill_esperada = (
+        ganador.estado_temporal is EstadoTemporal.CAZADOR_Z
+        and perdedor.estado_temporal is EstadoTemporal.HERIDO
+        and perdedor.es_zombie
+    )
+    efecto_esperado = EfectoComunitario(equipo_ganador, comunidad_ganador)
+    if (transicion.punto_zombificacion == efecto_esperado) != punto_esperado:
+        raise AssertionError("el punto de zombificación no coincide con la fotografía")
+    if (transicion.kill == efecto_esperado) != kill_esperada:
+        raise AssertionError("la kill no coincide con la fotografía")
