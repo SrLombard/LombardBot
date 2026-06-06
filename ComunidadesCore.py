@@ -6,7 +6,7 @@ recibida, sin depender de los modelos del torneo suizo individual.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import json
 from enum import Enum
@@ -18,6 +18,8 @@ from ComunidadesConstantes import (
     ESTADO_TEMPORAL_CAZADOR_Z,
     ESTADO_TEMPORAL_HERIDO,
     ESTADO_TEMPORAL_NEUTRO,
+    ENFRENTAMIENTO_ELECCIONES_COMPLETAS,
+    ENFRENTAMIENTO_PENDIENTE_ELECCIONES,
     PLANTILLA_RONDA1_PENDIENTE,
     PLANTILLA_RONDAS_SIGUIENTES_PENDIENTE,
     RAZAS_VALIDAS,
@@ -1429,6 +1431,257 @@ def generar_pairings_comunidades_backtracking(
             ),
         },
     }
+
+
+class ErrorSeleccionAtacanteComunidades(ValueError):
+    """Error de dominio al registrar una elección de atacante."""
+
+    def __init__(self, codigo: str, detalle: str):
+        super().__init__(detalle)
+        self.codigo = codigo
+        self.detalle = detalle
+
+
+@dataclass(frozen=True)
+class ResultadoSeleccionAtacanteComunidades:
+    """Contrato explícito devuelto tras persistir una elección."""
+
+    eleccion: Any
+    atacante: Any
+    defensor: Any
+    ambas_elecciones_completas: bool
+    requiere_crear_partidos: bool
+
+
+def _error_seleccion_atacante(codigo: str, detalle: str) -> None:
+    raise ErrorSeleccionAtacanteComunidades(codigo, detalle)
+
+
+def _resolver_enfrentamiento_seleccion(
+    session: Any,
+    *,
+    enfrentamiento_id: Optional[int],
+    canal_general_discord_id: Optional[int],
+):
+    from GestorSQL import ComunidadesEnfrentamiento
+
+    if (enfrentamiento_id is None) == (canal_general_discord_id is None):
+        _error_seleccion_atacante(
+            "REFERENCIA_ENFRENTAMIENTO_INVALIDA",
+            "Debe indicarse exactamente un ID de enfrentamiento o de canal general.",
+        )
+    if enfrentamiento_id is not None:
+        if type(enfrentamiento_id) is not int or enfrentamiento_id <= 0:
+            _error_seleccion_atacante(
+                "REFERENCIA_ENFRENTAMIENTO_INVALIDA",
+                "El ID del enfrentamiento debe ser un entero mayor que cero.",
+            )
+        filtro = ComunidadesEnfrentamiento.id == enfrentamiento_id
+    else:
+        if type(canal_general_discord_id) is not int or canal_general_discord_id <= 0:
+            _error_seleccion_atacante(
+                "REFERENCIA_ENFRENTAMIENTO_INVALIDA",
+                "El ID del canal general debe ser un entero mayor que cero.",
+            )
+        filtro = (
+            ComunidadesEnfrentamiento.canal_general_discord_id
+            == canal_general_discord_id
+        )
+
+    enfrentamientos = session.query(ComunidadesEnfrentamiento).filter(filtro).limit(2).all()
+    if not enfrentamientos:
+        _error_seleccion_atacante(
+            "ENFRENTAMIENTO_NO_EXISTE",
+            "No existe un enfrentamiento asociado a la referencia indicada.",
+        )
+    if len(enfrentamientos) != 1:
+        _error_seleccion_atacante(
+            "CANAL_ENFRENTAMIENTO_AMBIGUO",
+            "El canal general está asociado a más de un enfrentamiento.",
+        )
+    return enfrentamientos[0]
+
+
+def registrar_eleccion_atacante_comunidades(
+    session: Any,
+    *,
+    actor_discord_id: int,
+    atacante_usuario_id: int,
+    enfrentamiento_id: Optional[int] = None,
+    canal_general_discord_id: Optional[int] = None,
+    elegido_en: Optional[datetime] = None,
+) -> ResultadoSeleccionAtacanteComunidades:
+    """Registra una elección y bloquea las dos al quedar completas.
+
+    La escritura serializa a los contendientes mediante una actualización
+    condicional del enfrentamiento. En InnoDB bloquea la fila y en SQLite
+    adquiere el bloqueo de escritura, evitando que dos últimas elecciones
+    creen filas duplicadas o observen un estado parcial.
+    """
+    from GestorSQL import (
+        ComunidadesEleccionAtacante,
+        ComunidadesEnfrentamiento,
+        ComunidadesMiembro,
+    )
+
+    if type(actor_discord_id) is not int or actor_discord_id <= 0:
+        _error_seleccion_atacante(
+            "ACTOR_INVALIDO", "El ID Discord del actor debe ser un entero mayor que cero."
+        )
+    if type(atacante_usuario_id) is not int or atacante_usuario_id <= 0:
+        _error_seleccion_atacante(
+            "ATACANTE_INVALIDO", "El ID del atacante debe ser un entero mayor que cero."
+        )
+    if elegido_en is not None and not isinstance(elegido_en, datetime):
+        _error_seleccion_atacante(
+            "FECHA_INVALIDA", "La fecha de elección debe ser datetime o None."
+        )
+
+    try:
+        enfrentamiento = _resolver_enfrentamiento_seleccion(
+            session,
+            enfrentamiento_id=enfrentamiento_id,
+            canal_general_discord_id=canal_general_discord_id,
+        )
+        identificador = int(enfrentamiento.id)
+
+        # Una UPDATE sobre la propia fila sirve como mutex transaccional y la
+        # condición impide reabrir un enfrentamiento ya completado.
+        session.query(ComunidadesEnfrentamiento).filter(
+            ComunidadesEnfrentamiento.id == identificador,
+            ComunidadesEnfrentamiento.estado
+            == ENFRENTAMIENTO_PENDIENTE_ELECCIONES,
+        ).update(
+            {ComunidadesEnfrentamiento.estado: ENFRENTAMIENTO_PENDIENTE_ELECCIONES},
+            synchronize_session=False,
+        )
+        session.expire_all()
+        enfrentamiento = session.get(ComunidadesEnfrentamiento, identificador)
+
+        equipo_ids = (int(enfrentamiento.equipo_a_id), int(enfrentamiento.equipo_b_id))
+        miembros = (
+            session.query(ComunidadesMiembro)
+            .filter(
+                ComunidadesMiembro.torneo_id == enfrentamiento.torneo_id,
+                ComunidadesMiembro.equipo_id.in_(equipo_ids),
+            )
+            .all()
+        )
+        miembros_actor = [
+            miembro
+            for miembro in miembros
+            if miembro.usuario is not None
+            and miembro.usuario.id_discord is not None
+            and int(miembro.usuario.id_discord) == actor_discord_id
+        ]
+        if len(miembros_actor) != 1:
+            _error_seleccion_atacante(
+                "ACTOR_NO_PERTENECE",
+                "El actor no pertenece a ninguno de los equipos del enfrentamiento.",
+            )
+        equipo_id = int(miembros_actor[0].equipo_id)
+        miembros_equipo = [
+            miembro for miembro in miembros if int(miembro.equipo_id) == equipo_id
+        ]
+        if len(miembros_equipo) != 2:
+            _error_seleccion_atacante(
+                "EQUIPO_INCOMPLETO", "El equipo del actor no tiene exactamente dos miembros."
+            )
+        atacante_miembro = next(
+            (
+                miembro
+                for miembro in miembros_equipo
+                if int(miembro.usuario_id) == atacante_usuario_id
+            ),
+            None,
+        )
+        if atacante_miembro is None:
+            _error_seleccion_atacante(
+                "ATACANTE_NO_PERTENECE",
+                "El atacante seleccionado no pertenece al equipo del actor.",
+            )
+        defensor_miembro = next(
+            miembro
+            for miembro in miembros_equipo
+            if int(miembro.usuario_id) != atacante_usuario_id
+        )
+
+        eleccion = (
+            session.query(ComunidadesEleccionAtacante)
+            .filter(
+                ComunidadesEleccionAtacante.enfrentamiento_id == identificador,
+                ComunidadesEleccionAtacante.equipo_id == equipo_id,
+            )
+            .one_or_none()
+        )
+        if enfrentamiento.estado != ENFRENTAMIENTO_PENDIENTE_ELECCIONES:
+            if (
+                enfrentamiento.estado == ENFRENTAMIENTO_ELECCIONES_COMPLETAS
+                and eleccion is not None
+                and int(eleccion.atacante_usuario_id) == atacante_usuario_id
+                and bool(eleccion.bloqueada)
+            ):
+                session.commit()
+                return ResultadoSeleccionAtacanteComunidades(
+                    eleccion=eleccion,
+                    atacante=atacante_miembro.usuario,
+                    defensor=defensor_miembro.usuario,
+                    ambas_elecciones_completas=True,
+                    requiere_crear_partidos=True,
+                )
+            _error_seleccion_atacante(
+                "ELECCIONES_BLOQUEADAS",
+                "Las elecciones del enfrentamiento ya no se pueden modificar.",
+            )
+
+        ahora = elegido_en or datetime.now(timezone.utc).replace(tzinfo=None)
+        if eleccion is None:
+            eleccion = ComunidadesEleccionAtacante(
+                torneo_id=enfrentamiento.torneo_id,
+                enfrentamiento_id=identificador,
+                equipo_id=equipo_id,
+                atacante_usuario_id=atacante_usuario_id,
+                defensor_usuario_id=int(defensor_miembro.usuario_id),
+                elegido_por_discord_id=actor_discord_id,
+                elegido_en=ahora,
+                bloqueada=False,
+            )
+            session.add(eleccion)
+        else:
+            if bool(eleccion.bloqueada):
+                _error_seleccion_atacante(
+                    "ELECCIONES_BLOQUEADAS",
+                    "La elección del equipo ya está bloqueada.",
+                )
+            eleccion.atacante_usuario_id = atacante_usuario_id
+            eleccion.defensor_usuario_id = int(defensor_miembro.usuario_id)
+            eleccion.elegido_por_discord_id = actor_discord_id
+            eleccion.elegido_en = ahora
+        session.flush()
+
+        elecciones = (
+            session.query(ComunidadesEleccionAtacante)
+            .filter(ComunidadesEleccionAtacante.enfrentamiento_id == identificador)
+            .all()
+        )
+        completas = {int(item.equipo_id) for item in elecciones} == set(equipo_ids)
+        if completas:
+            for item in elecciones:
+                item.bloqueada = True
+            enfrentamiento.estado = ENFRENTAMIENTO_ELECCIONES_COMPLETAS
+            session.flush()
+
+        session.commit()
+        return ResultadoSeleccionAtacanteComunidades(
+            eleccion=eleccion,
+            atacante=atacante_miembro.usuario,
+            defensor=defensor_miembro.usuario,
+            ambas_elecciones_completas=completas,
+            requiere_crear_partidos=completas,
+        )
+    except Exception:
+        session.rollback()
+        raise
 
 
 class ErrorGeneracionRondaComunidades(ValueError):

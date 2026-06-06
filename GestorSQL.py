@@ -612,7 +612,7 @@ class ComunidadesEnfrentamiento(Base):
     equipo_a_id = Column(Integer, nullable=False)
     equipo_b_id = Column(Integer, nullable=False)
     canal_general_discord_id = Column(BigInteger, nullable=True)
-    estado = Column(_comunidades_enum('PENDIENTE_ELECCIONES', 'PARTIDOS_CREADOS', 'EN_CURSO', 'CERRADO', 'ADMINISTRADO', name='comunidades_enfrentamiento_estado'), nullable=False, server_default=text("'PENDIENTE_ELECCIONES'"))
+    estado = Column(_comunidades_enum('PENDIENTE_ELECCIONES', 'ELECCIONES_COMPLETAS', 'PARTIDOS_CREADOS', 'EN_CURSO', 'CERRADO', 'ADMINISTRADO', name='comunidades_enfrentamiento_estado'), nullable=False, server_default=text("'PENDIENTE_ELECCIONES'"))
     puntos_internos_a = Column(Numeric(8, 2), nullable=False, server_default=text('0.00'))
     puntos_internos_b = Column(Numeric(8, 2), nullable=False, server_default=text('0.00'))
     td_favor_a = Column(Integer, nullable=False, server_default=text('0'))

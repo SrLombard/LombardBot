@@ -177,7 +177,7 @@ Cada enfrentamiento debe almacenar:
 - Número de mesa.
 - Equipo A y equipo B.
 - Canal general de Discord.
-- Estado: pendiente de elecciones, partidos creados, en curso, cerrado o administrado.
+- Estado: pendiente de elecciones, elecciones completas pendientes de materializar, partidos creados, en curso, cerrado o administrado.
 - Puntos internos sumados por cada equipo.
 - TD a favor y en contra de cada equipo.
 - TD anotados por el atacante de cada equipo.
@@ -198,7 +198,7 @@ Debe almacenarse una elección por equipo y enfrentamiento:
 - Fecha y hora de la última elección.
 - Indicador de bloqueo.
 
-La elección puede modificarse hasta que ambos equipos hayan elegido. En ese momento, ambas elecciones quedan bloqueadas.
+La elección puede modificarse hasta que ambos equipos hayan elegido. En ese momento, ambas elecciones quedan bloqueadas y el enfrentamiento pasa a `ELECCIONES_COMPLETAS` hasta que el servicio posterior materialice los dos partidos.
 
 ### 4.8. Partidos individuales
 

@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS comunidades_enfrentamiento (
   canal_general_discord_id BIGINT NULL,
   estado ENUM(
     'PENDIENTE_ELECCIONES',
+    'ELECCIONES_COMPLETAS',
     'PARTIDOS_CREADOS',
     'EN_CURSO',
     'CERRADO',
@@ -202,6 +203,17 @@ CREATE TABLE IF NOT EXISTS comunidades_enfrentamiento (
     REFERENCES comunidades_equipo(id, torneo_id)
     ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+-- Mantiene instalaciones existentes alineadas con el estado intermedio que
+-- separa el bloqueo atómico de elecciones de la materialización de partidos.
+ALTER TABLE comunidades_enfrentamiento MODIFY COLUMN estado ENUM(
+  'PENDIENTE_ELECCIONES',
+  'ELECCIONES_COMPLETAS',
+  'PARTIDOS_CREADOS',
+  'EN_CURSO',
+  'CERRADO',
+  'ADMINISTRADO'
+) NOT NULL DEFAULT 'PENDIENTE_ELECCIONES';
 
 -- Configuración ordenada de categorías. El orden_alta se asigna al insertar y
 -- permite recorrer las categorías en el mismo orden en que se configuraron.

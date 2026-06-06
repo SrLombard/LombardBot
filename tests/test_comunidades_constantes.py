@@ -98,6 +98,7 @@ def test_valores_canónicos_de_estados_orígenes_y_tipos_administrativos():
     assert ESTADOS_RONDA == {"ABIERTA", "BLOQUEADA", "CERRADA"}
     assert ESTADOS_ENFRENTAMIENTO == {
         "PENDIENTE_ELECCIONES",
+        "ELECCIONES_COMPLETAS",
         "PARTIDOS_CREADOS",
         "EN_CURSO",
         "CERRADO",
