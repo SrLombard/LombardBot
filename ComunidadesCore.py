@@ -1684,6 +1684,149 @@ def registrar_eleccion_atacante_comunidades(
         raise
 
 
+class ErrorMaterializacionPartidosComunidades(ValueError):
+    """Error de dominio al fijar las identidades de los partidos."""
+
+    def __init__(self, codigo: str, detalle: str):
+        super().__init__(detalle)
+        self.codigo = codigo
+        self.detalle = detalle
+
+
+@dataclass(frozen=True)
+class ResultadoMaterializacionPartidosComunidades:
+    """Identidades estables de los dos partidos de un enfrentamiento."""
+
+    enfrentamiento: Any
+    partidos: tuple[Any, Any]
+    creados: bool
+
+
+def _error_materializacion_partidos(codigo: str, detalle: str) -> None:
+    raise ErrorMaterializacionPartidosComunidades(codigo, detalle)
+
+
+def materializar_identidades_partidos_comunidades(
+    session: Any,
+    *,
+    enfrentamiento_id: int,
+) -> ResultadoMaterializacionPartidosComunidades:
+    """Persiste exactamente los dos cruces derivados de elecciones bloqueadas.
+
+    Esta función no confirma la transacción. El llamador debe hacer ``commit``
+    antes de iniciar efectos externos en Discord, de modo que un reintento
+    conserve la misma identidad de partido aunque falle la creación de canales.
+    """
+    from GestorSQL import (
+        ComunidadesEleccionAtacante,
+        ComunidadesEnfrentamiento,
+        ComunidadesPartido,
+    )
+
+    if type(enfrentamiento_id) is not int or enfrentamiento_id <= 0:
+        _error_materializacion_partidos(
+            "REFERENCIA_INVALIDA",
+            "El ID del enfrentamiento debe ser un entero mayor que cero.",
+        )
+
+    enfrentamiento = (
+        session.query(ComunidadesEnfrentamiento)
+        .filter(ComunidadesEnfrentamiento.id == enfrentamiento_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if enfrentamiento is None:
+        _error_materializacion_partidos(
+            "ENFRENTAMIENTO_NO_EXISTE",
+            f"No existe el enfrentamiento {enfrentamiento_id}.",
+        )
+
+    partidos_existentes = (
+        session.query(ComunidadesPartido)
+        .filter(ComunidadesPartido.enfrentamiento_id == enfrentamiento_id)
+        .order_by(ComunidadesPartido.indice)
+        .all()
+    )
+    if partidos_existentes:
+        indices = [int(partido.indice) for partido in partidos_existentes]
+        if len(partidos_existentes) != 2 or indices != [1, 2]:
+            _error_materializacion_partidos(
+                "PARTIDOS_INCOMPLETOS",
+                "El enfrentamiento tiene una materialización parcial o inconsistente.",
+            )
+        return ResultadoMaterializacionPartidosComunidades(
+            enfrentamiento=enfrentamiento,
+            partidos=(partidos_existentes[0], partidos_existentes[1]),
+            creados=False,
+        )
+
+    if enfrentamiento.estado != ENFRENTAMIENTO_ELECCIONES_COMPLETAS:
+        _error_materializacion_partidos(
+            "ELECCIONES_NO_COMPLETAS",
+            (
+                "Los partidos solo pueden materializarse cuando ambas "
+                "elecciones están bloqueadas."
+            ),
+        )
+
+    elecciones = (
+        session.query(ComunidadesEleccionAtacante)
+        .filter(ComunidadesEleccionAtacante.enfrentamiento_id == enfrentamiento_id)
+        .all()
+    )
+    por_equipo = {int(eleccion.equipo_id): eleccion for eleccion in elecciones}
+    equipos_esperados = {
+        int(enfrentamiento.equipo_a_id),
+        int(enfrentamiento.equipo_b_id),
+    }
+    if set(por_equipo) != equipos_esperados or not all(
+        bool(eleccion.bloqueada) for eleccion in elecciones
+    ):
+        _error_materializacion_partidos(
+            "ELECCIONES_NO_BLOQUEADAS",
+            "Deben existir dos elecciones bloqueadas, una por cada equipo.",
+        )
+
+    eleccion_a = por_equipo[int(enfrentamiento.equipo_a_id)]
+    eleccion_b = por_equipo[int(enfrentamiento.equipo_b_id)]
+    datos = (
+        {
+            "indice": 1,
+            "equipo_local_id": int(enfrentamiento.equipo_a_id),
+            "equipo_visitante_id": int(enfrentamiento.equipo_b_id),
+            "usuario_local_id": int(eleccion_a.atacante_usuario_id),
+            "usuario_visitante_id": int(eleccion_b.defensor_usuario_id),
+            "atacante_usuario_id": int(eleccion_a.atacante_usuario_id),
+            "defensor_usuario_id": int(eleccion_b.defensor_usuario_id),
+        },
+        {
+            "indice": 2,
+            "equipo_local_id": int(enfrentamiento.equipo_b_id),
+            "equipo_visitante_id": int(enfrentamiento.equipo_a_id),
+            "usuario_local_id": int(eleccion_b.atacante_usuario_id),
+            "usuario_visitante_id": int(eleccion_a.defensor_usuario_id),
+            "atacante_usuario_id": int(eleccion_b.atacante_usuario_id),
+            "defensor_usuario_id": int(eleccion_a.defensor_usuario_id),
+        },
+    )
+    partidos = tuple(
+        ComunidadesPartido(
+            torneo_id=int(enfrentamiento.torneo_id),
+            enfrentamiento_id=int(enfrentamiento.id),
+            estado="PENDIENTE",
+            **cruce,
+        )
+        for cruce in datos
+    )
+    session.add_all(partidos)
+    session.flush()
+    return ResultadoMaterializacionPartidosComunidades(
+        enfrentamiento=enfrentamiento,
+        partidos=(partidos[0], partidos[1]),
+        creados=True,
+    )
+
+
 class ErrorGeneracionRondaComunidades(ValueError):
     """Error funcional que cancela por completo la generación de una ronda."""
 

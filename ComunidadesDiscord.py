@@ -254,3 +254,249 @@ def parsear_decimal(valor: str, nombre: str) -> Decimal:
         return Decimal(valor)
     except (InvalidOperation, TypeError, ValueError) as exc:
         raise ValueError(f"`{nombre}` debe ser un número decimal válido.") from exc
+
+
+class ErrorMaterializacionDiscordComunidades(RuntimeError):
+    """Incidencia recuperable durante la creación de canales individuales."""
+
+    def __init__(self, codigo: str, detalle: str):
+        super().__init__(detalle)
+        self.codigo = codigo
+        self.detalle = detalle
+
+
+@dataclass(frozen=True)
+class ResultadoMaterializacionDiscordComunidades:
+    """Resultado idempotente de materializar los dos partidos en Discord."""
+
+    enfrentamiento_id: int
+    partido_ids: Tuple[int, int]
+    canal_ids: Tuple[int, int]
+    canales_creados: int
+
+
+def _error_materializacion_discord(codigo: str, detalle: str) -> None:
+    raise ErrorMaterializacionDiscordComunidades(codigo, detalle)
+
+
+def _nombre_canal_partido_comunidades(enfrentamiento: Any, partido: Any) -> str:
+    def normalizar(valor: object) -> str:
+        texto = str(valor or "jugador").lower()
+        resultado = []
+        for caracter in texto:
+            if caracter.isalnum():
+                resultado.append(caracter)
+            elif resultado and resultado[-1] != "-":
+                resultado.append("-")
+        return "".join(resultado).strip("-") or "jugador"
+
+    return (
+        f"r{int(enfrentamiento.ronda.numero)}-m{int(enfrentamiento.mesa_numero)}-"
+        f"p{int(partido.indice)}-{normalizar(partido.usuario_local.nombre_discord)}-vs-"
+        f"{normalizar(partido.usuario_visitante.nombre_discord)}"
+    )[:100]
+
+
+def _mensaje_partido_comunidades(enfrentamiento: Any, partido: Any) -> str:
+    atacante_discord_id = int(partido.atacante_usuario.id_discord)
+    defensor_discord_id = int(partido.defensor_usuario.id_discord)
+    return (
+        f"## Partido {int(partido.indice)} — Mesa {int(enfrentamiento.mesa_numero)}\n"
+        f"**Atacante:** <@{atacante_discord_id}>\n"
+        f"**Defensor:** <@{defensor_discord_id}>\n\n"
+        f"<@{atacante_discord_id}> contra <@{defensor_discord_id}>\n"
+        f"**Fecha límite:** {enfrentamiento.ronda.fecha_fin.strftime('%Y-%m-%d %H:%M')}"
+    )
+
+
+async def _resolver_miembro_comunidades(guild: Any, discord_id: int):
+    miembro = guild.get_member(discord_id)
+    if miembro is not None:
+        return miembro
+    fetch_member = getattr(guild, "fetch_member", None)
+    if not callable(fetch_member):
+        return None
+    try:
+        return await fetch_member(discord_id)
+    except Exception:
+        return None
+
+
+async def _resolver_canal_comunidades(guild: Any, canal_id: int):
+    canal = guild.get_channel(canal_id)
+    if canal is not None:
+        return canal
+    fetch_channel = getattr(guild, "fetch_channel", None)
+    if not callable(fetch_channel):
+        return None
+    try:
+        return await fetch_channel(canal_id)
+    except Exception:
+        return None
+
+
+async def materializar_partidos_comunidades(
+    session: Any,
+    guild: Any,
+    *,
+    enfrentamiento_id: int,
+) -> ResultadoMaterializacionDiscordComunidades:
+    """Crea de forma reintentable los dos registros y sus canales privados.
+
+    Las identidades se confirman primero. Después cada canal se crea, recibe su
+    mensaje y se asocia al partido en una confirmación independiente. Así, un
+    fallo tras el primer canal deja un estado parcial visible y recuperable sin
+    duplicar el canal ya guardado.
+    """
+    import discord
+    from ComunidadesCore import materializar_identidades_partidos_comunidades
+    from GestorSQL import ComunidadesEnfrentamiento, ComunidadesPartido
+
+    try:
+        materializar_identidades_partidos_comunidades(
+            session, enfrentamiento_id=enfrentamiento_id
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
+    enfrentamiento = session.get(ComunidadesEnfrentamiento, enfrentamiento_id)
+    partidos = (
+        session.query(ComunidadesPartido)
+        .filter(ComunidadesPartido.enfrentamiento_id == enfrentamiento_id)
+        .order_by(ComunidadesPartido.indice)
+        .all()
+    )
+    if enfrentamiento is None or len(partidos) != 2:
+        _error_materializacion_discord(
+            "IDENTIDADES_NO_DISPONIBLES",
+            "No se pudieron recuperar las dos identidades persistidas.",
+        )
+
+    pendientes = [partido for partido in partidos if partido.canal_discord_id is None]
+    if not pendientes:
+        if enfrentamiento.estado != "PARTIDOS_CREADOS":
+            enfrentamiento.estado = "PARTIDOS_CREADOS"
+            session.commit()
+        return ResultadoMaterializacionDiscordComunidades(
+            enfrentamiento_id=enfrentamiento_id,
+            partido_ids=(int(partidos[0].id), int(partidos[1].id)),
+            canal_ids=(int(partidos[0].canal_discord_id), int(partidos[1].canal_discord_id)),
+            canales_creados=0,
+        )
+
+    canal_general_id = enfrentamiento.canal_general_discord_id
+    if canal_general_id is None:
+        _error_materializacion_discord(
+            "CANAL_GENERAL_NO_ASOCIADO",
+            "El enfrentamiento no tiene un canal general asociado.",
+        )
+    canal_general = await _resolver_canal_comunidades(guild, int(canal_general_id))
+    if canal_general is None:
+        _error_materializacion_discord(
+            "CANAL_GENERAL_INACCESIBLE",
+            f"No se pudo acceder al canal general {int(canal_general_id)}.",
+        )
+
+    comisario_role = next(
+        (rol for rol in getattr(guild, "roles", ()) if getattr(rol, "name", None) == "Comisario"),
+        None,
+    )
+    if comisario_role is None:
+        _error_materializacion_discord(
+            "ROL_COMISARIO_INEXISTENTE",
+            "No existe el rol Comisario necesario para configurar los permisos.",
+        )
+
+    miembros_por_partido = {}
+    for partido in pendientes:
+        miembros = []
+        for usuario in (partido.usuario_local, partido.usuario_visitante):
+            discord_id = getattr(usuario, "id_discord", None)
+            if discord_id is None:
+                _error_materializacion_discord(
+                    "USUARIO_SIN_DISCORD",
+                    f"El usuario BD {int(usuario.idUsuarios)} no tiene ID de Discord.",
+                )
+            miembro = await _resolver_miembro_comunidades(guild, int(discord_id))
+            if miembro is None:
+                _error_materializacion_discord(
+                    "MIEMBRO_NO_ENCONTRADO",
+                    f"No se encontró el usuario Discord {int(discord_id)} en el servidor.",
+                )
+            miembros.append(miembro)
+        miembros_por_partido[int(partido.id)] = tuple(miembros)
+
+    categorias = await planificar_categorias_comunidades(
+        session,
+        guild,
+        torneo_id=int(enfrentamiento.torneo_id),
+        tipo="partidos",
+        cantidad=len(pendientes),
+    )
+
+    await canal_general.send("Se van a crear los encuentros")
+
+    canales_creados = 0
+    for partido, categoria in zip(pendientes, categorias):
+        miembros = miembros_por_partido[int(partido.id)]
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(
+                view_channel=False, read_messages=False
+            ),
+            comisario_role: discord.PermissionOverwrite(
+                view_channel=True, read_messages=True, send_messages=True
+            ),
+        }
+        for miembro in miembros:
+            overwrites[miembro] = discord.PermissionOverwrite(
+                view_channel=True, read_messages=True, send_messages=True
+            )
+
+        canal = None
+        try:
+            canal = await guild.create_text_channel(
+                name=_nombre_canal_partido_comunidades(enfrentamiento, partido),
+                category=categoria,
+                overwrites=overwrites,
+                reason=(
+                    f"Torneo de comunidades, enfrentamiento {enfrentamiento_id}, "
+                    f"partido {int(partido.indice)}"
+                ),
+            )
+            await canal.send(_mensaje_partido_comunidades(enfrentamiento, partido))
+            partido.canal_discord_id = int(canal.id)
+            session.commit()
+            canales_creados += 1
+        except Exception as exc:
+            session.rollback()
+            limpieza = ""
+            if canal is not None:
+                try:
+                    await canal.delete(reason="Fallo al materializar partido de comunidades")
+                except Exception as error_limpieza:
+                    limpieza = f"; no se pudo eliminar el canal huérfano ({error_limpieza})"
+            _error_materializacion_discord(
+                "FALLO_CREACION_CANAL",
+                f"Falló el canal del partido {int(partido.indice)} ({exc}){limpieza}.",
+            )
+
+    session.expire_all()
+    enfrentamiento = session.get(ComunidadesEnfrentamiento, enfrentamiento_id)
+    partidos = (
+        session.query(ComunidadesPartido)
+        .filter(ComunidadesPartido.enfrentamiento_id == enfrentamiento_id)
+        .order_by(ComunidadesPartido.indice)
+        .all()
+    )
+    if len(partidos) == 2 and all(partido.canal_discord_id is not None for partido in partidos):
+        enfrentamiento.estado = "PARTIDOS_CREADOS"
+        session.commit()
+
+    return ResultadoMaterializacionDiscordComunidades(
+        enfrentamiento_id=enfrentamiento_id,
+        partido_ids=(int(partidos[0].id), int(partidos[1].id)),
+        canal_ids=(int(partidos[0].canal_discord_id), int(partidos[1].canal_discord_id)),
+        canales_creados=canales_creados,
+    )
