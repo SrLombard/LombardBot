@@ -1,4 +1,4 @@
--- Esquema MySQL 8.0.16+ independiente para el torneo suizo por parejas y comunidades.
+-- Esquema compatible con MySQL 8.0.16+ y MariaDB 10.11+ para el torneo suizo por parejas y comunidades.
 -- No reutiliza ni referencia ninguna tabla suizo_*.
 --
 -- Invariantes que debe completar la capa de dominio, porque MySQL no puede
