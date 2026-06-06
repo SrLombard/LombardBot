@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS comunidades_equipo (
   CONSTRAINT fk_comunidades_equipo_comunidad_torneo
     FOREIGN KEY (comunidad_id, torneo_id)
     REFERENCES comunidades_comunidad(id, torneo_id)
-    ON DELETE RESTRICT
+    ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS comunidades_miembro (
@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS comunidades_enfrentamiento (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  CONSTRAINT uk_comunidades_enfrentamiento_id_torneo UNIQUE (id, torneo_id),
   CONSTRAINT uk_comunidades_enfrentamiento_ronda_mesa UNIQUE (ronda_id, mesa_numero),
   CONSTRAINT uk_comunidades_enfrentamiento_ronda_equipo_a UNIQUE (ronda_id, equipo_a_id),
   CONSTRAINT uk_comunidades_enfrentamiento_ronda_equipo_b UNIQUE (ronda_id, equipo_b_id),
@@ -187,13 +188,393 @@ CREATE TABLE IF NOT EXISTS comunidades_enfrentamiento (
   CONSTRAINT fk_comunidades_enfrentamiento_equipo_a_torneo
     FOREIGN KEY (equipo_a_id, torneo_id)
     REFERENCES comunidades_equipo(id, torneo_id)
-    ON DELETE RESTRICT,
+    ON DELETE CASCADE,
   CONSTRAINT fk_comunidades_enfrentamiento_equipo_b_torneo
     FOREIGN KEY (equipo_b_id, torneo_id)
     REFERENCES comunidades_equipo(id, torneo_id)
-    ON DELETE RESTRICT,
+    ON DELETE CASCADE,
   CONSTRAINT fk_comunidades_enfrentamiento_ganador_torneo
     FOREIGN KEY (ganador_equipo_id, torneo_id)
     REFERENCES comunidades_equipo(id, torneo_id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Configuración ordenada de categorías. El orden_alta se asigna al insertar y
+-- permite recorrer las categorías en el mismo orden en que se configuraron.
+CREATE TABLE IF NOT EXISTS comunidades_categoria_enfrentamiento (
+  id INT AUTO_INCREMENT,
+  torneo_id INT NOT NULL,
+  categoria_discord_id BIGINT NOT NULL,
+  orden_alta INT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_com_cat_enf_torneo_categoria UNIQUE (torneo_id, categoria_discord_id),
+  CONSTRAINT uk_com_cat_enf_torneo_orden UNIQUE (torneo_id, orden_alta),
+  CONSTRAINT ck_com_cat_enf_orden CHECK (orden_alta > 0),
+  CONSTRAINT fk_com_cat_enf_torneo
+    FOREIGN KEY (torneo_id) REFERENCES comunidades_torneo(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS comunidades_categoria_partido (
+  id INT AUTO_INCREMENT,
+  torneo_id INT NOT NULL,
+  categoria_discord_id BIGINT NOT NULL,
+  orden_alta INT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_com_cat_par_torneo_categoria UNIQUE (torneo_id, categoria_discord_id),
+  CONSTRAINT uk_com_cat_par_torneo_orden UNIQUE (torneo_id, orden_alta),
+  CONSTRAINT ck_com_cat_par_orden CHECK (orden_alta > 0),
+  CONSTRAINT fk_com_cat_par_torneo
+    FOREIGN KEY (torneo_id) REFERENCES comunidades_torneo(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS comunidades_eleccion_atacante (
+  id INT AUTO_INCREMENT,
+  torneo_id INT NOT NULL,
+  enfrentamiento_id INT NOT NULL,
+  equipo_id INT NOT NULL,
+  atacante_usuario_id INT NOT NULL,
+  defensor_usuario_id INT NOT NULL,
+  elegido_por_discord_id BIGINT NOT NULL,
+  elegido_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  bloqueada TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_com_eleccion_enfrentamiento_equipo
+    UNIQUE (enfrentamiento_id, equipo_id),
+  CONSTRAINT ck_com_eleccion_jugadores
+    CHECK (atacante_usuario_id <> defensor_usuario_id),
+  CONSTRAINT ck_com_eleccion_bloqueada CHECK (bloqueada IN (0, 1)),
+  KEY idx_com_eleccion_enfrentamiento_torneo (enfrentamiento_id, torneo_id),
+  KEY idx_com_eleccion_equipo_torneo (equipo_id, torneo_id),
+  KEY idx_com_eleccion_atacante (atacante_usuario_id),
+  KEY idx_com_eleccion_defensor (defensor_usuario_id),
+  CONSTRAINT fk_com_eleccion_enfrentamiento
+    FOREIGN KEY (enfrentamiento_id, torneo_id)
+    REFERENCES comunidades_enfrentamiento(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_eleccion_torneo
+    FOREIGN KEY (torneo_id) REFERENCES comunidades_torneo(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_eleccion_equipo_torneo
+    FOREIGN KEY (equipo_id, torneo_id)
+    REFERENCES comunidades_equipo(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_eleccion_atacante
+    FOREIGN KEY (atacante_usuario_id) REFERENCES usuarios(idUsuarios)
+    ON DELETE RESTRICT,
+  CONSTRAINT fk_com_eleccion_defensor
+    FOREIGN KEY (defensor_usuario_id) REFERENCES usuarios(idUsuarios)
     ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS comunidades_partido (
+  id INT AUTO_INCREMENT,
+  torneo_id INT NOT NULL,
+  enfrentamiento_id INT NOT NULL,
+  indice TINYINT UNSIGNED NOT NULL,
+  equipo_local_id INT NOT NULL,
+  equipo_visitante_id INT NOT NULL,
+  usuario_local_id INT NOT NULL,
+  usuario_visitante_id INT NOT NULL,
+  atacante_usuario_id INT NOT NULL,
+  defensor_usuario_id INT NOT NULL,
+  canal_discord_id BIGINT NULL,
+  partido_bloodbowl_id VARCHAR(45) NULL,
+  td_local INT NULL,
+  td_visitante INT NULL,
+  puntos_internos_local DECIMAL(8,2) NULL,
+  puntos_internos_visitante DECIMAL(8,2) NULL,
+  estado ENUM('PENDIENTE','EN_CURSO','FINALIZADO','ADMINISTRADO')
+    NOT NULL DEFAULT 'PENDIENTE',
+  resultado_origen ENUM('API','ADMIN') NULL,
+  tipo_forfait ENUM('LOCAL','VISITANTE','DOBLE') NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_com_partido_enfrentamiento_indice
+    UNIQUE (enfrentamiento_id, indice),
+  CONSTRAINT uk_com_partido_bloodbowl UNIQUE (partido_bloodbowl_id),
+  CONSTRAINT ck_com_partido_indice CHECK (indice IN (1, 2)),
+  CONSTRAINT ck_com_partido_equipos CHECK (equipo_local_id <> equipo_visitante_id),
+  CONSTRAINT ck_com_partido_usuarios CHECK (usuario_local_id <> usuario_visitante_id),
+  CONSTRAINT ck_com_partido_roles CHECK (atacante_usuario_id <> defensor_usuario_id),
+  CONSTRAINT ck_com_partido_td CHECK (
+    (td_local IS NULL AND td_visitante IS NULL)
+    OR (td_local >= 0 AND td_visitante >= 0)
+  ),
+  KEY idx_com_partido_enfrentamiento_torneo (enfrentamiento_id, torneo_id),
+  KEY idx_com_partido_equipo_local (equipo_local_id, torneo_id),
+  KEY idx_com_partido_equipo_visitante (equipo_visitante_id, torneo_id),
+  KEY idx_com_partido_usuario_local (usuario_local_id),
+  KEY idx_com_partido_usuario_visitante (usuario_visitante_id),
+  KEY idx_com_partido_atacante (atacante_usuario_id),
+  KEY idx_com_partido_defensor (defensor_usuario_id),
+  CONSTRAINT fk_com_partido_enfrentamiento
+    FOREIGN KEY (enfrentamiento_id, torneo_id)
+    REFERENCES comunidades_enfrentamiento(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_partido_torneo
+    FOREIGN KEY (torneo_id) REFERENCES comunidades_torneo(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_partido_equipo_local
+    FOREIGN KEY (equipo_local_id, torneo_id)
+    REFERENCES comunidades_equipo(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_partido_equipo_visitante
+    FOREIGN KEY (equipo_visitante_id, torneo_id)
+    REFERENCES comunidades_equipo(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_partido_usuario_local
+    FOREIGN KEY (usuario_local_id) REFERENCES usuarios(idUsuarios)
+    ON DELETE RESTRICT,
+  CONSTRAINT fk_com_partido_usuario_visitante
+    FOREIGN KEY (usuario_visitante_id) REFERENCES usuarios(idUsuarios)
+    ON DELETE RESTRICT,
+  CONSTRAINT fk_com_partido_atacante
+    FOREIGN KEY (atacante_usuario_id) REFERENCES usuarios(idUsuarios)
+    ON DELETE RESTRICT,
+  CONSTRAINT fk_com_partido_defensor
+    FOREIGN KEY (defensor_usuario_id) REFERENCES usuarios(idUsuarios)
+    ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+-- Copia inmutable desde la perspectiva del dominio: no contiene columnas que
+-- dependan de consultar el estado vivo del equipo al resolver el resultado.
+CREATE TABLE IF NOT EXISTS comunidades_fotografia_estado (
+  id INT AUTO_INCREMENT,
+  torneo_id INT NOT NULL,
+  ronda_id INT NOT NULL,
+  enfrentamiento_id INT NOT NULL,
+  equipo_id INT NOT NULL,
+  comunidad_id INT NOT NULL,
+  es_zombie TINYINT(1) NOT NULL,
+  estado_temporal ENUM('NEUTRO','CAZADOR','CAZADOR_Z','HERIDO') NOT NULL,
+  fotografiado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_com_foto_enfrentamiento_equipo
+    UNIQUE (enfrentamiento_id, equipo_id),
+  CONSTRAINT ck_com_foto_zombie CHECK (es_zombie IN (0, 1)),
+  KEY idx_com_foto_ronda_torneo (ronda_id, torneo_id),
+  KEY idx_com_foto_enfrentamiento (enfrentamiento_id),
+  KEY idx_com_foto_equipo_torneo (equipo_id, torneo_id),
+  KEY idx_com_foto_comunidad_torneo (comunidad_id, torneo_id),
+  CONSTRAINT fk_com_foto_ronda
+    FOREIGN KEY (ronda_id, torneo_id)
+    REFERENCES comunidades_ronda(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_foto_enfrentamiento
+    FOREIGN KEY (enfrentamiento_id, torneo_id)
+    REFERENCES comunidades_enfrentamiento(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_foto_torneo
+    FOREIGN KEY (torneo_id) REFERENCES comunidades_torneo(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_foto_equipo
+    FOREIGN KEY (equipo_id, torneo_id)
+    REFERENCES comunidades_equipo(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_foto_comunidad
+    FOREIGN KEY (comunidad_id, torneo_id)
+    REFERENCES comunidades_comunidad(id, torneo_id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS comunidades_historial_transicion (
+  id INT AUTO_INCREMENT,
+  torneo_id INT NOT NULL,
+  ronda_id INT NOT NULL,
+  enfrentamiento_id INT NULL,
+  equipo_id INT NOT NULL,
+  estado_temporal_anterior ENUM('NEUTRO','CAZADOR','CAZADOR_Z','HERIDO') NOT NULL,
+  es_zombie_anterior TINYINT(1) NOT NULL,
+  estado_temporal_posterior ENUM('NEUTRO','CAZADOR','CAZADOR_Z','HERIDO') NOT NULL,
+  es_zombie_posterior TINYINT(1) NOT NULL,
+  motivo ENUM(
+    'VICTORIA','DERROTA','EMPATE','BYE','ZOMBIFICACION','KILL',
+    'DOBLE_FORFAIT','TRANSFERENCIA'
+  ) NOT NULL,
+  puntos_comunitarios_generados DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  kills_generadas INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT ck_com_transicion_zombie_anterior CHECK (es_zombie_anterior IN (0, 1)),
+  CONSTRAINT ck_com_transicion_zombie_posterior CHECK (es_zombie_posterior IN (0, 1)),
+  CONSTRAINT ck_com_transicion_contadores CHECK (
+    puntos_comunitarios_generados >= 0 AND kills_generadas >= 0
+  ),
+  KEY idx_com_transicion_ronda_torneo (ronda_id, torneo_id),
+  KEY idx_com_transicion_enfrentamiento (enfrentamiento_id),
+  KEY idx_com_transicion_equipo_torneo (equipo_id, torneo_id),
+  CONSTRAINT fk_com_transicion_ronda
+    FOREIGN KEY (ronda_id, torneo_id)
+    REFERENCES comunidades_ronda(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_transicion_enfrentamiento
+    FOREIGN KEY (enfrentamiento_id, torneo_id)
+    REFERENCES comunidades_enfrentamiento(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_transicion_torneo
+    FOREIGN KEY (torneo_id) REFERENCES comunidades_torneo(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_transicion_equipo
+    FOREIGN KEY (equipo_id, torneo_id)
+    REFERENCES comunidades_equipo(id, torneo_id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Auditoría consolidada: ronda_id se conserva como dato histórico y no se
+-- enlaza con borrado en cascada a la fila regenerable de la ronda. La FK del
+-- torneo elimina el historial únicamente al borrar el torneo completo.
+CREATE TABLE IF NOT EXISTS comunidades_historial_transferencia (
+  id INT AUTO_INCREMENT,
+  torneo_id INT NOT NULL,
+  ronda_id INT NOT NULL,
+  comunidad_id INT NOT NULL,
+  equipo_origen_id INT NOT NULL,
+  equipo_destino_id INT NOT NULL,
+  tipo ENUM('CAZADOR','CAZADOR_Z') NOT NULL,
+  ejecutada_por_discord_id BIGINT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT ck_com_transferencia_equipos
+    CHECK (equipo_origen_id <> equipo_destino_id),
+  KEY idx_com_transferencia_ronda_torneo (ronda_id, torneo_id),
+  KEY idx_com_transferencia_comunidad_torneo (comunidad_id, torneo_id),
+  KEY idx_com_transferencia_origen (equipo_origen_id, torneo_id),
+  KEY idx_com_transferencia_destino (equipo_destino_id, torneo_id),
+  CONSTRAINT fk_com_transferencia_torneo
+    FOREIGN KEY (torneo_id) REFERENCES comunidades_torneo(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_transferencia_comunidad
+    FOREIGN KEY (comunidad_id, torneo_id)
+    REFERENCES comunidades_comunidad(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_transferencia_origen
+    FOREIGN KEY (equipo_origen_id, torneo_id)
+    REFERENCES comunidades_equipo(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_transferencia_destino
+    FOREIGN KEY (equipo_destino_id, torneo_id)
+    REFERENCES comunidades_equipo(id, torneo_id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Los snapshots contienen todos los valores necesarios para reproducir el
+-- orden publicado sin consultar estadísticas acumuladas actuales. ronda_id se
+-- conserva como dato histórico independiente de la fila regenerable.
+CREATE TABLE IF NOT EXISTS comunidades_snapshot_clasificacion_equipo (
+  id INT AUTO_INCREMENT,
+  torneo_id INT NOT NULL,
+  ronda_id INT NOT NULL,
+  equipo_id INT NOT NULL,
+  posicion INT NOT NULL,
+  puntos_clasificacion DECIMAL(10,2) NOT NULL,
+  buchholz_cut DECIMAL(10,2) NOT NULL,
+  puntos_enfrentamiento_directo DECIMAL(10,2) NULL,
+  td_favor INT NOT NULL,
+  td_contra INT NOT NULL,
+  partidos_jugados INT NOT NULL,
+  victorias INT NOT NULL,
+  empates INT NOT NULL,
+  derrotas INT NOT NULL,
+  cantidad_byes INT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_com_snap_equipo_ronda_equipo UNIQUE (ronda_id, equipo_id),
+  CONSTRAINT ck_com_snap_equipo_posicion CHECK (posicion > 0),
+  CONSTRAINT ck_com_snap_equipo_contadores CHECK (
+    td_favor >= 0 AND td_contra >= 0 AND partidos_jugados >= 0
+    AND victorias >= 0 AND empates >= 0 AND derrotas >= 0
+    AND cantidad_byes >= 0
+  ),
+  KEY idx_com_snap_equipo_torneo_ronda_posicion (torneo_id, ronda_id, posicion),
+  KEY idx_com_snap_equipo_equipo_torneo (equipo_id, torneo_id),
+  CONSTRAINT fk_com_snap_equipo_torneo
+    FOREIGN KEY (torneo_id) REFERENCES comunidades_torneo(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_snap_equipo_equipo
+    FOREIGN KEY (equipo_id, torneo_id)
+    REFERENCES comunidades_equipo(id, torneo_id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS comunidades_snapshot_clasificacion_comunidad (
+  id INT AUTO_INCREMENT,
+  torneo_id INT NOT NULL,
+  ronda_id INT NOT NULL,
+  comunidad_id INT NOT NULL,
+  posicion INT NOT NULL,
+  puntos_zombificaciones DECIMAL(10,2) NOT NULL,
+  zombies_matados INT NOT NULL,
+  suma_puntos_equipos DECIMAL(10,2) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_com_snap_comunidad_ronda_comunidad
+    UNIQUE (ronda_id, comunidad_id),
+  CONSTRAINT ck_com_snap_comunidad_posicion CHECK (posicion > 0),
+  CONSTRAINT ck_com_snap_comunidad_contadores CHECK (
+    puntos_zombificaciones >= 0 AND zombies_matados >= 0
+  ),
+  KEY idx_com_snap_com_torneo_ronda_posicion (torneo_id, ronda_id, posicion),
+  KEY idx_com_snap_com_comunidad_torneo (comunidad_id, torneo_id),
+  CONSTRAINT fk_com_snap_com_torneo
+    FOREIGN KEY (torneo_id) REFERENCES comunidades_torneo(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_snap_com_comunidad
+    FOREIGN KEY (comunidad_id, torneo_id)
+    REFERENCES comunidades_comunidad(id, torneo_id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Traza regenerable de las decisiones del algoritmo de emparejamiento. Puede
+-- registrar candidatos descartados, relajaciones y la selección final.
+CREATE TABLE IF NOT EXISTS comunidades_traza_emparejamiento (
+  id INT AUTO_INCREMENT,
+  torneo_id INT NOT NULL,
+  ronda_id INT NOT NULL,
+  secuencia INT NOT NULL,
+  etapa ENUM(
+    'BASE','PERMITIR_MIRRORS','PERMITIR_ESTADOS_NO_DESEADOS',
+    'PERMITIR_REPETIDOS','SELECCION_BYE','SELECCION_FINAL','CANCELACION'
+  ) NOT NULL,
+  equipo_a_id INT NULL,
+  equipo_b_id INT NULL,
+  diferencia_puntos DECIMAL(10,2) NULL,
+  es_mirror TINYINT(1) NULL,
+  es_rival_repetido TINYINT(1) NULL,
+  prioridad_estado INT NULL,
+  desempate_aleatorio DECIMAL(18,17) NULL,
+  detalle TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_com_traza_ronda_secuencia UNIQUE (ronda_id, secuencia),
+  CONSTRAINT ck_com_traza_secuencia CHECK (secuencia > 0),
+  CONSTRAINT ck_com_traza_equipos CHECK (
+    equipo_a_id IS NULL OR equipo_b_id IS NULL OR equipo_a_id <> equipo_b_id
+  ),
+  CONSTRAINT ck_com_traza_mirror CHECK (es_mirror IS NULL OR es_mirror IN (0, 1)),
+  CONSTRAINT ck_com_traza_repetido CHECK (
+    es_rival_repetido IS NULL OR es_rival_repetido IN (0, 1)
+  ),
+  KEY idx_com_traza_torneo_ronda_etapa (torneo_id, ronda_id, etapa),
+  KEY idx_com_traza_equipo_a (equipo_a_id, torneo_id),
+  KEY idx_com_traza_equipo_b (equipo_b_id, torneo_id),
+  CONSTRAINT fk_com_traza_ronda
+    FOREIGN KEY (ronda_id, torneo_id)
+    REFERENCES comunidades_ronda(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_traza_torneo
+    FOREIGN KEY (torneo_id) REFERENCES comunidades_torneo(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_traza_equipo_a
+    FOREIGN KEY (equipo_a_id, torneo_id)
+    REFERENCES comunidades_equipo(id, torneo_id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_com_traza_equipo_b
+    FOREIGN KEY (equipo_b_id, torneo_id)
+    REFERENCES comunidades_equipo(id, torneo_id)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB;
