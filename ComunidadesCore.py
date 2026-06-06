@@ -650,6 +650,364 @@ def _validar_salida_transicion(
 
 
 # ---------------------------------------------------------------------------
+# Emparejamientos de comunidades
+# ---------------------------------------------------------------------------
+
+PairingComunidades = dict[str, Any]
+TrazaPairingsComunidades = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class _EquipoPairing:
+    equipo_id: int
+    comunidad_id: int
+    puntos: Decimal
+    posicion: int
+    estado_temporal: EstadoTemporal
+    es_zombie: bool
+    cantidad_byes: int
+    razas: frozenset[str]
+
+
+_ETAPAS_PAIRING = (
+    ("BASE", False, False, 0),
+    ("PERMITIR_MIRRORS", True, False, 1),
+    ("PERMITIR_ESTADOS_NO_DESEADOS", True, True, 2),
+    ("PERMITIR_REPETIDOS", True, True, 3),
+)
+
+
+def _normalizar_raza(raza: object) -> str:
+    return " ".join(str(raza or "").strip().casefold().split())
+
+
+def _es_objetivo_caza(a: _EquipoPairing, b: _EquipoPairing) -> bool:
+    return (
+        a.estado_temporal is EstadoTemporal.CAZADOR
+        and b.estado_temporal is EstadoTemporal.HERIDO
+        and not b.es_zombie
+    ) or (
+        a.estado_temporal is EstadoTemporal.CAZADOR_Z
+        and b.estado_temporal is EstadoTemporal.HERIDO
+        and b.es_zombie
+    )
+
+
+def _prioridad_estado_pairing(a: _EquipoPairing, b: _EquipoPairing) -> int:
+    """Devuelve 0 para cazas prioritarias, 1 para neutros y 2 para fallback."""
+    if _es_objetivo_caza(a, b) or _es_objetivo_caza(b, a):
+        return 0
+    if (
+        a.estado_temporal is EstadoTemporal.NEUTRO
+        and b.estado_temporal is EstadoTemporal.NEUTRO
+    ):
+        return 1
+    return 2
+
+
+def _es_mirror_pairing(a: _EquipoPairing, b: _EquipoPairing) -> bool:
+    return bool(a.razas.intersection(b.razas))
+
+
+def generar_pairings_comunidades_backtracking(
+    session: Any,
+    torneo_id: int,
+    ronda_numero: int,
+    rng: Any = None,
+) -> tuple[list[PairingComunidades], TrazaPairingsComunidades]:
+    """Calcula una ronda completa sin persistirla.
+
+    La función devuelve ``(pairings, traza)``. Cada intento conserva como
+    restricciones absolutas la comunidad distinta y la solución completa, y
+    relaja en orden mirrors, estados no deseados y rivales repetidos. Si no hay
+    solución, ``pairings`` es una lista vacía y la traza contiene un error
+    estructurado con código ``SIN_SOLUCION_COMPLETA``.
+    """
+    import random
+
+    from GestorSQL import (
+        ComunidadesEnfrentamiento,
+        ComunidadesEquipo,
+        ComunidadesMiembro,
+        ComunidadesRonda,
+    )
+
+    if rng is None:
+        rng = random.Random()
+    if not hasattr(rng, "random"):
+        raise TypeError("rng debe proporcionar un método random()")
+    if ronda_numero < 1:
+        raise ValueError("ronda_numero debe ser mayor que cero")
+
+    clasificacion = calcular_clasificacion_equipos(
+        session, torneo_id, hasta_ronda=ronda_numero - 1
+    )
+    if not clasificacion:
+        return [], {
+            "nivel_fallback": None,
+            "etapa": "CANCELACION",
+            "intentos": [],
+            "error": {
+                "codigo": "SIN_EQUIPOS",
+                "detalle": "No hay equipos disponibles para emparejar.",
+            },
+        }
+
+    filas = {int(fila["equipo_id"]): fila for fila in clasificacion}
+    equipos_orm = (
+        session.query(ComunidadesEquipo)
+        .filter(ComunidadesEquipo.torneo_id == torneo_id)
+        .all()
+    )
+    razas_por_equipo: dict[int, set[str]] = {int(e.id): set() for e in equipos_orm}
+    for equipo_id, raza in (
+        session.query(ComunidadesMiembro.equipo_id, ComunidadesMiembro.raza)
+        .filter(ComunidadesMiembro.torneo_id == torneo_id)
+        .all()
+    ):
+        normalizada = _normalizar_raza(raza)
+        if normalizada:
+            razas_por_equipo.setdefault(int(equipo_id), set()).add(normalizada)
+
+    equipos: dict[int, _EquipoPairing] = {}
+    for equipo in equipos_orm:
+        fila = filas[int(equipo.id)]
+        equipos[int(equipo.id)] = _EquipoPairing(
+            equipo_id=int(equipo.id),
+            comunidad_id=int(equipo.comunidad_id),
+            puntos=_decimal(fila["puntos"]),
+            posicion=int(fila.get("posicion", len(filas))),
+            estado_temporal=EstadoTemporal(equipo.estado_temporal),
+            es_zombie=bool(equipo.es_zombie),
+            cantidad_byes=int(fila.get("cantidad_byes", equipo.cantidad_byes or 0)),
+            razas=frozenset(razas_por_equipo.get(int(equipo.id), set())),
+        )
+
+    historial = (
+        session.query(
+            ComunidadesEnfrentamiento.equipo_a_id,
+            ComunidadesEnfrentamiento.equipo_b_id,
+        )
+        .join(ComunidadesRonda, ComunidadesRonda.id == ComunidadesEnfrentamiento.ronda_id)
+        .filter(
+            ComunidadesEnfrentamiento.torneo_id == torneo_id,
+            ComunidadesRonda.numero < ronda_numero,
+        )
+        .all()
+    )
+    rivales_previos = {equipo_id: set() for equipo_id in equipos}
+    for equipo_a_id, equipo_b_id in historial:
+        a, b = int(equipo_a_id), int(equipo_b_id)
+        if a in rivales_previos and b in rivales_previos:
+            rivales_previos[a].add(b)
+            rivales_previos[b].add(a)
+
+    ids = tuple(equipos)
+    azar_pareja = {
+        frozenset((a, b)): rng.random()
+        for indice, a in enumerate(ids)
+        for b in ids[indice + 1 :]
+    }
+    azar_bye = {equipo_id: rng.random() for equipo_id in ids}
+
+    def ordenar_byes() -> list[Optional[int]]:
+        if len(ids) % 2 == 0:
+            return [None]
+        return sorted(
+            ids,
+            key=lambda equipo_id: (
+                equipos[equipo_id].estado_temporal is not EstadoTemporal.NEUTRO,
+                equipos[equipo_id].cantidad_byes > 0,
+                -equipos[equipo_id].posicion,
+                azar_bye[equipo_id],
+            ),
+        )
+
+    def resolver_etapa(
+        permite_mirror: bool,
+        permite_estados: bool,
+        permite_repetidos: bool,
+        bye_id: Optional[int],
+    ) -> tuple[Optional[list[tuple[int, int]]], int]:
+        pendientes_iniciales = tuple(e for e in ids if e != bye_id)
+        mejor: Optional[list[tuple[int, int]]] = None
+        mejor_coste: Optional[tuple[Any, ...]] = None
+        exploradas = 0
+
+        def backtrack(
+            pendientes: tuple[int, ...],
+            parejas: list[tuple[int, int]],
+            estados_no_deseados: int,
+            diferencia_puntos: Decimal,
+            mirrors: int,
+            azar_total: float,
+        ) -> None:
+            nonlocal mejor, mejor_coste, exploradas
+            if not pendientes:
+                exploradas += 1
+                coste = (
+                    estados_no_deseados,
+                    diferencia_puntos,
+                    mirrors,
+                    azar_total,
+                )
+                if mejor_coste is None or coste < mejor_coste:
+                    mejor_coste = coste
+                    mejor = list(parejas)
+                return
+
+            # Elegir primero el equipo más restringido reduce drásticamente la
+            # búsqueda sin convertir el orden de clasificación en una regla.
+            def cantidad_candidatos(equipo_id: int) -> int:
+                equipo = equipos[equipo_id]
+                return sum(
+                    equipos[otro].comunidad_id != equipo.comunidad_id
+                    for otro in pendientes
+                    if otro != equipo_id
+                )
+
+            a_id = min(
+                pendientes,
+                key=lambda equipo_id: (
+                    cantidad_candidatos(equipo_id),
+                    equipos[equipo_id].estado_temporal is EstadoTemporal.NEUTRO,
+                    equipos[equipo_id].posicion,
+                    equipo_id,
+                ),
+            )
+            a = equipos[a_id]
+            resto = tuple(e for e in pendientes if e != a_id)
+            candidatos = []
+            for b_id in resto:
+                b = equipos[b_id]
+                if a.comunidad_id == b.comunidad_id:
+                    continue
+                repetido = b_id in rivales_previos[a_id]
+                if repetido and not permite_repetidos:
+                    continue
+                prioridad = _prioridad_estado_pairing(a, b)
+                if prioridad == 2 and not permite_estados:
+                    continue
+                mirror = _es_mirror_pairing(a, b)
+                if mirror and not permite_mirror:
+                    continue
+                candidatos.append(
+                    (
+                        prioridad,
+                        abs(a.puntos - b.puntos),
+                        mirror,
+                        azar_pareja[frozenset((a_id, b_id))],
+                        b_id,
+                    )
+                )
+            candidatos.sort(key=lambda candidato: candidato[:-1])
+
+            for prioridad, diferencia, mirror, azar, b_id in candidatos:
+                nuevo_no_deseado = estados_no_deseados + (prioridad == 2)
+                nueva_diferencia = diferencia_puntos + diferencia
+                nuevos_mirrors = mirrors + int(mirror)
+                coste_parcial = (
+                    nuevo_no_deseado,
+                    nueva_diferencia,
+                    nuevos_mirrors,
+                    azar_total + azar,
+                )
+                if mejor_coste is not None and coste_parcial >= mejor_coste:
+                    continue
+                parejas.append((a_id, b_id))
+                backtrack(
+                    tuple(e for e in resto if e != b_id),
+                    parejas,
+                    nuevo_no_deseado,
+                    nueva_diferencia,
+                    nuevos_mirrors,
+                    azar_total + azar,
+                )
+                parejas.pop()
+
+        backtrack(pendientes_iniciales, [], 0, Decimal("0"), 0, 0.0)
+        return mejor, exploradas
+
+    intentos: list[dict[str, Any]] = []
+    # El orden del bye es una prioridad propia y absoluta: para cada candidato
+    # se agotan los fallbacks de emparejamiento antes de considerar el siguiente.
+    for bye_id in ordenar_byes():
+        for etapa, permite_mirror, permite_estados, nivel in _ETAPAS_PAIRING:
+            permite_repetidos = etapa == "PERMITIR_REPETIDOS"
+            solucion, soluciones_exploradas = resolver_etapa(
+                permite_mirror,
+                permite_estados,
+                permite_repetidos,
+                bye_id,
+            )
+            intento = {
+                "etapa": etapa,
+                "nivel_fallback": nivel,
+                "bye_equipo_id": bye_id,
+                "permite_mirrors": permite_mirror,
+                "permite_estados_no_deseados": permite_estados,
+                "permite_repetidos": permite_repetidos,
+                "soluciones_completas_exploradas": soluciones_exploradas,
+                "encontrada": solucion is not None,
+            }
+            intentos.append(intento)
+            if solucion is None:
+                continue
+
+            pairings: list[PairingComunidades] = []
+            for mesa, (a_id, b_id) in enumerate(solucion, start=1):
+                a, b = equipos[a_id], equipos[b_id]
+                pairings.append(
+                    {
+                        "mesa_numero": mesa,
+                        "equipo_a_id": a_id,
+                        "equipo_b_id": b_id,
+                        "es_bye": False,
+                        "diferencia_puntos": abs(a.puntos - b.puntos),
+                        "prioridad_estado": _prioridad_estado_pairing(a, b),
+                        "es_mirror": _es_mirror_pairing(a, b),
+                        "es_rival_repetido": b_id in rivales_previos[a_id],
+                    }
+                )
+            if bye_id is not None:
+                pairings.append(
+                    {
+                        "mesa_numero": len(pairings) + 1,
+                        "equipo_a_id": bye_id,
+                        "equipo_b_id": None,
+                        "es_bye": True,
+                        "diferencia_puntos": None,
+                        "prioridad_estado": None,
+                        "es_mirror": False,
+                        "es_rival_repetido": False,
+                    }
+                )
+            return pairings, {
+                "nivel_fallback": nivel,
+                "etapa": etapa,
+                "intentos": intentos,
+                "error": None,
+            }
+
+    return [], {
+        "nivel_fallback": None,
+        "etapa": "CANCELACION",
+        "intentos": intentos,
+        "error": {
+            "codigo": "SIN_SOLUCION_COMPLETA",
+            "detalle": (
+                "No existe una ronda completa sin enfrentar equipos de la "
+                "misma comunidad."
+            ),
+        },
+    }
+
+
+# Alias legible para consumidores que prefieran el orden verbo-ámbito-técnica.
+generar_pairings_backtracking_comunidades = generar_pairings_comunidades_backtracking
+
+
+# ---------------------------------------------------------------------------
 # Clasificaciones acumuladas
 # ---------------------------------------------------------------------------
 
