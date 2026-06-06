@@ -1,14 +1,15 @@
-"""Cálculos puros de resultados para enfrentamientos de comunidades.
+"""Cálculos de resultados y clasificaciones del torneo de comunidades.
 
-Este módulo no conoce SQLAlchemy, Discord ni estados del torneo. Todos los
-marcadores se expresan desde la perspectiva estable de los equipos A y B del
-enfrentamiento, independientemente de quién figure como local en Blood Bowl.
+La resolución de marcadores y estados se mantiene pura. Las funciones de
+clasificación consultan los modelos propios de comunidades mediante la sesión
+recibida, sin depender de los modelos del torneo suizo individual.
 """
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from enum import Enum
-from typing import Iterable
+from functools import cmp_to_key
+from typing import Any, Iterable, Optional
 
 from ComunidadesConstantes import (
     ESTADO_TEMPORAL_CAZADOR,
@@ -646,3 +647,334 @@ def _validar_salida_transicion(
         raise AssertionError("el punto de zombificación no coincide con la fotografía")
     if (transicion.kill == efecto_esperado) != kill_esperada:
         raise AssertionError("la kill no coincide con la fotografía")
+
+
+# ---------------------------------------------------------------------------
+# Clasificaciones acumuladas
+# ---------------------------------------------------------------------------
+
+FilaClasificacion = dict[str, Any]
+
+
+def _decimal(valor: Any) -> Decimal:
+    """Normaliza valores numéricos de ORM/diccionarios sin perder precisión."""
+    if isinstance(valor, Decimal):
+        return valor
+    return Decimal(str(valor or 0))
+
+
+def _valor(registro: Any, campo: str, default: Any = None) -> Any:
+    if isinstance(registro, dict):
+        return registro.get(campo, default)
+    return getattr(registro, campo, default)
+
+
+def calcular_h2h_equipos(
+    clasificacion: list[FilaClasificacion],
+    enfrentamientos_cerrados: Iterable[Any],
+) -> dict[int, Optional[Decimal]]:
+    """Calcula el enfrentamiento directo dentro de cada empate a puntos.
+
+    Un equipo solo recibe valor si disputó al menos un enfrentamiento real
+    contra otro integrante de su grupo empatado. Los byes no se representan
+    como enfrentamientos y, por tanto, nunca participan en este cálculo.
+    """
+    h2h: dict[int, Optional[Decimal]] = {
+        int(fila["equipo_id"]): None for fila in clasificacion
+    }
+    empatados: dict[Decimal, list[int]] = {}
+    for fila in clasificacion:
+        empatados.setdefault(_decimal(fila.get("puntos")), []).append(
+            int(fila["equipo_id"])
+        )
+
+    for equipos in empatados.values():
+        if len(equipos) < 2:
+            continue
+        conjunto = set(equipos)
+        acumulado = {equipo_id: Decimal("0") for equipo_id in equipos}
+        aplicable = {equipo_id: False for equipo_id in equipos}
+
+        for enfrentamiento in enfrentamientos_cerrados:
+            equipo_a_id = _valor(enfrentamiento, "equipo_a_id")
+            equipo_b_id = _valor(enfrentamiento, "equipo_b_id")
+            if equipo_a_id is None or equipo_b_id is None:
+                continue
+            equipo_a_id = int(equipo_a_id)
+            equipo_b_id = int(equipo_b_id)
+            if equipo_a_id not in conjunto or equipo_b_id not in conjunto:
+                continue
+
+            acumulado[equipo_a_id] += _decimal(
+                _valor(enfrentamiento, "puntos_clasificacion_a")
+            )
+            acumulado[equipo_b_id] += _decimal(
+                _valor(enfrentamiento, "puntos_clasificacion_b")
+            )
+            aplicable[equipo_a_id] = True
+            aplicable[equipo_b_id] = True
+
+        for equipo_id in equipos:
+            if aplicable[equipo_id]:
+                h2h[equipo_id] = acumulado[equipo_id]
+
+    return h2h
+
+
+def ordenar_clasificacion_equipos(
+    clasificacion: list[FilaClasificacion],
+) -> list[FilaClasificacion]:
+    """Ordena la clasificación publicada y asigna posiciones consecutivas.
+
+    El ID es exclusivamente el último desempate determinista de esta
+    clasificación publicada. No debe reutilizarse como desempate de pairing.
+    """
+
+    def comparar(a: FilaClasificacion, b: FilaClasificacion) -> int:
+        for campo in ("puntos", "buchholz_cut"):
+            valor_a = _decimal(a.get(campo))
+            valor_b = _decimal(b.get(campo))
+            if valor_a != valor_b:
+                return -1 if valor_a > valor_b else 1
+
+        h2h_a = a.get("h2h_valor")
+        h2h_b = b.get("h2h_valor")
+        if h2h_a is not None and h2h_b is not None:
+            valor_a = _decimal(h2h_a)
+            valor_b = _decimal(h2h_b)
+            if valor_a != valor_b:
+                return -1 if valor_a > valor_b else 1
+
+        diferencia_a = int(a.get("diferencia_td") or 0)
+        diferencia_b = int(b.get("diferencia_td") or 0)
+        if diferencia_a != diferencia_b:
+            return -1 if diferencia_a > diferencia_b else 1
+
+        equipo_a = int(a["equipo_id"])
+        equipo_b = int(b["equipo_id"])
+        if equipo_a != equipo_b:
+            return -1 if equipo_a < equipo_b else 1
+        return 0
+
+    ordenada = sorted(clasificacion, key=cmp_to_key(comparar))
+    for posicion, fila in enumerate(ordenada, start=1):
+        fila["posicion"] = posicion
+    return ordenada
+
+
+def calcular_clasificacion_equipos(
+    session: Any,
+    torneo_id: int,
+    hasta_ronda: Optional[int] = None,
+) -> list[FilaClasificacion]:
+    """Calcula estadísticas y desempates actuales de todos los equipos.
+
+    Solo cuentan enfrentamientos ``CERRADO`` o ``ADMINISTRADO``. Los byes se
+    reconstruyen desde las transiciones con motivo ``BYE``: suman la
+    puntuación configurada y el contador de byes, pero no PJ, PG, PE ni PP,
+    no añaden TD, rival, Buchholz directo ni H2H.
+    """
+    from GestorSQL import (
+        ComunidadesEnfrentamiento,
+        ComunidadesEquipo,
+        ComunidadesHistorialTransicion,
+        ComunidadesRonda,
+        ComunidadesTorneo,
+    )
+
+    torneo = (
+        session.query(ComunidadesTorneo)
+        .filter(ComunidadesTorneo.id == torneo_id)
+        .one_or_none()
+    )
+    if torneo is None:
+        return []
+
+    equipos = (
+        session.query(ComunidadesEquipo)
+        .filter(ComunidadesEquipo.torneo_id == torneo_id)
+        .all()
+    )
+    filas: dict[int, FilaClasificacion] = {}
+    rivales: dict[int, list[int]] = {}
+    for equipo in equipos:
+        filas[equipo.id] = {
+            "equipo_id": int(equipo.id),
+            "comunidad_id": int(equipo.comunidad_id),
+            "nombre": equipo.nombre,
+            "pj": 0,
+            "pg": 0,
+            "pe": 0,
+            "pp": 0,
+            "cantidad_byes": 0,
+            "puntos": Decimal("0"),
+            "td_favor": 0,
+            "td_contra": 0,
+            "diferencia_td": 0,
+            "buchholz_cut": Decimal("0"),
+            "h2h_valor": None,
+        }
+        rivales[equipo.id] = []
+
+    consulta = (
+        session.query(ComunidadesEnfrentamiento)
+        .join(ComunidadesRonda, ComunidadesRonda.id == ComunidadesEnfrentamiento.ronda_id)
+        .filter(
+            ComunidadesEnfrentamiento.torneo_id == torneo_id,
+            ComunidadesEnfrentamiento.estado.in_(["CERRADO", "ADMINISTRADO"]),
+        )
+    )
+    if hasta_ronda is not None:
+        consulta = consulta.filter(ComunidadesRonda.numero <= hasta_ronda)
+    enfrentamientos = consulta.all()
+
+    for enfrentamiento in enfrentamientos:
+        equipo_a_id = int(enfrentamiento.equipo_a_id)
+        equipo_b_id = int(enfrentamiento.equipo_b_id)
+        if equipo_a_id not in filas or equipo_b_id not in filas:
+            continue
+        fila_a = filas[equipo_a_id]
+        fila_b = filas[equipo_b_id]
+        fila_a["pj"] += 1
+        fila_b["pj"] += 1
+        fila_a["puntos"] += _decimal(enfrentamiento.puntos_clasificacion_a)
+        fila_b["puntos"] += _decimal(enfrentamiento.puntos_clasificacion_b)
+        fila_a["td_favor"] += int(enfrentamiento.td_favor_a or 0)
+        fila_a["td_contra"] += int(enfrentamiento.td_contra_a or 0)
+        fila_b["td_favor"] += int(enfrentamiento.td_favor_b or 0)
+        fila_b["td_contra"] += int(enfrentamiento.td_contra_b or 0)
+        rivales[equipo_a_id].append(equipo_b_id)
+        rivales[equipo_b_id].append(equipo_a_id)
+
+        ganador_id = enfrentamiento.ganador_equipo_id
+        if ganador_id is None:
+            fila_a["pe"] += 1
+            fila_b["pe"] += 1
+        elif int(ganador_id) == equipo_a_id:
+            fila_a["pg"] += 1
+            fila_b["pp"] += 1
+        elif int(ganador_id) == equipo_b_id:
+            fila_b["pg"] += 1
+            fila_a["pp"] += 1
+
+    consulta_byes = (
+        session.query(ComunidadesHistorialTransicion)
+        .join(ComunidadesRonda, ComunidadesRonda.id == ComunidadesHistorialTransicion.ronda_id)
+        .filter(
+            ComunidadesHistorialTransicion.torneo_id == torneo_id,
+            ComunidadesHistorialTransicion.motivo == "BYE",
+        )
+    )
+    if hasta_ronda is not None:
+        consulta_byes = consulta_byes.filter(ComunidadesRonda.numero <= hasta_ronda)
+    for transicion in consulta_byes.all():
+        equipo_id = int(transicion.equipo_id)
+        if equipo_id in filas:
+            filas[equipo_id]["cantidad_byes"] += 1
+            filas[equipo_id]["puntos"] += _decimal(
+                torneo.puntos_clasificacion_bye
+            )
+
+    for equipo_id, fila in filas.items():
+        fila["diferencia_td"] = fila["td_favor"] - fila["td_contra"]
+        puntos_rivales = [filas[rival]["puntos"] for rival in rivales[equipo_id]]
+        if len(puntos_rivales) >= 2:
+            fila["buchholz_cut"] = sum(
+                puntos_rivales, Decimal("0")
+            ) - min(puntos_rivales)
+
+    clasificacion = list(filas.values())
+    h2h = calcular_h2h_equipos(clasificacion, enfrentamientos)
+    for fila in clasificacion:
+        fila["h2h_valor"] = h2h[fila["equipo_id"]]
+    return ordenar_clasificacion_equipos(clasificacion)
+
+
+def calcular_clasificacion_comunidades(
+    session: Any,
+    torneo_id: int,
+    hasta_ronda: Optional[int] = None,
+    clasificacion_equipos: Optional[list[FilaClasificacion]] = None,
+) -> list[FilaClasificacion]:
+    """Calcula la clasificación comunitaria con posiciones compartidas."""
+    from GestorSQL import (
+        ComunidadesComunidad,
+        ComunidadesEquipo,
+        ComunidadesHistorialTransicion,
+        ComunidadesRonda,
+    )
+
+    comunidades = (
+        session.query(ComunidadesComunidad)
+        .filter(ComunidadesComunidad.torneo_id == torneo_id)
+        .all()
+    )
+    if not comunidades:
+        return []
+
+    if clasificacion_equipos is None:
+        clasificacion_equipos = calcular_clasificacion_equipos(
+            session, torneo_id, hasta_ronda
+        )
+
+    filas: dict[int, FilaClasificacion] = {
+        comunidad.id: {
+            "comunidad_id": int(comunidad.id),
+            "nombre": comunidad.nombre,
+            "puntos_zombificaciones": Decimal("0"),
+            "zombies_matados": 0,
+            "suma_puntos_equipos": Decimal("0"),
+        }
+        for comunidad in comunidades
+    }
+    for equipo in clasificacion_equipos:
+        comunidad_id = int(equipo["comunidad_id"])
+        if comunidad_id in filas:
+            filas[comunidad_id]["suma_puntos_equipos"] += _decimal(
+                equipo.get("puntos")
+            )
+
+    consulta = (
+        session.query(ComunidadesHistorialTransicion, ComunidadesEquipo.comunidad_id)
+        .join(
+            ComunidadesEquipo,
+            (ComunidadesEquipo.id == ComunidadesHistorialTransicion.equipo_id)
+            & (ComunidadesEquipo.torneo_id == ComunidadesHistorialTransicion.torneo_id),
+        )
+        .join(ComunidadesRonda, ComunidadesRonda.id == ComunidadesHistorialTransicion.ronda_id)
+        .filter(ComunidadesHistorialTransicion.torneo_id == torneo_id)
+    )
+    if hasta_ronda is not None:
+        consulta = consulta.filter(ComunidadesRonda.numero <= hasta_ronda)
+    for transicion, comunidad_id in consulta.all():
+        comunidad_id = int(comunidad_id)
+        if comunidad_id not in filas:
+            continue
+        filas[comunidad_id]["puntos_zombificaciones"] += _decimal(
+            transicion.puntos_comunitarios_generados
+        )
+        filas[comunidad_id]["zombies_matados"] += int(
+            transicion.kills_generadas or 0
+        )
+
+    ordenada = sorted(
+        filas.values(),
+        key=lambda fila: (
+            -fila["puntos_zombificaciones"],
+            -fila["zombies_matados"],
+            -fila["suma_puntos_equipos"],
+            fila["comunidad_id"],
+        ),
+    )
+    criterio_anterior: Optional[tuple[Decimal, int, Decimal]] = None
+    for indice, fila in enumerate(ordenada, start=1):
+        criterio = (
+            fila["puntos_zombificaciones"],
+            fila["zombies_matados"],
+            fila["suma_puntos_equipos"],
+        )
+        if criterio != criterio_anterior:
+            posicion = indice
+            criterio_anterior = criterio
+        fila["posicion"] = posicion
+    return ordenada
