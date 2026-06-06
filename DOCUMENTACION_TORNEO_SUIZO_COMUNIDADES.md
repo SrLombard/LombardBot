@@ -105,7 +105,8 @@ Debe almacenar:
 - ID del canal hub.
 - Puntos de clasificación por victoria, empate, derrota y bye.
 - Puntos internos de partido individual por victoria, empate y derrota.
-- Mensajes configurables para rondas y canales, si se reutiliza ese mecanismo del suizo actual.
+- Plantilla configurable del mensaje inicial para los canales de la ronda 1.
+- Plantilla configurable de los mensajes posteriores para los canales de las rondas 2 y siguientes.
 - Usuario Discord creador y marcas de tiempo.
 
 El formato individual siempre es BO1 y cada enfrentamiento siempre tiene dos partidos, por lo que no hacen falta opciones BO3/BO5 ni ida/vuelta.
@@ -282,31 +283,33 @@ Los datos de Blood Bowl se completarán manualmente antes del primer partido. La
 
 ### 5.2. Razas válidas
 
-La lista es fija y compartida por todos los torneos de comunidades. Los comandos deben exigir exactamente uno de estos nombres:
+La lista es fija y compartida por todos los torneos de comunidades. Los comandos deben exigir exactamente uno de estos nombres. Cada nombre canónico se vincula directamente con `Iconos/<nombre canónico>.png`:
 
-- `Alianza V. Mundo`
-- `Amazonas`
-- `Caos Elegido`
-- `Elfos Oscuros`
-- `Elfos Silvanos`
-- `Enanos del Caos`
-- `Enanos`
-- `Hombres Lagarto`
-- `Horror Nigromantico`
-- `Humanos`
-- `Inframundo`
-- `Khorne`
-- `No muertos`
-- `Nobleza Imperial`
-- `Nordicos`
-- `Nurgle`
-- `Orcos negros`
-- `Orcos`
-- `Renegados`
-- `Skaven`
-- `Stunty`
-- `Union Elfica`
-- `Vampiros`
+- `Alianza V. Mundo` → `Iconos/Alianza V. Mundo.png`
+- `Amazonas` → `Iconos/Amazonas.png`
+- `Caos Elegido` → `Iconos/Caos Elegido.png`
+- `Elfos Oscuros` → `Iconos/Elfos Oscuros.png`
+- `Elfos Silvanos` → `Iconos/Elfos Silvanos.png`
+- `Enanos del Caos` → `Iconos/Enanos del Caos.png`
+- `Enanos` → `Iconos/Enanos.png`
+- `Hombres Lagarto` → `Iconos/Hombres Lagarto.png`
+- `Horror Nigromantico` → `Iconos/Horror Nigromantico.png`
+- `Humanos` → `Iconos/Humanos.png`
+- `Inframundo` → `Iconos/Inframundo.png`
+- `Khorne` → `Iconos/Khorne.png`
+- `No muertos` → `Iconos/No muertos.png`
+- `Nobleza Imperial` → `Iconos/Nobleza Imperial.png`
+- `Nordicos` → `Iconos/Nordicos.png`
+- `Nurgle` → `Iconos/Nurgle.png`
+- `Orcos negros` → `Iconos/Orcos negros.png`
+- `Orcos` → `Iconos/Orcos.png`
+- `Renegados` → `Iconos/Renegados.png`
+- `Skaven` → `Iconos/Skaven.png`
+- `Stunty` → `Iconos/Stunty.png`
+- `Union Elfica` → `Iconos/Union Elfica.png`
+- `Vampiros` → `Iconos/Vampiros.png`
+
+No existen aliases de recursos gráficos: los archivos con erratas, variantes o acentos distintos del nombre canónico no se utilizan, aunque permanezcan temporalmente en el repositorio. En particular, `Iconos/Elfo Osucros.png` y `Iconos/Unión Élfica.png` quedan obsoletos para este formato. La implementación debe usar `Iconos/Elfos Oscuros.png` e `Iconos/Union Elfica.png`.
 
 No se normalizan variantes, acentos ni errores ortográficos. Las razas quedan fijadas al inscribir el equipo. Los dos miembros de una pareja pueden utilizar la misma raza.
 
@@ -333,9 +336,17 @@ Argumentos:
 5. días por ronda;
 6. canal hub ID.
 
-El torneo se crea en estado `CREADO`. El ID de competición de Blood Bowl debe quedar configurable en su tabla o mediante un comando administrativo específico durante la implementación.
+El torneo se crea en estado `CREADO`. La creación no exige informar todavía el ID de competición de Blood Bowl.
 
-### 6.2. Configurar puntuación de clasificación
+### 6.2. Configurar competición de Blood Bowl
+
+```text
+!comunidades_set_competicion <torneo_id> <idCompBbowl>
+```
+
+El comando guarda o reemplaza el ID de competición de Blood Bowl del torneo. Solo puede ejecutarse cuando el torneo está en estado `CREADO`; una vez iniciada la ronda 1, el valor queda bloqueado y cualquier intento de cambio debe rechazarse sin modificarlo. No se contempla la edición manual de este dato como flujo operativo ordinario.
+
+### 6.3. Configurar puntuación de clasificación
 
 ```text
 !comunidades_set_puntos_equipo <torneo_id> <win> <draw> <loss> <bye>
@@ -349,7 +360,7 @@ Ejemplo:
 
 Estos valores se otorgan al equipo por el resultado global del enfrentamiento. El bye es configurable.
 
-### 6.3. Configurar puntuación interna individual
+### 6.4. Configurar puntuación interna individual
 
 ```text
 !comunidades_set_puntos_individuales <torneo_id> <win> <draw> <loss>
@@ -363,7 +374,7 @@ Ejemplo:
 
 Estos valores solo se suman para decidir qué equipo ganó el enfrentamiento. No se publican como puntos de clasificación individual.
 
-### 6.4. Añadir comunidad
+### 6.5. Añadir comunidad
 
 ```text
 !comunidades_add_comunidad <torneo_id> <nombre>
@@ -379,7 +390,7 @@ Ejemplos:
 
 Solo se permite antes de generar la ronda 1. Desde ese momento, la lista queda congelada.
 
-### 6.5. Añadir categorías de partidos
+### 6.6. Añadir categorías de partidos
 
 ```text
 !comunidades_add_categoria_partidos <torneo_id> <categoria_id>
@@ -387,7 +398,7 @@ Solo se permite antes de generar la ronda 1. Desde ese momento, la lista queda c
 
 Pueden añadirse varias. Se prueban en el orden de alta.
 
-### 6.6. Añadir categorías de enfrentamientos
+### 6.7. Añadir categorías de enfrentamientos
 
 ```text
 !comunidades_add_categoria_enfrentamientos <torneo_id> <categoria_id>
@@ -397,7 +408,7 @@ Pueden añadirse varias. Se prueban en el orden de alta.
 
 No se necesitan comandos para consultar, eliminar o reordenar categorías; una corrección excepcional se hará manualmente en base de datos.
 
-### 6.7. Añadir equipo
+### 6.8. Añadir equipo
 
 ```text
 !comunidades_add_equipo <torneo_id> "<nombre_equipo>" <comunidad> <@jugador1> "<raza1>" <@jugador2> "<raza2>"
@@ -411,7 +422,7 @@ Ejemplo:
 
 Debe validar todas las invariantes de inscripción y crear en `usuarios` a los miembros inexistentes.
 
-### 6.8. Generar y regenerar ronda
+### 6.9. Generar y regenerar ronda
 
 ```text
 !comunidades_generar_ronda <torneo_id> <ronda>
@@ -432,7 +443,7 @@ La regeneración elimina inmediatamente todo lo derivado de la ronda:
 
 No elimina publicaciones del foro ni mensajes anteriores del canal hub.
 
-### 6.9. Actualizar desde la API
+### 6.10. Actualizar desde la API
 
 ```text
 !comunidades_actualizar <torneo_id>
@@ -441,7 +452,7 @@ No elimina publicaciones del foro ni mensajes anteriores del canal hub.
 
 Debe reutilizar conceptualmente el flujo del suizo actual para localizar partidos por `id_bloodbowl`, guardar resultados, publicar imágenes y cerrar partidos. La opción `1` puede procesar todos los partidos encontrados en una pasada.
 
-### 6.10. Administrar un partido individual
+### 6.11. Administrar un partido individual
 
 Debe existir un comando equivalente a:
 
@@ -461,19 +472,23 @@ Los resultados administrativos se procesan como resultados reales y pueden produ
 
 No habrá un comando para imponer directamente un resultado global: se administran los dos partidos individuales y el cierre del segundo dispara la resolución normal del enfrentamiento.
 
-### 6.11. Forzar la creación de partidos
+### 6.12. Forzar la creación de partidos
 
 Debe existir un comando administrativo equivalente a:
 
 ```text
-!comunidades_forzar_crear_partidos <torneo_id> <ronda> <enfrentamiento>
+!comunidades_forzar_crear_partidos <torneo_id> <ronda> <enfrentamiento> <@atacante_equipo_a> <@atacante_equipo_b>
 ```
 
-Su función es desbloquear administrativamente un enfrentamiento cuando falta alguna selección tras el plazo indicado. El comando debe forzar o completar la asignación necesaria de atacante y defensor, crear ambos partidos y sus canales, y dejar que los comisarios administren después cada partido por separado.
+Los argumentos de atacante son siempre obligatorios, incluso si uno o ambos equipos ya habían registrado una elección. `equipo_a` y `equipo_b` son, respectivamente, los lados A y B almacenados en el enfrentamiento indicado; no dependen del orden en que se escriban las menciones ni de quién hubiera elegido previamente.
 
-La regla operativa comunicada a los jugadores será que deben elegir atacante en un plazo de 24 horas. No se requiere automatización del vencimiento.
+Antes de modificar datos, el comando debe validar que el torneo, la ronda y el enfrentamiento existen, que el enfrentamiento admite todavía la creación de partidos, que cada atacante indicado pertenece al equipo de su lado y que los dos partidos y sus canales pueden crearse. Si una elección previa existe, se reemplaza por la indicada en el comando. El defensor de cada equipo se deriva obligatoriamente como el otro miembro de la pareja; no se recibe como argumento.
 
-### 6.12. Consultar elecciones secretas
+Tras superar todas las validaciones, el comando reemplaza ambas elecciones, las bloquea, crea los dos partidos y crea sus dos canales. La operación es atómica desde el punto de vista funcional: si falla una validación o cualquier parte de la creación, no se conserva ninguna elección reemplazada, partido ni canal nuevo. La implementación debe revertir los cambios de base de datos y eliminar cualquier canal que hubiera alcanzado a crear antes del fallo.
+
+El comando deja los dos partidos disponibles para que los comisarios los administren después por separado. La regla operativa comunicada a los jugadores será que deben elegir atacante en un plazo de 24 horas. No se requiere automatización del vencimiento y el comando no calcula ni valida que hayan transcurrido las 24 horas: el comisario decide cuándo procede aplicar el forzado.
+
+### 6.13. Consultar elecciones secretas
 
 ```text
 !comunidades_consulta_elecciones <torneo_id> <ronda>
@@ -619,7 +634,14 @@ Si tiene 40 canales, se prueba la siguiente categoría según orden de alta. Si 
 
 ### 9.2. Contenido del canal general
 
-Debe explicar:
+Los mensajes de los canales son configurables por torneo mediante dos campos de texto obligatorios en la tabla del torneo, con los nombres `mensajeInicial` y `mensajesSubsiguientes`:
+
+- `mensajeInicial` se utiliza en los canales creados para la ronda 1;
+- `mensajesSubsiguientes` se utiliza en los canales creados para las rondas 2 y siguientes.
+
+En la v1 no habrá comandos para editar estos campos: su alta y modificación se realizarán directamente en base de datos. El texto exacto no queda hardcodeado en el bot. Si las plantillas contienen marcadores, la implementación solo podrá sustituir los marcadores admitidos expresamente por el contrato técnico correspondiente.
+
+El mensaje resultante del canal general debe explicar:
 
 - que cada equipo dispone de 24 horas para seleccionar atacante;
 - cómo ejecutar `/comunidades_seleccion_atacante`;
@@ -978,10 +1000,12 @@ Al cerrar:
 3. se guardan snapshots de equipos y comunidades;
 4. se publican los resúmenes en el hub;
 5. se eliminan todos los canales generales e individuales de la ronda;
-6. si quedan rondas, se genera o habilita la siguiente según el flujo de implementación;
+6. si quedan rondas, la ronda actual queda cerrada y no se genera ni se habilita automáticamente la siguiente;
 7. si era la última, el torneo pasa a `FINALIZADO` y se publican ambas clasificaciones finales.
 
-Los estados temporales vigentes se arrastran a la siguiente ronda. Ser zombie permanece siempre.
+Cuando queden rondas, un comisario deberá ejecutar explícitamente `!comunidades_generar_ronda <torneo_id> <ronda>` para crear la siguiente. La generación conserva su regla de todo o nada: si falla, la ronda anterior permanece cerrada, no se guarda parcialmente la nueva ronda y se informa del error en el canal administrativo hardcodeado.
+
+Los estados temporales vigentes se arrastran a la siguiente ronda cuando esta se genere. Ser zombie permanece siempre.
 
 ---
 
@@ -1078,15 +1102,19 @@ Todas las reglas funcionales de este documento se consideran confirmadas, en par
 - clasificación de equipos y comunidades;
 - categorías ordenadas con límite de 40 canales;
 - conservación del foro y hub;
-- eliminación de canales al cerrar ronda.
+- eliminación de canales al cerrar ronda;
+- forzado con ambos atacantes obligatorios, reemplazo de elecciones y creación atómica;
+- configuración de `idCompBbowl` mediante `!comunidades_set_competicion`, solo en estado `CREADO`;
+- cierre sin generación automática de la siguiente ronda;
+- mensajes iniciales y posteriores configurables en base de datos desde la primera versión, sin comandos de edición en la v1;
+- correspondencia directa entre las 23 razas canónicas y `Iconos/<nombre canónico>.png`, sin aliases.
 
 ### Detalles que la tarea de implementación deberá concretar sin cambiar reglas
 
-- nombres físicos definitivos de tablas y constraints;
+- nombres físicos definitivos de las demás tablas y constraints;
 - IDs hardcodeados existentes del foro y canal administrativo;
-- texto exacto y diseño visual de embeds y mensajes;
-- nombre del comando o mecanismo administrativo para configurar `idCompBbowl` si no se edita directamente en base de datos;
-- estrategia transaccional para coordinar base de datos y creación/eliminación de canales Discord;
+- texto inicial de las plantillas configurables, sus marcadores admitidos y el diseño visual de embeds;
+- estrategia técnica para garantizar el rollback coordinado de base de datos y canales Discord exigido por las operaciones atómicas;
 - comportamiento exacto ya existente de PJ/PG/PE/PP y Buchholz para bye, que debe reutilizarse sin desviaciones;
 
 Si una futura tarea descubre una ambigüedad no cubierta, debe detener la implementación y pedir confirmación antes de introducir una regla nueva.
