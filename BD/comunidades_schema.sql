@@ -1,4 +1,4 @@
--- Esquema independiente para el torneo suizo por parejas y comunidades.
+-- Esquema MySQL 8.0.16+ independiente para el torneo suizo por parejas y comunidades.
 -- No reutiliza ni referencia ninguna tabla suizo_*.
 --
 -- Invariantes que debe completar la capa de dominio, porque MySQL no puede
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS comunidades_torneo (
   creado_por_discord_id BIGINT NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT pk_comunidades_torneo PRIMARY KEY (id),
+  PRIMARY KEY (id),
   CONSTRAINT ck_comunidades_torneo_rondas CHECK (rondas_totales > 0),
   CONSTRAINT ck_comunidades_torneo_dias CHECK (dias_por_ronda > 0)
 ) ENGINE=InnoDB;
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS comunidades_comunidad (
   zombies_matados INT NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT pk_comunidades_comunidad PRIMARY KEY (id),
+  PRIMARY KEY (id),
   CONSTRAINT uk_comunidades_comunidad_id_torneo UNIQUE (id, torneo_id),
   CONSTRAINT uk_comunidades_comunidad_torneo_nombre UNIQUE (torneo_id, nombre),
   CONSTRAINT ck_comunidades_comunidad_zombies_matados CHECK (zombies_matados >= 0),
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS comunidades_equipo (
   buchholz_cut DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT pk_comunidades_equipo PRIMARY KEY (id),
+  PRIMARY KEY (id),
   CONSTRAINT uk_comunidades_equipo_id_torneo UNIQUE (id, torneo_id),
   CONSTRAINT uk_comunidades_equipo_torneo_nombre UNIQUE (torneo_id, nombre),
   CONSTRAINT ck_comunidades_equipo_es_zombie CHECK (es_zombie IN (0, 1)),
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS comunidades_miembro (
   raza VARCHAR(80) NOT NULL,
   posicion TINYINT UNSIGNED NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT pk_comunidades_miembro PRIMARY KEY (id),
+  PRIMARY KEY (id),
   CONSTRAINT uk_comunidades_miembro_equipo_posicion UNIQUE (equipo_id, posicion),
   CONSTRAINT uk_comunidades_miembro_torneo_usuario UNIQUE (torneo_id, usuario_id),
   CONSTRAINT ck_comunidades_miembro_posicion CHECK (posicion IN (1, 2)),
@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS comunidades_ronda (
   cerrada_en DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT pk_comunidades_ronda PRIMARY KEY (id),
+  PRIMARY KEY (id),
   CONSTRAINT uk_comunidades_ronda_id_torneo UNIQUE (id, torneo_id),
   CONSTRAINT uk_comunidades_ronda_torneo_numero UNIQUE (torneo_id, numero),
   CONSTRAINT ck_comunidades_ronda_numero CHECK (numero > 0),
@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS comunidades_enfrentamiento (
   es_doble_forfait TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT pk_comunidades_enfrentamiento PRIMARY KEY (id),
+  PRIMARY KEY (id),
   CONSTRAINT uk_comunidades_enfrentamiento_ronda_mesa UNIQUE (ronda_id, mesa_numero),
   CONSTRAINT uk_comunidades_enfrentamiento_ronda_equipo_a UNIQUE (ronda_id, equipo_a_id),
   CONSTRAINT uk_comunidades_enfrentamiento_ronda_equipo_b UNIQUE (ronda_id, equipo_b_id),
