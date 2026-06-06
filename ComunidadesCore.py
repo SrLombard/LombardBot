@@ -223,6 +223,45 @@ def anadir_categoria_enfrentamientos_comunidades(
     )
 
 
+def obtener_categorias_comunidades(session: Any, *, torneo_id: int, tipo: str):
+    """Devuelve las categorías configuradas del tipo indicado en orden de alta."""
+    from GestorSQL import (
+        ComunidadesCategoriaEnfrentamiento,
+        ComunidadesCategoriaPartido,
+        ComunidadesTorneo,
+    )
+
+    _validar_entero_positivo(torneo_id, "torneo_id")
+    torneo_existe = (
+        session.query(ComunidadesTorneo.id)
+        .filter(ComunidadesTorneo.id == torneo_id)
+        .first()
+    )
+    if torneo_existe is None:
+        _error_configuracion(
+            "TORNEO_NO_EXISTE",
+            f"No existe un torneo de comunidades con ID {torneo_id}.",
+        )
+
+    modelos = {
+        "enfrentamientos": ComunidadesCategoriaEnfrentamiento,
+        "partidos": ComunidadesCategoriaPartido,
+    }
+    modelo = modelos.get(tipo)
+    if modelo is None:
+        _error_configuracion(
+            "TIPO_CATEGORIA_INVALIDO",
+            "El tipo de categoría debe ser 'enfrentamientos' o 'partidos'.",
+        )
+
+    return (
+        session.query(modelo)
+        .filter(modelo.torneo_id == torneo_id)
+        .order_by(modelo.orden_alta.asc())
+        .all()
+    )
+
+
 def anadir_equipo_comunidades(
     session: Any,
     *,
