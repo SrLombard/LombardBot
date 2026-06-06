@@ -52,6 +52,14 @@ from SuizoCore import (
     procesar_cierre_ronda_si_corresponde,
     obtener_raza_suizo_o_usuario,
 )
+from ComunidadesCore import (
+    ErrorConfiguracionComunidades,
+    configurar_competicion_comunidades,
+    configurar_puntos_equipo_comunidades,
+    configurar_puntos_individuales_comunidades,
+    crear_torneo_comunidades,
+)
+from ComunidadesDiscord import parsear_decimal, parsear_fecha_limite
 
 
 # Cargar las variables de entorno desde .env
@@ -4192,6 +4200,164 @@ async def crear_peticiones_razas(ctx):
         await ctx.send(f"Error al crear el mensaje de peticiones de razas: {e}")
     finally:
         session.close()
+
+
+async def _ejecutar_configuracion_comunidades(ctx, operacion, mensaje_error: str):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        resultado = operacion(session)
+        session.commit()
+        session.refresh(resultado)
+        return resultado
+    except ErrorConfiguracionComunidades as exc:
+        session.rollback()
+        await ctx.send(f"❌ {exc.detalle}")
+    except Exception as exc:
+        session.rollback()
+        await ctx.send(f"❌ {mensaje_error}: {exc}")
+    finally:
+        session.close()
+    return None
+
+
+@bot.command(name="comunidades_crear")
+async def comunidades_crear(
+    ctx,
+    nombre: str,
+    rondas: int,
+    fecha_fin: str,
+    hora_fin: str,
+    dias_por_ronda: int,
+    canal_hub_id: int,
+):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    try:
+        fecha_fin_ronda1 = parsear_fecha_limite(fecha_fin, hora_fin)
+    except ValueError as exc:
+        await ctx.send(f"❌ Fecha inválida. {exc}")
+        return
+
+    torneo = await _ejecutar_configuracion_comunidades(
+        ctx,
+        lambda session: crear_torneo_comunidades(
+            session,
+            nombre=nombre,
+            rondas_totales=rondas,
+            fecha_fin_ronda1=fecha_fin_ronda1,
+            dias_por_ronda=dias_por_ronda,
+            canal_hub_id=canal_hub_id,
+            creado_por_discord_id=ctx.author.id,
+        ),
+        "No se pudo crear el torneo de comunidades",
+    )
+    if torneo is None:
+        return
+
+    await ctx.send(
+        "✅ Torneo de comunidades creado correctamente en estado `CREADO`.\n"
+        f"ID torneo: **{torneo.id}** | Nombre: **{torneo.nombre}**\n"
+        f"Rondas: **{torneo.rondas_totales}** | Fin ronda 1: "
+        f"**{torneo.fecha_fin_ronda1.strftime('%Y-%m-%d %H:%M')}** | "
+        f"Días por ronda: **{torneo.dias_por_ronda}**\n"
+        f"Canal hub: **{torneo.canal_hub_id}**\n"
+        "⚠️ Antes de generar la ronda 1, rellena directamente en BD "
+        "`plantilla_mensaje_ronda1` y `plantilla_mensaje_rondas_siguientes`. "
+        "En esta versión no existe un comando para editarlas."
+    )
+
+
+@bot.command(name="comunidades_set_competicion")
+async def comunidades_set_competicion(ctx, torneo_id: int, idCompBbowl: str):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    torneo = await _ejecutar_configuracion_comunidades(
+        ctx,
+        lambda session: configurar_competicion_comunidades(
+            session, torneo_id=torneo_id, id_competicion_bbowl=idCompBbowl
+        ),
+        "No se pudo configurar la competición de Blood Bowl",
+    )
+    if torneo is not None:
+        await ctx.send(
+            "✅ Competición de Blood Bowl configurada.\n"
+            f"Torneo ID: **{torneo.id}** | idCompBbowl: **{torneo.id_competicion_bbowl}**"
+        )
+
+
+@bot.command(name="comunidades_set_puntos_equipo")
+async def comunidades_set_puntos_equipo(
+    ctx, torneo_id: int, win: str, draw: str, loss: str, bye: str
+):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    try:
+        valores = {
+            "victoria": parsear_decimal(win, "win"),
+            "empate": parsear_decimal(draw, "draw"),
+            "derrota": parsear_decimal(loss, "loss"),
+            "bye": parsear_decimal(bye, "bye"),
+        }
+    except ValueError as exc:
+        await ctx.send(f"❌ {exc}")
+        return
+
+    torneo = await _ejecutar_configuracion_comunidades(
+        ctx,
+        lambda session: configurar_puntos_equipo_comunidades(
+            session, torneo_id=torneo_id, **valores
+        ),
+        "No se pudo configurar la puntuación por equipos",
+    )
+    if torneo is not None:
+        await ctx.send(
+            "✅ Puntuación por equipos configurada.\n"
+            f"win: **{torneo.puntos_clasificacion_victoria}** | "
+            f"draw: **{torneo.puntos_clasificacion_empate}** | "
+            f"loss: **{torneo.puntos_clasificacion_derrota}** | "
+            f"bye: **{torneo.puntos_clasificacion_bye}**"
+        )
+
+
+@bot.command(name="comunidades_set_puntos_individuales")
+async def comunidades_set_puntos_individuales(
+    ctx, torneo_id: int, win: str, draw: str, loss: str
+):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    try:
+        valores = {
+            "victoria": parsear_decimal(win, "win"),
+            "empate": parsear_decimal(draw, "draw"),
+            "derrota": parsear_decimal(loss, "loss"),
+        }
+    except ValueError as exc:
+        await ctx.send(f"❌ {exc}")
+        return
+
+    torneo = await _ejecutar_configuracion_comunidades(
+        ctx,
+        lambda session: configurar_puntos_individuales_comunidades(
+            session, torneo_id=torneo_id, **valores
+        ),
+        "No se pudo configurar la puntuación individual",
+    )
+    if torneo is not None:
+        await ctx.send(
+            "✅ Puntuación individual configurada.\n"
+            f"win: **{torneo.puntos_individuales_victoria}** | "
+            f"draw: **{torneo.puntos_individuales_empate}** | "
+            f"loss: **{torneo.puntos_individuales_derrota}**"
+        )
 
 
 @bot.command(name="suizo_crear")

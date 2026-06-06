@@ -6,7 +6,7 @@ recibida, sin depender de los modelos del torneo suizo individual.
 """
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import json
 from enum import Enum
@@ -18,7 +18,151 @@ from ComunidadesConstantes import (
     ESTADO_TEMPORAL_CAZADOR_Z,
     ESTADO_TEMPORAL_HERIDO,
     ESTADO_TEMPORAL_NEUTRO,
+    PLANTILLA_RONDA1_PENDIENTE,
+    PLANTILLA_RONDAS_SIGUIENTES_PENDIENTE,
+    TORNEO_CREADO,
+    validar_puntuacion,
 )
+
+
+class ErrorConfiguracionComunidades(ValueError):
+    """Error de dominio legible para configurar un torneo de comunidades."""
+
+    def __init__(self, codigo: str, detalle: str):
+        super().__init__(detalle)
+        self.codigo = codigo
+        self.detalle = detalle
+
+
+def _error_configuracion(codigo: str, detalle: str) -> None:
+    raise ErrorConfiguracionComunidades(codigo, detalle)
+
+
+def _validar_entero_positivo(valor: object, nombre: str) -> int:
+    if type(valor) is not int or valor <= 0:
+        _error_configuracion("VALOR_INVALIDO", f"{nombre} debe ser un entero mayor que 0.")
+    return valor
+
+
+def _normalizar_puntuacion(valor: object, nombre: str) -> Decimal:
+    if not validar_puntuacion(valor):
+        _error_configuracion(
+            "PUNTUACION_INVALIDA",
+            f"{nombre} debe ser un decimal entre 0 y 9999.99 con un máximo de dos decimales.",
+        )
+    return Decimal(str(valor))
+
+
+def _obtener_torneo_configurable(session: Any, torneo_id: int):
+    from GestorSQL import ComunidadesTorneo
+
+    _validar_entero_positivo(torneo_id, "torneo_id")
+    torneo = session.query(ComunidadesTorneo).filter(ComunidadesTorneo.id == torneo_id).first()
+    if torneo is None:
+        _error_configuracion(
+            "TORNEO_NO_EXISTE", f"No existe un torneo de comunidades con ID {torneo_id}."
+        )
+    if torneo.estado != TORNEO_CREADO:
+        _error_configuracion(
+            "TORNEO_INICIADO",
+            "La configuración solo puede modificarse mientras el torneo está en estado CREADO.",
+        )
+    return torneo
+
+
+def crear_torneo_comunidades(
+    session: Any,
+    *,
+    nombre: str,
+    rondas_totales: int,
+    fecha_fin_ronda1: datetime,
+    dias_por_ronda: int,
+    canal_hub_id: int,
+    creado_por_discord_id: int,
+):
+    """Crea, sin confirmar la transacción, un torneo con valores iniciales seguros."""
+    from GestorSQL import ComunidadesTorneo
+
+    if not isinstance(nombre, str) or not nombre.strip():
+        _error_configuracion("NOMBRE_INVALIDO", "El nombre del torneo no puede estar vacío.")
+    nombre = nombre.strip()
+    if len(nombre) > 120:
+        _error_configuracion("NOMBRE_INVALIDO", "El nombre del torneo no puede superar 120 caracteres.")
+    _validar_entero_positivo(rondas_totales, "rondas_totales")
+    if not isinstance(fecha_fin_ronda1, datetime):
+        _error_configuracion("FECHA_INVALIDA", "fecha_fin_ronda1 debe ser una fecha y hora válidas.")
+    _validar_entero_positivo(dias_por_ronda, "dias_por_ronda")
+    _validar_entero_positivo(canal_hub_id, "canal_hub_id")
+    _validar_entero_positivo(creado_por_discord_id, "creado_por_discord_id")
+
+    torneo = ComunidadesTorneo(
+        nombre=nombre,
+        estado=TORNEO_CREADO,
+        rondas_totales=rondas_totales,
+        fecha_fin_ronda1=fecha_fin_ronda1,
+        dias_por_ronda=dias_por_ronda,
+        canal_hub_id=canal_hub_id,
+        plantilla_mensaje_ronda1=PLANTILLA_RONDA1_PENDIENTE,
+        plantilla_mensaje_rondas_siguientes=PLANTILLA_RONDAS_SIGUIENTES_PENDIENTE,
+        creado_por_discord_id=creado_por_discord_id,
+    )
+    session.add(torneo)
+    session.flush()
+    return torneo
+
+
+def configurar_competicion_comunidades(session: Any, *, torneo_id: int, id_competicion_bbowl: str):
+    """Guarda el ID de competición mientras el torneo siga sin iniciar."""
+    torneo = _obtener_torneo_configurable(session, torneo_id)
+    valor = str(id_competicion_bbowl).strip() if id_competicion_bbowl is not None else ""
+    if not valor or len(valor) > 45:
+        _error_configuracion(
+            "COMPETICION_INVALIDA",
+            "idCompBbowl debe tener entre 1 y 45 caracteres.",
+        )
+    torneo.id_competicion_bbowl = valor
+    session.flush()
+    return torneo
+
+
+def configurar_puntos_equipo_comunidades(
+    session: Any, *, torneo_id: int, victoria: object, empate: object, derrota: object, bye: object
+):
+    """Configura exclusivamente la puntuación de clasificación por equipos."""
+    torneo = _obtener_torneo_configurable(session, torneo_id)
+    valores = {
+        "victoria": _normalizar_puntuacion(victoria, "win"),
+        "empate": _normalizar_puntuacion(empate, "draw"),
+        "derrota": _normalizar_puntuacion(derrota, "loss"),
+        "bye": _normalizar_puntuacion(bye, "bye"),
+    }
+    if not valores["victoria"] > valores["empate"] >= valores["derrota"]:
+        _error_configuracion("PUNTUACION_INVALIDA", "Debe cumplirse win > draw >= loss.")
+    torneo.puntos_clasificacion_victoria = valores["victoria"]
+    torneo.puntos_clasificacion_empate = valores["empate"]
+    torneo.puntos_clasificacion_derrota = valores["derrota"]
+    torneo.puntos_clasificacion_bye = valores["bye"]
+    session.flush()
+    return torneo
+
+
+def configurar_puntos_individuales_comunidades(
+    session: Any, *, torneo_id: int, victoria: object, empate: object, derrota: object
+):
+    """Configura exclusivamente los puntos internos de los partidos BO1."""
+    torneo = _obtener_torneo_configurable(session, torneo_id)
+    valores = {
+        "victoria": _normalizar_puntuacion(victoria, "win"),
+        "empate": _normalizar_puntuacion(empate, "draw"),
+        "derrota": _normalizar_puntuacion(derrota, "loss"),
+    }
+    if not valores["victoria"] > valores["empate"] >= valores["derrota"]:
+        _error_configuracion("PUNTUACION_INVALIDA", "Debe cumplirse win > draw >= loss.")
+    torneo.puntos_individuales_victoria = valores["victoria"]
+    torneo.puntos_individuales_empate = valores["empate"]
+    torneo.puntos_individuales_derrota = valores["derrota"]
+    session.flush()
+    return torneo
 
 
 class Equipo(str, Enum):

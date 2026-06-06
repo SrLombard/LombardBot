@@ -338,6 +338,8 @@ Argumentos:
 
 El torneo se crea en estado `CREADO`. La creación no exige informar todavía el ID de competición de Blood Bowl.
 
+Como los dos campos de plantilla son obligatorios, el sistema los inicializa con valores técnicos pendientes de configuración. El mensaje de confirmación recuerda que, antes de generar la ronda 1, deben rellenarse directamente en base de datos `plantilla_mensaje_ronda1` y `plantilla_mensaje_rondas_siguientes`. En la v1 no existe un comando para editar estas plantillas.
+
 ### 6.2. Configurar competición de Blood Bowl
 
 ```text
@@ -373,6 +375,8 @@ Ejemplo:
 ```
 
 Estos valores solo se suman para decidir qué equipo ganó el enfrentamiento. No se publican como puntos de clasificación individual.
+
+Las dos configuraciones de puntuación solo pueden modificarse mientras el torneo esté en estado `CREADO`. Una vez iniciada la ronda 1, cualquier intento debe rechazarse sin alterar los valores persistidos.
 
 ### 6.5. Añadir comunidad
 

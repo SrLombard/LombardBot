@@ -156,6 +156,13 @@ EMOJIS_ESTADO_TEMPORAL = {
 
 LIMITE_CANALES_POR_CATEGORIA = 40
 
+# Las plantillas son obligatorias en el esquema, pero en la v1 se configuran
+# directamente en base de datos después de crear el torneo.
+PLANTILLA_RONDA1_PENDIENTE = "PENDIENTE_CONFIGURACION_BD_MENSAJE_INICIAL"
+PLANTILLA_RONDAS_SIGUIENTES_PENDIENTE = (
+    "PENDIENTE_CONFIGURACION_BD_MENSAJES_SUBSIGUIENTES"
+)
+
 
 def validar_raza(raza):
     """Indica si ``raza`` coincide exactamente con un nombre canónico."""
