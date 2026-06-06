@@ -17,7 +17,7 @@ class Usuario(Base):
     __tablename__ = 'usuarios'
     idUsuarios = Column(Integer, primary_key=True)
     nombre_discord = Column(String)
-    id_discord = Column(Integer)
+    id_discord = Column(BigInteger)
     nombre_bloodbowl = Column(String)
     id_bloodbowl = Column(Integer)
     jornada_actual = Column(Integer)

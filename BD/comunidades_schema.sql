@@ -9,6 +9,10 @@
 --   * cada equipo solo puede aparecer una vez por ronda, sin importar su lado;
 --   * las fechas y transiciones de estado deben respetar el ciclo del torneo.
 
+-- Los snowflakes de Discord superan el rango de INT; la tabla compartida de
+-- usuarios debe usar BIGINT antes de recibir altas automáticas de este formato.
+ALTER TABLE usuarios MODIFY COLUMN id_discord BIGINT NULL;
+
 CREATE TABLE IF NOT EXISTS comunidades_torneo (
   id INT AUTO_INCREMENT,
   nombre VARCHAR(120) NOT NULL,

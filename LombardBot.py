@@ -54,6 +54,10 @@ from SuizoCore import (
 )
 from ComunidadesCore import (
     ErrorConfiguracionComunidades,
+    anadir_categoria_enfrentamientos_comunidades,
+    anadir_categoria_partidos_comunidades,
+    anadir_comunidad_comunidades,
+    anadir_equipo_comunidades,
     configurar_competicion_comunidades,
     configurar_puntos_equipo_comunidades,
     configurar_puntos_individuales_comunidades,
@@ -4357,6 +4361,135 @@ async def comunidades_set_puntos_individuales(
             f"win: **{torneo.puntos_individuales_victoria}** | "
             f"draw: **{torneo.puntos_individuales_empate}** | "
             f"loss: **{torneo.puntos_individuales_derrota}**"
+        )
+
+
+def _categoria_del_guild(ctx, categoria_id: int):
+    if ctx.guild is None:
+        raise ValueError("Este comando solo puede ejecutarse dentro de un servidor.")
+    categoria = ctx.guild.get_channel(int(categoria_id))
+    if categoria is None:
+        raise ValueError(f"No existe un canal con ID {categoria_id} en este servidor.")
+    if not isinstance(categoria, discord.CategoryChannel):
+        raise ValueError(f"El canal {categoria_id} existe, pero no es una categoría de Discord.")
+    return categoria
+
+
+def _texto_discord_seguro(valor: object) -> str:
+    texto = discord.utils.escape_markdown(str(valor))
+    return discord.utils.escape_mentions(texto)
+
+
+@bot.command(name="comunidades_add_comunidad")
+async def comunidades_add_comunidad(ctx, torneo_id: int, *, nombre: str):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    comunidad = await _ejecutar_configuracion_comunidades(
+        ctx,
+        lambda session: anadir_comunidad_comunidades(
+            session, torneo_id=torneo_id, nombre=nombre
+        ),
+        "No se pudo añadir la comunidad",
+    )
+    if comunidad is not None:
+        await ctx.send(
+            "✅ Comunidad añadida. "
+            f"Torneo ID: **{comunidad.torneo_id}** | "
+            f"Nombre: **{_texto_discord_seguro(comunidad.nombre)}**"
+        )
+
+
+async def _comunidades_add_categoria(ctx, torneo_id, categoria_id, servicio, tipo):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+    try:
+        categoria_discord = _categoria_del_guild(ctx, categoria_id)
+    except ValueError as exc:
+        await ctx.send(f"❌ {exc}")
+        return
+
+    categoria = await _ejecutar_configuracion_comunidades(
+        ctx,
+        lambda session: servicio(
+            session, torneo_id=torneo_id, categoria_discord_id=int(categoria_discord.id)
+        ),
+        f"No se pudo añadir la categoría de {tipo}",
+    )
+    if categoria is not None:
+        await ctx.send(
+            f"✅ Categoría de {tipo} añadida. "
+            f"Torneo ID: **{categoria.torneo_id}** | "
+            f"Categoría: **{_texto_discord_seguro(categoria_discord.name)}** "
+            f"(`{int(categoria_discord.id)}`) | Orden de alta: **{categoria.orden_alta}**"
+        )
+
+
+@bot.command(name="comunidades_add_categoria_partidos")
+async def comunidades_add_categoria_partidos(ctx, torneo_id: int, categoria_id: int):
+    await _comunidades_add_categoria(
+        ctx,
+        torneo_id,
+        categoria_id,
+        anadir_categoria_partidos_comunidades,
+        "partidos",
+    )
+
+
+@bot.command(name="comunidades_add_categoria_enfrentamientos")
+async def comunidades_add_categoria_enfrentamientos(
+    ctx, torneo_id: int, categoria_id: int
+):
+    await _comunidades_add_categoria(
+        ctx,
+        torneo_id,
+        categoria_id,
+        anadir_categoria_enfrentamientos_comunidades,
+        "enfrentamientos",
+    )
+
+
+@bot.command(name="comunidades_add_equipo")
+async def comunidades_add_equipo(
+    ctx,
+    torneo_id: int,
+    nombre_equipo: str,
+    comunidad: str,
+    jugador1: discord.Member,
+    raza1: str,
+    jugador2: discord.Member,
+    raza2: str,
+):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    equipo = await _ejecutar_configuracion_comunidades(
+        ctx,
+        lambda session: anadir_equipo_comunidades(
+            session,
+            torneo_id=torneo_id,
+            nombre=nombre_equipo,
+            comunidad_nombre=comunidad,
+            jugador1_discord_id=int(jugador1.id),
+            jugador1_nombre_discord=jugador1.display_name,
+            raza1=raza1,
+            jugador2_discord_id=int(jugador2.id),
+            jugador2_nombre_discord=jugador2.display_name,
+            raza2=raza2,
+        ),
+        "No se pudo añadir el equipo",
+    )
+    if equipo is not None:
+        await ctx.send(
+            "✅ Equipo creado correctamente.\n"
+            f"ID: **{equipo.id}** | Torneo ID: **{equipo.torneo_id}**\n"
+            f"Equipo: **{_texto_discord_seguro(equipo.nombre)}** | "
+            f"Comunidad: **{_texto_discord_seguro(comunidad)}**\n"
+            f"1. {jugador1.mention} — **{_texto_discord_seguro(raza1)}**\n"
+            f"2. {jugador2.mention} — **{_texto_discord_seguro(raza2)}**"
         )
 
 

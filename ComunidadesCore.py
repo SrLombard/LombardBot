@@ -20,6 +20,7 @@ from ComunidadesConstantes import (
     ESTADO_TEMPORAL_NEUTRO,
     PLANTILLA_RONDA1_PENDIENTE,
     PLANTILLA_RONDAS_SIGUIENTES_PENDIENTE,
+    RAZAS_VALIDAS,
     TORNEO_CREADO,
     validar_puntuacion,
 )
@@ -109,6 +110,248 @@ def crear_torneo_comunidades(
     session.add(torneo)
     session.flush()
     return torneo
+
+
+def _validar_texto_alta(valor: object, nombre: str, longitud_maxima: int = 120) -> str:
+    if not isinstance(valor, str) or not valor.strip():
+        _error_configuracion("VALOR_INVALIDO", f"{nombre} no puede estar vacío.")
+    if valor != valor.strip():
+        _error_configuracion(
+            "VALOR_INVALIDO", f"{nombre} no puede tener espacios al principio o al final."
+        )
+    if len(valor) > longitud_maxima:
+        _error_configuracion(
+            "VALOR_INVALIDO", f"{nombre} no puede superar {longitud_maxima} caracteres."
+        )
+    return valor
+
+
+def _validar_discord_id(valor: object, nombre: str) -> int:
+    if type(valor) is not int or valor <= 0:
+        _error_configuracion("VALOR_INVALIDO", f"{nombre} debe ser un ID de Discord válido.")
+    return valor
+
+
+def anadir_comunidad_comunidades(session: Any, *, torneo_id: int, nombre: str):
+    """Añade una comunidad sin confirmar la transacción de la sesión."""
+    from GestorSQL import ComunidadesComunidad
+
+    torneo = _obtener_torneo_configurable(session, torneo_id)
+    nombre = _validar_texto_alta(nombre, "nombre")
+    duplicada = (
+        session.query(ComunidadesComunidad.id)
+        .filter(
+            ComunidadesComunidad.torneo_id == torneo.id,
+            ComunidadesComunidad.nombre == nombre,
+        )
+        .first()
+    )
+    if duplicada is not None:
+        _error_configuracion(
+            "COMUNIDAD_DUPLICADA",
+            f"La comunidad `{nombre}` ya existe en el torneo {torneo.id}.",
+        )
+
+    comunidad = ComunidadesComunidad(torneo_id=torneo.id, nombre=nombre)
+    session.add(comunidad)
+    session.flush()
+    return comunidad
+
+
+def _anadir_categoria_comunidades(
+    session: Any, *, torneo_id: int, categoria_discord_id: int, modelo: Any, tipo: str
+):
+    torneo = _obtener_torneo_configurable(session, torneo_id)
+    categoria_discord_id = _validar_discord_id(categoria_discord_id, "categoria_id")
+    duplicada = (
+        session.query(modelo.id)
+        .filter(
+            modelo.torneo_id == torneo.id,
+            modelo.categoria_discord_id == categoria_discord_id,
+        )
+        .first()
+    )
+    if duplicada is not None:
+        _error_configuracion(
+            "CATEGORIA_DUPLICADA",
+            f"La categoría de {tipo} {categoria_discord_id} ya está configurada en el torneo {torneo.id}.",
+        )
+
+    ultimo_orden = (
+        session.query(modelo.orden_alta)
+        .filter(modelo.torneo_id == torneo.id)
+        .order_by(modelo.orden_alta.desc())
+        .first()
+    )
+    categoria = modelo(
+        torneo_id=torneo.id,
+        categoria_discord_id=categoria_discord_id,
+        orden_alta=1 if ultimo_orden is None else ultimo_orden[0] + 1,
+    )
+    session.add(categoria)
+    session.flush()
+    return categoria
+
+
+def anadir_categoria_partidos_comunidades(
+    session: Any, *, torneo_id: int, categoria_discord_id: int
+):
+    """Añade una categoría de partidos conservando el orden de alta."""
+    from GestorSQL import ComunidadesCategoriaPartido
+
+    return _anadir_categoria_comunidades(
+        session,
+        torneo_id=torneo_id,
+        categoria_discord_id=categoria_discord_id,
+        modelo=ComunidadesCategoriaPartido,
+        tipo="partidos",
+    )
+
+
+def anadir_categoria_enfrentamientos_comunidades(
+    session: Any, *, torneo_id: int, categoria_discord_id: int
+):
+    """Añade una categoría de enfrentamientos conservando el orden de alta."""
+    from GestorSQL import ComunidadesCategoriaEnfrentamiento
+
+    return _anadir_categoria_comunidades(
+        session,
+        torneo_id=torneo_id,
+        categoria_discord_id=categoria_discord_id,
+        modelo=ComunidadesCategoriaEnfrentamiento,
+        tipo="enfrentamientos",
+    )
+
+
+def anadir_equipo_comunidades(
+    session: Any,
+    *,
+    torneo_id: int,
+    nombre: str,
+    comunidad_nombre: str,
+    jugador1_discord_id: int,
+    jugador1_nombre_discord: str,
+    raza1: str,
+    jugador2_discord_id: int,
+    jugador2_nombre_discord: str,
+    raza2: str,
+):
+    """Inscribe atómicamente un equipo y crea los usuarios que no existan.
+
+    La función hace ``flush`` para validar y devolver IDs, pero deja el ``commit``
+    o ``rollback`` al llamador, que actúa como frontera transaccional.
+    """
+    from GestorSQL import (
+        ComunidadesComunidad,
+        ComunidadesEquipo,
+        ComunidadesMiembro,
+        Usuario,
+    )
+
+    torneo = _obtener_torneo_configurable(session, torneo_id)
+    nombre = _validar_texto_alta(nombre, "nombre_equipo")
+    comunidad_nombre = _validar_texto_alta(comunidad_nombre, "comunidad")
+    jugador1_discord_id = _validar_discord_id(jugador1_discord_id, "jugador1")
+    jugador2_discord_id = _validar_discord_id(jugador2_discord_id, "jugador2")
+    jugador1_nombre_discord = _validar_texto_alta(
+        jugador1_nombre_discord, "nombre Discord del jugador 1", 255
+    )
+    jugador2_nombre_discord = _validar_texto_alta(
+        jugador2_nombre_discord, "nombre Discord del jugador 2", 255
+    )
+    if jugador1_discord_id == jugador2_discord_id:
+        _error_configuracion(
+            "MIEMBROS_REPETIDOS", "Un equipo debe contener dos usuarios distintos."
+        )
+    for raza, campo in ((raza1, "raza1"), (raza2, "raza2")):
+        if raza not in RAZAS_VALIDAS:
+            _error_configuracion(
+                "RAZA_INVALIDA",
+                f"{campo} debe coincidir exactamente con una raza válida: `{raza}` no es válida.",
+            )
+
+    comunidad = (
+        session.query(ComunidadesComunidad)
+        .filter(
+            ComunidadesComunidad.torneo_id == torneo.id,
+            ComunidadesComunidad.nombre == comunidad_nombre,
+        )
+        .first()
+    )
+    if comunidad is None:
+        _error_configuracion(
+            "COMUNIDAD_NO_EXISTE",
+            f"La comunidad `{comunidad_nombre}` no existe en el torneo {torneo.id}.",
+        )
+    if (
+        session.query(ComunidadesEquipo.id)
+        .filter(ComunidadesEquipo.torneo_id == torneo.id, ComunidadesEquipo.nombre == nombre)
+        .first()
+        is not None
+    ):
+        _error_configuracion(
+            "EQUIPO_DUPLICADO", f"El equipo `{nombre}` ya existe en el torneo {torneo.id}."
+        )
+
+    usuarios = []
+    for discord_id, nombre_discord in (
+        (jugador1_discord_id, jugador1_nombre_discord),
+        (jugador2_discord_id, jugador2_nombre_discord),
+    ):
+        usuario = session.query(Usuario).filter(Usuario.id_discord == discord_id).first()
+        if usuario is not None:
+            inscrito = (
+                session.query(ComunidadesMiembro.id)
+                .filter(
+                    ComunidadesMiembro.torneo_id == torneo.id,
+                    ComunidadesMiembro.usuario_id == usuario.idUsuarios,
+                )
+                .first()
+            )
+            if inscrito is not None:
+                _error_configuracion(
+                    "USUARIO_YA_INSCRITO",
+                    f"El usuario Discord {discord_id} ya pertenece a otro equipo del torneo {torneo.id}.",
+                )
+        usuarios.append((usuario, discord_id, nombre_discord))
+
+    for indice, (usuario, discord_id, nombre_discord) in enumerate(usuarios):
+        if usuario is None:
+            usuario = Usuario(
+                id_discord=discord_id,
+                nombre_discord=nombre_discord,
+                id_bloodbowl=None,
+                nombre_bloodbowl=None,
+            )
+            session.add(usuario)
+            session.flush()
+            usuarios[indice] = (usuario, discord_id, nombre_discord)
+
+    equipo = ComunidadesEquipo(
+        torneo_id=torneo.id, comunidad_id=comunidad.id, nombre=nombre
+    )
+    session.add(equipo)
+    session.flush()
+    session.add_all(
+        [
+            ComunidadesMiembro(
+                torneo_id=torneo.id,
+                equipo_id=equipo.id,
+                usuario_id=usuarios[0][0].idUsuarios,
+                raza=raza1,
+                posicion=1,
+            ),
+            ComunidadesMiembro(
+                torneo_id=torneo.id,
+                equipo_id=equipo.id,
+                usuario_id=usuarios[1][0].idUsuarios,
+                raza=raza2,
+                posicion=2,
+            ),
+        ]
+    )
+    session.flush()
+    return equipo
 
 
 def configurar_competicion_comunidades(session: Any, *, torneo_id: int, id_competicion_bbowl: str):
