@@ -6,7 +6,9 @@ recibida, sin depender de los modelos del torneo suizo individual.
 """
 
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
+import json
 from enum import Enum
 from functools import cmp_to_key
 from typing import Any, Iterable, Optional
@@ -1001,6 +1003,318 @@ def generar_pairings_comunidades_backtracking(
             ),
         },
     }
+
+
+class ErrorGeneracionRondaComunidades(ValueError):
+    """Error funcional que cancela por completo la generación de una ronda."""
+
+    def __init__(self, codigo: str, detalle: str):
+        super().__init__(detalle)
+        self.codigo = codigo
+        self.detalle = detalle
+
+
+def _error_generacion(codigo: str, detalle: str) -> None:
+    raise ErrorGeneracionRondaComunidades(codigo, detalle)
+
+
+def _validar_generacion_ronda_comunidades(
+    session: Any,
+    torneo: Any,
+    ronda_numero: int,
+) -> Optional[Any]:
+    """Valida la secuencia y devuelve la ronda anterior cuando corresponde."""
+    from GestorSQL import ComunidadesEquipo, ComunidadesMiembro, ComunidadesRonda
+
+    if ronda_numero < 1 or ronda_numero > int(torneo.rondas_totales):
+        _error_generacion(
+            "NUMERO_RONDA_INVALIDO",
+            f"La ronda debe estar entre 1 y {int(torneo.rondas_totales)}.",
+        )
+
+    existente = (
+        session.query(ComunidadesRonda)
+        .filter(
+            ComunidadesRonda.torneo_id == torneo.id,
+            ComunidadesRonda.numero == ronda_numero,
+        )
+        .one_or_none()
+    )
+    if existente is not None:
+        _error_generacion("RONDA_DUPLICADA", "La ronda solicitada ya existe.")
+
+    incompatible = (
+        session.query(ComunidadesRonda)
+        .filter(
+            ComunidadesRonda.torneo_id == torneo.id,
+            ComunidadesRonda.estado.in_(["ABIERTA", "BLOQUEADA"]),
+        )
+        .first()
+    )
+    if incompatible is not None:
+        _error_generacion(
+            "RONDA_ABIERTA_INCOMPATIBLE",
+            f"La ronda {int(incompatible.numero)} todavía no está cerrada.",
+        )
+
+    if ronda_numero == 1:
+        if torneo.estado != "CREADO":
+            _error_generacion(
+                "ESTADO_TORNEO_INVALIDO",
+                "La ronda 1 solo puede generarse con el torneo en estado CREADO.",
+            )
+        ronda_anterior = None
+    else:
+        if torneo.estado != "EN_CURSO":
+            _error_generacion(
+                "ESTADO_TORNEO_INVALIDO",
+                "Las rondas posteriores requieren un torneo EN_CURSO.",
+            )
+        ronda_anterior = (
+            session.query(ComunidadesRonda)
+            .filter(
+                ComunidadesRonda.torneo_id == torneo.id,
+                ComunidadesRonda.numero == ronda_numero - 1,
+            )
+            .one_or_none()
+        )
+        if ronda_anterior is None:
+            _error_generacion(
+                "RONDA_ANTERIOR_INEXISTENTE",
+                f"No existe la ronda {ronda_numero - 1}.",
+            )
+        if ronda_anterior.estado != "CERRADA":
+            _error_generacion(
+                "RONDA_ANTERIOR_NO_CERRADA",
+                f"La ronda {ronda_numero - 1} no está cerrada.",
+            )
+
+    equipos = (
+        session.query(ComunidadesEquipo)
+        .filter(ComunidadesEquipo.torneo_id == torneo.id)
+        .with_for_update()
+        .all()
+    )
+    if not equipos:
+        _error_generacion("SIN_EQUIPOS", "El torneo no tiene equipos inscritos.")
+
+    # Se comprueba explícitamente para conservar la invariante incluso en bases
+    # creadas antes de los constraints actuales.
+    for equipo in equipos:
+        cantidad = (
+            session.query(ComunidadesMiembro)
+            .filter(ComunidadesMiembro.equipo_id == equipo.id)
+            .count()
+        )
+        if cantidad != 2:
+            _error_generacion(
+                "EQUIPO_INCOMPLETO",
+                f"El equipo {int(equipo.id)} debe tener exactamente dos miembros.",
+            )
+    return ronda_anterior
+
+
+def _guardar_traza_generacion(
+    session: Any,
+    torneo_id: int,
+    ronda_id: int,
+    pairings: list[PairingComunidades],
+    traza: TrazaPairingsComunidades,
+) -> None:
+    from GestorSQL import ComunidadesTrazaEmparejamiento
+
+    secuencia = 1
+    for intento in traza.get("intentos", []):
+        bye_id = intento.get("bye_equipo_id")
+        session.add(
+            ComunidadesTrazaEmparejamiento(
+                torneo_id=torneo_id,
+                ronda_id=ronda_id,
+                secuencia=secuencia,
+                etapa=intento["etapa"],
+                equipo_a_id=bye_id,
+                detalle=json.dumps(intento, ensure_ascii=False, default=str),
+            )
+        )
+        secuencia += 1
+
+    for pairing in pairings:
+        es_bye = bool(pairing["es_bye"])
+        detalle = {
+            "tipo": "BYE" if es_bye else "PAIRING",
+            "nivel_fallback": traza.get("nivel_fallback"),
+            "fallback_utilizado": traza.get("etapa"),
+            "mesa_numero": pairing["mesa_numero"],
+        }
+        session.add(
+            ComunidadesTrazaEmparejamiento(
+                torneo_id=torneo_id,
+                ronda_id=ronda_id,
+                secuencia=secuencia,
+                etapa="SELECCION_BYE" if es_bye else "SELECCION_FINAL",
+                equipo_a_id=pairing["equipo_a_id"],
+                equipo_b_id=pairing["equipo_b_id"],
+                diferencia_puntos=pairing["diferencia_puntos"],
+                es_mirror=pairing["es_mirror"],
+                es_rival_repetido=pairing["es_rival_repetido"],
+                prioridad_estado=pairing["prioridad_estado"],
+                detalle=json.dumps(detalle, ensure_ascii=False),
+            )
+        )
+        secuencia += 1
+
+
+def generar_ronda_comunidades(
+    session: Any,
+    torneo_id: int,
+    ronda_numero: int,
+    generada_por_discord_id: int,
+    rng: Any = None,
+    *,
+    on_enfrentamiento_persistido: Any = None,
+) -> dict[str, Any]:
+    """Genera y confirma una ronda completa sin realizar operaciones Discord.
+
+    El servicio es la frontera transaccional: confirma únicamente después de
+    crear ronda, enfrentamientos, dos fotografías por enfrentamiento, traza y
+    efectos del bye. Ante cualquier excepción revierte la sesión completa.
+    ``on_enfrentamiento_persistido`` permite instrumentar la operación y probar
+    fallos intermedios; se ejecuta después de cada enfrentamiento completo.
+    """
+    from GestorSQL import (
+        ComunidadesEnfrentamiento,
+        ComunidadesEquipo,
+        ComunidadesFotografiaEstado,
+        ComunidadesHistorialTransicion,
+        ComunidadesRonda,
+        ComunidadesTorneo,
+    )
+
+    try:
+        torneo = (
+            session.query(ComunidadesTorneo)
+            .filter(ComunidadesTorneo.id == torneo_id)
+            .with_for_update()
+            .one_or_none()
+        )
+        if torneo is None:
+            _error_generacion("TORNEO_INEXISTENTE", "El torneo no existe.")
+
+        ronda_anterior = _validar_generacion_ronda_comunidades(
+            session, torneo, ronda_numero
+        )
+        pairings, traza = generar_pairings_comunidades_backtracking(
+            session, torneo_id, ronda_numero, rng
+        )
+        if not pairings:
+            error = traza.get("error") or {}
+            _error_generacion(
+                error.get("codigo", "SIN_SOLUCION_COMPLETA"),
+                error.get("detalle", "No existe una solución completa."),
+            )
+
+        if ronda_numero == 1:
+            fecha_fin = torneo.fecha_fin_ronda1
+            fecha_inicio = fecha_fin - timedelta(days=int(torneo.dias_por_ronda))
+        else:
+            fecha_inicio = ronda_anterior.fecha_fin
+            fecha_fin = fecha_inicio + timedelta(days=int(torneo.dias_por_ronda))
+
+        ronda = ComunidadesRonda(
+            torneo_id=torneo_id,
+            numero=ronda_numero,
+            estado="ABIERTA",
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            generada_por_discord_id=generada_por_discord_id,
+        )
+        session.add(ronda)
+        session.flush()
+
+        equipos = {
+            int(equipo.id): equipo
+            for equipo in session.query(ComunidadesEquipo)
+            .filter(ComunidadesEquipo.torneo_id == torneo_id)
+            .with_for_update()
+            .all()
+        }
+        enfrentamiento_ids: list[int] = []
+        bye_equipo_id: Optional[int] = None
+
+        for pairing in pairings:
+            equipo_a = equipos[int(pairing["equipo_a_id"])]
+            if pairing["es_bye"]:
+                bye_equipo_id = int(equipo_a.id)
+                estado_anterior = equipo_a.estado_temporal
+                zombie_anterior = bool(equipo_a.es_zombie)
+                equipo_a.estado_temporal = EstadoTemporal.NEUTRO.value
+                equipo_a.cantidad_byes = int(equipo_a.cantidad_byes or 0) + 1
+                equipo_a.puntos_clasificacion = _decimal(
+                    equipo_a.puntos_clasificacion
+                ) + _decimal(torneo.puntos_clasificacion_bye)
+                session.add(
+                    ComunidadesHistorialTransicion(
+                        torneo_id=torneo_id,
+                        ronda_id=ronda.id,
+                        enfrentamiento_id=None,
+                        equipo_id=equipo_a.id,
+                        estado_temporal_anterior=estado_anterior,
+                        es_zombie_anterior=zombie_anterior,
+                        estado_temporal_posterior=EstadoTemporal.NEUTRO.value,
+                        es_zombie_posterior=zombie_anterior,
+                        motivo="BYE",
+                    )
+                )
+                continue
+
+            equipo_b = equipos[int(pairing["equipo_b_id"])]
+            enfrentamiento = ComunidadesEnfrentamiento(
+                torneo_id=torneo_id,
+                ronda_id=ronda.id,
+                mesa_numero=pairing["mesa_numero"],
+                equipo_a_id=equipo_a.id,
+                equipo_b_id=equipo_b.id,
+                estado="PENDIENTE_ELECCIONES",
+            )
+            session.add(enfrentamiento)
+            session.flush()
+            enfrentamiento_ids.append(int(enfrentamiento.id))
+
+            for equipo in (equipo_a, equipo_b):
+                session.add(
+                    ComunidadesFotografiaEstado(
+                        torneo_id=torneo_id,
+                        ronda_id=ronda.id,
+                        enfrentamiento_id=enfrentamiento.id,
+                        equipo_id=equipo.id,
+                        comunidad_id=equipo.comunidad_id,
+                        es_zombie=bool(equipo.es_zombie),
+                        estado_temporal=equipo.estado_temporal,
+                    )
+                )
+            session.flush()
+            if on_enfrentamiento_persistido is not None:
+                on_enfrentamiento_persistido(enfrentamiento)
+
+        _guardar_traza_generacion(session, torneo_id, ronda.id, pairings, traza)
+        if ronda_numero == 1:
+            torneo.estado = "EN_CURSO"
+
+        session.flush()
+        resultado = {
+            "torneo_id": int(torneo_id),
+            "ronda_id": int(ronda.id),
+            "ronda_numero": int(ronda_numero),
+            "enfrentamiento_ids": enfrentamiento_ids,
+            "bye_equipo_id": bye_equipo_id,
+            "nivel_fallback": traza.get("nivel_fallback"),
+            "etapa": traza.get("etapa"),
+        }
+        session.commit()
+        return resultado
+    except Exception:
+        session.rollback()
+        raise
 
 
 # Alias legible para consumidores que prefieran el orden verbo-ámbito-técnica.
