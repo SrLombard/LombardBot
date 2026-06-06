@@ -241,7 +241,7 @@ def test_buchholz_rompe_empate_por_encima_de_h2h():
     assert fila_2["rank"] < fila_1["rank"]
 
 
-def test_diff_score_rompe_empate_por_encima_de_h2h():
+def test_h2h_rompe_empate_por_encima_de_diff_score():
     standings = [
         {
             "usuario_id": 1,
@@ -261,30 +261,30 @@ def test_diff_score_rompe_empate_por_encima_de_h2h():
 
     ordenados = ordenar_standings(standings)
 
-    assert [fila["usuario_id"] for fila in ordenados] == [2, 1]
+    assert [fila["usuario_id"] for fila in ordenados] == [1, 2]
 
 
-def test_h2h_rompe_empate_despues_de_buchholz_y_diff_score():
+def test_diff_score_rompe_empate_despues_de_buchholz_y_h2h():
     standings = [
         {
             "usuario_id": 2,
             "puntos": Decimal("6"),
             "buchholz_cut": Decimal("9"),
             "diff_score": 2,
-            "h2h_valor": Decimal("0"),
+            "h2h_valor": Decimal("1"),
         },
         {
             "usuario_id": 1,
             "puntos": Decimal("6"),
             "buchholz_cut": Decimal("9"),
-            "diff_score": 2,
-            "h2h_valor": Decimal("3"),
+            "diff_score": 1,
+            "h2h_valor": Decimal("1"),
         },
     ]
 
     ordenados = ordenar_standings(standings)
 
-    assert [fila["usuario_id"] for fila in ordenados] == [1, 2]
+    assert [fila["usuario_id"] for fila in ordenados] == [2, 1]
 
 
 def test_id_rompe_empate_cuando_h2h_no_es_aplicable():

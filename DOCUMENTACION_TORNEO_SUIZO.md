@@ -187,10 +187,10 @@ La clasificación suiza se ordena aplicando estos criterios, en este orden:
 
 1. Puntos totales, de mayor a menor.
 2. Buchholz Cut, de mayor a menor.
-3. Diferencia de score, de mayor a menor.
-4. H2H, de mayor a menor, solo cuando ambos jugadores comparados tienen un valor H2H aplicable.
+3. H2H, de mayor a menor, solo cuando ambos jugadores comparados tienen un valor H2H aplicable.
+4. Diferencia de touchdowns (score), de mayor a menor.
 5. ID de usuario, de menor a mayor, como último criterio determinista.
 
-El H2H mantiene su cálculo actual: dentro de cada grupo empatado a puntos suma los puntos obtenidos por cada jugador en sus enfrentamientos contra otros integrantes de ese mismo grupo. Si un jugador no se enfrentó a nadie del grupo, su H2H no es aplicable (`None`) y se pasa directamente al ID después de haber comparado Buchholz Cut y diferencia de score.
+El H2H mantiene su cálculo actual: dentro de cada grupo empatado a puntos suma los puntos obtenidos por cada jugador en sus enfrentamientos contra otros integrantes de ese mismo grupo. Si uno de los jugadores comparados no se enfrentó a nadie del grupo, su H2H no es aplicable (`None`) y esa comparación pasa a la diferencia de touchdowns después de Buchholz Cut.
 
 El mismo orden de criterios se utiliza como base al preparar los emparejamientos de la siguiente ronda. El último desempate de los emparejamientos continúa siendo aleatorio para no favorecer sistemáticamente a los ID más bajos.
