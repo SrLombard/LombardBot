@@ -105,20 +105,27 @@ def _detalle_inaccesible(guild: Any, categoria: Any) -> Optional[str]:
     return None
 
 
-async def seleccionar_categoria_comunidades(
+async def planificar_categorias_comunidades(
     session: Any,
     guild: Any,
     *,
     torneo_id: int,
     tipo: str,
+    cantidad: int,
 ):
-    """Elige la primera categoría configurada con menos de 40 canales.
+    """Reserva lógicamente categorías para varias creaciones sin tocar Discord.
 
-    La configuración procede de base de datos y se recorre estrictamente por
-    ``orden_alta``. El recuento usa la colección completa ``channels`` de cada
-    categoría, sin filtrar por torneo ni por tipo de canal.
+    La planificación completa permite detectar falta de capacidad antes de
+    persistir una ronda. Cada aparición de una categoría en el resultado
+    representa un canal nuevo y respeta tanto ``orden_alta`` como el límite
+    global de 40 canales existentes por categoría.
     """
     from ComunidadesCore import obtener_categorias_comunidades
+
+    if cantidad < 0:
+        raise ValueError("cantidad no puede ser negativa.")
+    if cantidad == 0:
+        return ()
 
     categorias_configuradas = obtener_categorias_comunidades(
         session, torneo_id=torneo_id, tipo=tipo
@@ -132,6 +139,7 @@ async def seleccionar_categoria_comunidades(
         )
 
     incidencias = []
+    plan = []
     for configuracion in categorias_configuradas:
         categoria_id = int(configuracion.categoria_discord_id)
         categoria, estado_error = await _resolver_canal_configurado(guild, categoria_id)
@@ -158,21 +166,8 @@ async def seleccionar_categoria_comunidades(
             continue
 
         try:
-            canales = categoria.channels
+            canales_existentes = len(categoria.channels)
         except (AttributeError, TypeError):
-            incidencias.append(
-                IncidenciaCategoriaComunidades(
-                    categoria_discord_id=categoria_id,
-                    orden_alta=int(configuracion.orden_alta),
-                    estado="INACCESIBLE",
-                    detalle="El recurso configurado no expone canales de categoría.",
-                )
-            )
-            continue
-
-        try:
-            canales_existentes = len(canales)
-        except TypeError:
             incidencias.append(
                 IncidenciaCategoriaComunidades(
                     categoria_discord_id=categoria_id,
@@ -183,7 +178,8 @@ async def seleccionar_categoria_comunidades(
             )
             continue
 
-        if canales_existentes >= MAX_CANALES_POR_CATEGORIA_COMUNIDADES:
+        huecos = MAX_CANALES_POR_CATEGORIA_COMUNIDADES - canales_existentes
+        if huecos <= 0:
             incidencias.append(
                 IncidenciaCategoriaComunidades(
                     categoria_discord_id=categoria_id,
@@ -193,16 +189,51 @@ async def seleccionar_categoria_comunidades(
                 )
             )
             continue
-
-        return categoria
+        asignados = min(huecos, cantidad - len(plan))
+        plan.extend([categoria] * asignados)
+        if len(plan) == cantidad:
+            return tuple(plan)
 
     raise ErrorSeleccionCategoriaComunidades(
-        "SIN_CATEGORIA_UTILIZABLE",
-        f"Ninguna categoría de {tipo} del torneo {torneo_id} tiene capacidad disponible.",
+        "CAPACIDAD_INSUFICIENTE",
+        (
+            f"Las categorías de {tipo} del torneo {torneo_id} no tienen "
+            f"capacidad para {cantidad} canales nuevos (disponibles: {len(plan)})."
+        ),
         torneo_id=torneo_id,
         tipo=tipo,
         incidencias=tuple(incidencias),
     )
+
+
+async def seleccionar_categoria_comunidades(
+    session: Any,
+    guild: Any,
+    *,
+    torneo_id: int,
+    tipo: str,
+):
+    """Elige la primera categoría configurada con menos de 40 canales."""
+    try:
+        return (
+            await planificar_categorias_comunidades(
+                session,
+                guild,
+                torneo_id=torneo_id,
+                tipo=tipo,
+                cantidad=1,
+            )
+        )[0]
+    except ErrorSeleccionCategoriaComunidades as exc:
+        if exc.codigo != "CAPACIDAD_INSUFICIENTE":
+            raise
+        raise ErrorSeleccionCategoriaComunidades(
+            "SIN_CATEGORIA_UTILIZABLE",
+            f"Ninguna categoría de {tipo} del torneo {torneo_id} tiene capacidad disponible.",
+            torneo_id=torneo_id,
+            tipo=tipo,
+            incidencias=exc.incidencias,
+        ) from exc
 
 
 def parsear_fecha_limite(fecha: str, hora: str) -> datetime:

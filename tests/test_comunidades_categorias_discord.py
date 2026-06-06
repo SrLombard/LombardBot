@@ -284,3 +284,60 @@ def test_torneo_sin_categorias_falla_con_error_especifico():
         assert error.codigo == "SIN_CATEGORIAS_CONFIGURADAS"
         assert error.incidencias == ()
         assert error.para_administracion()["categorias"] == []
+
+
+def test_planifica_varios_canales_repartidos_sin_superar_limite():
+    from ComunidadesDiscord import planificar_categorias_comunidades
+
+    with _session() as session:
+        torneo = _crear_torneo(session)
+        for categoria_id in (701, 702):
+            anadir_categoria_enfrentamientos_comunidades(
+                session, torneo_id=torneo.id, categoria_discord_id=categoria_id
+            )
+        session.commit()
+        primera = CategoriaDiscordDoble(701, 39)
+        segunda = CategoriaDiscordDoble(702, 38)
+
+        plan = asyncio.run(
+            planificar_categorias_comunidades(
+                session,
+                GuildDoble({701: primera, 702: segunda}),
+                torneo_id=torneo.id,
+                tipo="enfrentamientos",
+                cantidad=3,
+            )
+        )
+
+        assert [categoria.id for categoria in plan] == [701, 702, 702]
+
+
+def test_planificacion_detecta_capacidad_total_insuficiente_antes_de_crear():
+    from ComunidadesDiscord import planificar_categorias_comunidades
+
+    with _session() as session:
+        torneo = _crear_torneo(session)
+        for categoria_id in (801, 802):
+            anadir_categoria_enfrentamientos_comunidades(
+                session, torneo_id=torneo.id, categoria_discord_id=categoria_id
+            )
+        session.commit()
+
+        with pytest.raises(ErrorSeleccionCategoriaComunidades) as capturado:
+            asyncio.run(
+                planificar_categorias_comunidades(
+                    session,
+                    GuildDoble(
+                        {
+                            801: CategoriaDiscordDoble(801, 39),
+                            802: CategoriaDiscordDoble(802, 40),
+                        }
+                    ),
+                    torneo_id=torneo.id,
+                    tipo="enfrentamientos",
+                    cantidad=2,
+                )
+            )
+
+        assert capturado.value.codigo == "CAPACIDAD_INSUFICIENTE"
+        assert "disponibles: 1" in capturado.value.detalle
