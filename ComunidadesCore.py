@@ -1713,6 +1713,255 @@ def registrar_eleccion_atacante_comunidades(
         raise
 
 
+class ErrorTransferenciaComunidades(ValueError):
+    """Error de dominio legible para transferir cazador entre equipos."""
+
+    def __init__(self, codigo: str, detalle: str):
+        super().__init__(detalle)
+        self.codigo = codigo
+        self.detalle = detalle
+
+
+def _error_transferencia(codigo: str, detalle: str) -> None:
+    raise ErrorTransferenciaComunidades(codigo, detalle)
+
+
+def _enfrentamiento_finalizado_o_bye_comunidades(
+    session: Any, *, torneo_id: int, ronda_id: int, equipo_id: int
+) -> bool:
+    """Indica si el equipo ya terminó su participación en la ronda vigente."""
+    from GestorSQL import ComunidadesEnfrentamiento, ComunidadesHistorialTransicion
+
+    enfrentamiento = (
+        session.query(ComunidadesEnfrentamiento)
+        .filter(
+            ComunidadesEnfrentamiento.torneo_id == torneo_id,
+            ComunidadesEnfrentamiento.ronda_id == ronda_id,
+            (
+                (ComunidadesEnfrentamiento.equipo_a_id == equipo_id)
+                | (ComunidadesEnfrentamiento.equipo_b_id == equipo_id)
+            ),
+        )
+        .with_for_update()
+        .one_or_none()
+    )
+    if enfrentamiento is not None:
+        return enfrentamiento.estado in {
+            ENFRENTAMIENTO_CERRADO,
+            ENFRENTAMIENTO_ADMINISTRADO,
+        }
+
+    return (
+        session.query(ComunidadesHistorialTransicion.id)
+        .filter(
+            ComunidadesHistorialTransicion.torneo_id == torneo_id,
+            ComunidadesHistorialTransicion.ronda_id == ronda_id,
+            ComunidadesHistorialTransicion.equipo_id == equipo_id,
+            ComunidadesHistorialTransicion.motivo == "BYE",
+        )
+        .first()
+        is not None
+    )
+
+
+def transferir_cazador_comunidades(
+    session: Any,
+    *,
+    torneo_id: int,
+    equipo_destino_nombre: str,
+    actor_discord_id: int,
+):
+    """Transfiere atómicamente un cazador obtenido en la ronda vigente.
+
+    El equipo origen se deduce de la pertenencia del actor al torneo. Se
+    bloquean ronda y equipos antes de validar para impedir dos transferencias
+    concurrentes del mismo estado. La procedencia se acredita con la última
+    transición del origen en la ronda actual, no solo con su valor presente.
+    """
+    from GestorSQL import (
+        ComunidadesEquipo,
+        ComunidadesHistorialTransferencia,
+        ComunidadesHistorialTransicion,
+        ComunidadesMiembro,
+        ComunidadesRonda,
+        Usuario,
+    )
+
+    if type(torneo_id) is not int or torneo_id <= 0:
+        _error_transferencia(
+            "TORNEO_INVALIDO", "torneo_id debe ser un entero mayor que cero."
+        )
+    if type(actor_discord_id) is not int or actor_discord_id <= 0:
+        _error_transferencia(
+            "ACTOR_INVALIDO", "El ID Discord del actor debe ser un entero mayor que cero."
+        )
+    equipo_destino_nombre = str(equipo_destino_nombre or "").strip()
+    if not equipo_destino_nombre:
+        _error_transferencia(
+            "DESTINO_INVALIDO", "Debe indicar el nombre del equipo destino."
+        )
+
+    try:
+        ronda = (
+            session.query(ComunidadesRonda)
+            .filter(
+                ComunidadesRonda.torneo_id == torneo_id,
+                ComunidadesRonda.estado == RONDA_ABIERTA,
+            )
+            .order_by(ComunidadesRonda.numero.desc())
+            .with_for_update()
+            .first()
+        )
+        if ronda is None:
+            _error_transferencia(
+                "RONDA_NO_DISPONIBLE",
+                "El torneo no tiene una ronda abierta en la que transferir el estado.",
+            )
+
+        origen = (
+            session.query(ComunidadesEquipo)
+            .join(
+                ComunidadesMiembro,
+                (ComunidadesMiembro.equipo_id == ComunidadesEquipo.id)
+                & (ComunidadesMiembro.torneo_id == ComunidadesEquipo.torneo_id),
+            )
+            .join(Usuario, Usuario.idUsuarios == ComunidadesMiembro.usuario_id)
+            .filter(
+                ComunidadesEquipo.torneo_id == torneo_id,
+                Usuario.id_discord == actor_discord_id,
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        if origen is None:
+            _error_transferencia(
+                "ACTOR_NO_MIEMBRO",
+                "Solo un miembro del equipo origen puede transferir el estado.",
+            )
+
+        destino = (
+            session.query(ComunidadesEquipo)
+            .filter(
+                ComunidadesEquipo.torneo_id == torneo_id,
+                ComunidadesEquipo.nombre == equipo_destino_nombre,
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        if destino is None:
+            _error_transferencia(
+                "DESTINO_NO_EXISTE",
+                f"El equipo destino `{equipo_destino_nombre}` no existe en el torneo.",
+            )
+        if int(origen.id) == int(destino.id):
+            _error_transferencia(
+                "MISMO_EQUIPO", "El equipo origen y el destino deben ser distintos."
+            )
+        if int(origen.comunidad_id) != int(destino.comunidad_id):
+            _error_transferencia(
+                "COMUNIDAD_DISTINTA",
+                "El equipo origen y el destino deben pertenecer a la misma comunidad.",
+            )
+
+        for equipo in (origen, destino):
+            if not _enfrentamiento_finalizado_o_bye_comunidades(
+                session,
+                torneo_id=torneo_id,
+                ronda_id=int(ronda.id),
+                equipo_id=int(equipo.id),
+            ):
+                _error_transferencia(
+                    "ENFRENTAMIENTO_EN_CURSO",
+                    "No puede transferir el estado con un enfrentamiento en curso",
+                )
+
+        tipo = str(origen.estado_temporal)
+        if tipo not in {
+            EstadoTemporal.CAZADOR.value,
+            EstadoTemporal.CAZADOR_Z.value,
+        }:
+            _error_transferencia(
+                "ORIGEN_SIN_CAZADOR",
+                "El equipo origen no tiene cazador ni cazador Z para transferir.",
+            )
+        if str(destino.estado_temporal) != EstadoTemporal.NEUTRO.value:
+            _error_transferencia(
+                "DESTINO_NO_NEUTRO",
+                "El equipo destino debe estar temporalmente neutro.",
+            )
+
+        ultima_transicion = (
+            session.query(ComunidadesHistorialTransicion)
+            .filter(
+                ComunidadesHistorialTransicion.torneo_id == torneo_id,
+                ComunidadesHistorialTransicion.ronda_id == ronda.id,
+                ComunidadesHistorialTransicion.equipo_id == origen.id,
+            )
+            .order_by(
+                ComunidadesHistorialTransicion.created_at.desc(),
+                ComunidadesHistorialTransicion.id.desc(),
+            )
+            .with_for_update()
+            .first()
+        )
+        if (
+            ultima_transicion is None
+            or ultima_transicion.motivo not in {"VICTORIA", "TRANSFERENCIA"}
+            or str(ultima_transicion.estado_temporal_posterior) != tipo
+        ):
+            _error_transferencia(
+                "ESTADO_NO_OBTENIDO_EN_RONDA",
+                "No se puede transferir un estado heredado de una ronda anterior.",
+            )
+
+        zombie_origen = bool(origen.es_zombie)
+        zombie_destino = bool(destino.es_zombie)
+        origen.estado_temporal = EstadoTemporal.NEUTRO.value
+        destino.estado_temporal = tipo
+        session.add_all(
+            [
+                ComunidadesHistorialTransicion(
+                    torneo_id=torneo_id,
+                    ronda_id=ronda.id,
+                    enfrentamiento_id=None,
+                    equipo_id=origen.id,
+                    estado_temporal_anterior=tipo,
+                    es_zombie_anterior=zombie_origen,
+                    estado_temporal_posterior=EstadoTemporal.NEUTRO.value,
+                    es_zombie_posterior=zombie_origen,
+                    motivo="TRANSFERENCIA",
+                ),
+                ComunidadesHistorialTransicion(
+                    torneo_id=torneo_id,
+                    ronda_id=ronda.id,
+                    enfrentamiento_id=None,
+                    equipo_id=destino.id,
+                    estado_temporal_anterior=EstadoTemporal.NEUTRO.value,
+                    es_zombie_anterior=zombie_destino,
+                    estado_temporal_posterior=tipo,
+                    es_zombie_posterior=zombie_destino,
+                    motivo="TRANSFERENCIA",
+                ),
+            ]
+        )
+        transferencia = ComunidadesHistorialTransferencia(
+            torneo_id=torneo_id,
+            ronda_id=ronda.id,
+            comunidad_id=origen.comunidad_id,
+            equipo_origen_id=origen.id,
+            equipo_destino_id=destino.id,
+            tipo=tipo,
+            ejecutada_por_discord_id=actor_discord_id,
+        )
+        session.add(transferencia)
+        session.flush()
+        session.commit()
+        return transferencia
+    except Exception:
+        session.rollback()
+        raise
+
+
 class ErrorAdministracionEleccionesComunidades(ValueError):
     """Error de dominio para consultar o imponer elecciones administrativas."""
 

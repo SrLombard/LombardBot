@@ -68,9 +68,11 @@ from ComunidadesCore import (
     consultar_elecciones_comunidades,
     ErrorGeneracionRondaComunidades,
     ErrorRegistroResultadoComunidades,
+    ErrorTransferenciaComunidades,
     forzar_elecciones_comunidades,
     generar_ronda_comunidades,
     registrar_resultado_partido_comunidades,
+    transferir_cazador_comunidades,
 )
 from ComunidadesConstantes import (
     EMOJI_CAZADOR,
@@ -5301,7 +5303,7 @@ def _texto_global_comunidades(session, enfrentamiento, *, para_hub=False) -> str
 
 
 async def publicar_transferencia_comunidades_en_hub(ctx, transferencia) -> bool:
-    """Helper para que el futuro flujo de transferencias publique sin duplicados."""
+    """Publica una transferencia en el hub con una marca idempotente."""
     torneo = transferencia.comunidad.torneo
     canal = await _resolver_canal_notificacion_comunidades(ctx, torneo.canal_hub_id)
     emoji = EMOJI_CAZADOR_Z if transferencia.tipo == "CAZADOR_Z" else EMOJI_CAZADOR
@@ -5314,6 +5316,74 @@ async def publicar_transferencia_comunidades_en_hub(ctx, transferencia) -> bool:
         f"Tipo: **{transferencia.tipo}**"
     )
     return await _enviar_unico_comunidades(canal, marca, contenido)
+
+
+@bot.tree.command(
+    name="comunidades_transferir_cazador",
+    description="Transfiere el cazador de tu equipo a otro de la misma comunidad",
+)
+@app_commands.describe(
+    torneo_id="Identificador del torneo de comunidades",
+    equipo_destino="Nombre exacto del equipo que recibirá el estado",
+)
+async def comunidades_transferir_cazador(
+    interaction: discord.Interaction, torneo_id: int, equipo_destino: str
+):
+    await interaction.response.defer(ephemeral=True)
+    SessionComunidades = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = SessionComunidades()
+    try:
+        try:
+            transferencia = transferir_cazador_comunidades(
+                session,
+                torneo_id=torneo_id,
+                equipo_destino_nombre=equipo_destino,
+                actor_discord_id=int(interaction.user.id),
+            )
+        except ErrorTransferenciaComunidades as exc:
+            await interaction.followup.send(f"❌ {exc.detalle}", ephemeral=True)
+            return
+        except Exception as exc:
+            session.rollback()
+            await interaction.followup.send(
+                f"❌ No se pudo transferir el estado: {exc}", ephemeral=True
+            )
+            return
+
+        try:
+            publicada = await publicar_transferencia_comunidades_en_hub(
+                interaction, transferencia
+            )
+        except Exception as exc:
+            try:
+                await UtilesDiscord.mensaje_administradores(
+                    "❌ **Transferencia de comunidades pendiente de publicación**\n"
+                    f"Transferencia `{transferencia.id}`: {exc}"
+                )
+            except Exception as error_aviso:
+                print(
+                    "No se pudo avisar de la publicación pendiente de la "
+                    f"transferencia {transferencia.id}: {error_aviso}"
+                )
+            await interaction.followup.send(
+                "⚠️ La transferencia quedó registrada, pero no pudo publicarse "
+                "en el hub. Se ha avisado a administración.",
+                ephemeral=True,
+            )
+            return
+
+        estado_publicacion = (
+            "publicada en el hub" if publicada else "ya publicada previamente en el hub"
+        )
+        await interaction.followup.send(
+            f"✅ Transferencia realizada y {estado_publicacion}: "
+            f"**{_texto_discord_seguro(transferencia.equipo_origen.nombre)}** → "
+            f"**{_texto_discord_seguro(transferencia.equipo_destino.nombre)}** "
+            f"({transferencia.tipo}).",
+            ephemeral=True,
+        )
+    finally:
+        session.close()
 
 
 async def publicar_resultado_partido_comunidades(
