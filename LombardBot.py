@@ -73,9 +73,19 @@ from ComunidadesCore import (
     registrar_resultado_partido_comunidades,
 )
 from ComunidadesConstantes import (
+    EMOJI_CAZADOR,
+    EMOJI_CAZADOR_Z,
+    EMOJI_HERIDO,
+    EMOJI_ZOMBIE,
+    EMOJIS_ESTADO_TEMPORAL,
+    ENFRENTAMIENTO_ADMINISTRADO,
+    ENFRENTAMIENTO_CERRADO,
     ENFRENTAMIENTO_EN_CURSO,
     ENFRENTAMIENTO_PARTIDOS_CREADOS,
+    ICONOS_POR_RAZA,
+    PARTIDO_ADMINISTRADO,
     PARTIDO_EN_CURSO,
+    PARTIDO_FINALIZADO,
     PARTIDO_PENDIENTE,
     RESULTADO_ORIGEN_API,
     RONDA_ABIERTA,
@@ -4864,6 +4874,14 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
             return
         ronda = rondas_abiertas[0]
 
+        avisos_previos = await _reintentar_publicaciones_ronda_comunidades(
+            ctx, session, ronda.id
+        )
+        detalles.extend(
+            f"publicación pendiente para reintento: {aviso}"
+            for aviso in avisos_previos
+        )
+
         partidos_pendientes = (
             session.query(GestorSQL.ComunidadesPartido)
             .join(
@@ -4884,9 +4902,12 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
             .all()
         )
         if not partidos_pendientes:
-            await ctx.send(
-                f"ℹ️ No hay partidos individuales pendientes en la ronda {ronda.numero}."
-            )
+            mensaje = f"ℹ️ No hay partidos individuales pendientes en la ronda {ronda.numero}."
+            if avisos_previos:
+                mensaje += "\n⚠️ " + "; ".join(avisos_previos) + "."
+            else:
+                mensaje += " Se comprobaron también las publicaciones consolidadas."
+            await ctx.send(mensaje)
             return
 
         usuarios_pendientes = {
@@ -4992,6 +5013,15 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
                 errores += 1
                 detalles.append(f"{partido_bloodbowl_id}: error inesperado ({exc}).")
 
+        avisos_publicacion = await _reintentar_publicaciones_ronda_comunidades(
+            ctx, session, ronda.id, matches
+        )
+        if avisos_publicacion:
+            detalles.extend(
+                f"publicación pendiente para reintento: {aviso}"
+                for aviso in avisos_publicacion
+            )
+
         resumen = (
             f"📊 **Actualización de comunidades — torneo {torneo_id}, ronda {ronda.numero}**\n"
             f"- Encontrados y registrados: **{encontrados}**\n"
@@ -5025,6 +5055,374 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
         )
     finally:
         session.close()
+
+
+FORO_RESULTADOS_ID = 1223765590146158653
+
+
+def _marca_publicacion_comunidades(tipo: str, registro_id: int) -> str:
+    return f"||pub:comunidades:{tipo}:{int(registro_id)}||"
+
+
+async def _canal_contiene_marca_comunidades(canal, marca: str) -> bool:
+    historial = getattr(canal, "history", None)
+    if not callable(historial):
+        return False
+    try:
+        async for mensaje in historial(limit=None):
+            if marca in str(getattr(mensaje, "content", "") or ""):
+                return True
+    except Exception:
+        return False
+    return False
+
+
+async def _enviar_unico_comunidades(canal, marca: str, contenido: str, **kwargs) -> bool:
+    """Publica una vez usando una marca estable que también sobrevive a reintentos."""
+    if canal is None:
+        raise RuntimeError("canal de publicación no disponible")
+    if await _canal_contiene_marca_comunidades(canal, marca):
+        return False
+    texto = f"{contenido}\n{marca}" if contenido else marca
+    await canal.send(texto, **kwargs)
+    return True
+
+
+async def _buscar_hilo_resultados_comunidades(canal_foro, titulo: str):
+    for hilo in getattr(canal_foro, "threads", ()):  # hilos activos
+        if getattr(hilo, "name", None) == titulo:
+            return hilo
+    archivados = getattr(canal_foro, "archived_threads", None)
+    if callable(archivados):
+        try:
+            async for hilo in archivados(limit=None):
+                if getattr(hilo, "name", None) == titulo:
+                    return hilo
+        except Exception:
+            pass
+    return None
+
+
+def _raza_usuario_partido_comunidades(session, partido, usuario_id: int) -> str:
+    miembro = (
+        session.query(GestorSQL.ComunidadesMiembro)
+        .filter(
+            GestorSQL.ComunidadesMiembro.torneo_id == int(partido.torneo_id),
+            GestorSQL.ComunidadesMiembro.usuario_id == int(usuario_id),
+        )
+        .one()
+    )
+    raza = str(miembro.raza)
+    ruta = ICONOS_POR_RAZA.get(raza)
+    if ruta is None or not os.path.isfile(ruta):
+        raise ValueError(f"La raza canónica `{raza}` no tiene un icono válido en `{ruta}`.")
+    return raza
+
+
+def _datos_api_imagen_comunidades(partido, match):
+    if not isinstance(match, dict):
+        return None
+    coaches = match.get("coaches") or []
+    teams = match.get("teams") or []
+    if len(coaches) < 2 or len(teams) < 2:
+        return None
+    ids = [str(coach.get("idcoach") or "").strip() for coach in coaches[:2]]
+    local_id = str(getattr(partido.usuario_local, "id_bloodbowl", None) or "").strip()
+    visitante_id = str(getattr(partido.usuario_visitante, "id_bloodbowl", None) or "").strip()
+    if local_id not in ids or visitante_id not in ids:
+        return None
+    indice_local, indice_visitante = ids.index(local_id), ids.index(visitante_id)
+    return teams[indice_local], teams[indice_visitante]
+
+
+def _crear_imagen_resultado_comunidades(session, partido, match=None):
+    raza_local = _raza_usuario_partido_comunidades(
+        session, partido, partido.usuario_local_id
+    )
+    raza_visitante = _raza_usuario_partido_comunidades(
+        session, partido, partido.usuario_visitante_id
+    )
+    datos_api = _datos_api_imagen_comunidades(partido, match)
+    if datos_api is None:
+        team_local, team_visitante = {}, {}
+        escudo_local, escudo_visitante = raza_local, raza_visitante
+    else:
+        team_local, team_visitante = datos_api
+        logo_local = str(team_local.get("teamlogo") or "").replace(".png", "")
+        logo_visitante = str(team_visitante.get("teamlogo") or "").replace(".png", "")
+        escudo_local = f"Logos/{logo_local}" if logo_local else raza_local
+        escudo_visitante = f"Logos/{logo_visitante}" if logo_visitante else raza_visitante
+
+    td_local, td_visitante = int(partido.td_local or 0), int(partido.td_visitante or 0)
+    if td_local > td_visitante:
+        ganador = {"ruta": "./plantillas/Victoria_Izquierda.png", "x": 50, "y": 220}
+    elif td_local < td_visitante:
+        ganador = {"ruta": "./plantillas/Victoria_Derecha.png", "x": 1400, "y": 220}
+    else:
+        ganador = {"ruta": "./plantillas/Empate.png", "x": 729, "y": 241}
+
+    return Imagenes.crear_imagen(
+        "resultado",
+        "",
+        entrenadores={
+            "0": _nombre_usuario_comunidades(partido.usuario_local),
+            "1": _nombre_usuario_comunidades(partido.usuario_visitante),
+        },
+        resultados={"0": td_local, "1": td_visitante},
+        escudos={"0": escudo_local, "1": escudo_visitante},
+        razas={"0": raza_local, "1": raza_visitante},
+        nombre_equipos={
+            "0": str(team_local.get("teamname") or partido.equipo_local.nombre),
+            "1": str(team_visitante.get("teamname") or partido.equipo_visitante.nombre),
+        },
+        kos={
+            "0": int(team_visitante.get("inflictedko") or 0),
+            "1": int(team_local.get("inflictedko") or 0),
+        },
+        heridos={
+            "0": max(0, int(team_visitante.get("inflictedcasualties") or 0) - int(team_local.get("sustaineddead") or 0)),
+            "1": max(0, int(team_local.get("inflictedcasualties") or 0) - int(team_visitante.get("sustaineddead") or 0)),
+        },
+        muertos={
+            "0": int(team_local.get("sustaineddead") or 0),
+            "1": int(team_visitante.get("sustaineddead") or 0),
+        },
+        ganador=ganador,
+        grupo={"0": 1},
+        lado={"izquierdo": "#5f8dd3", "derecho": "#c95f5f"},
+    )
+
+
+def _estado_con_emojis_comunidades(estado_temporal: str, es_zombie: bool) -> str:
+    emojis = []
+    if es_zombie:
+        emojis.append(EMOJI_ZOMBIE)
+    emoji_temporal = EMOJIS_ESTADO_TEMPORAL.get(estado_temporal, "")
+    if emoji_temporal:
+        emojis.append(emoji_temporal)
+    return " ".join(emojis) or "⚪"
+
+
+def _texto_partido_comunidades(partido) -> str:
+    return (
+        f"🏟️ **Resultado individual · Partido {int(partido.indice)}**\n"
+        f"{_texto_discord_seguro(_nombre_usuario_comunidades(partido.usuario_local))} "
+        f"**{int(partido.td_local)}-{int(partido.td_visitante)}** "
+        f"{_texto_discord_seguro(_nombre_usuario_comunidades(partido.usuario_visitante))}\n"
+        f"Puntos internos: **{partido.puntos_internos_local}-"
+        f"{partido.puntos_internos_visitante}** · Origen: **{partido.resultado_origen}**"
+    )
+
+
+def _desempate_enfrentamiento_comunidades(enfrentamiento) -> str:
+    if bool(enfrentamiento.es_doble_forfait):
+        return "Doble forfait global; no se aplicaron transiciones de estado."
+    if enfrentamiento.puntos_internos_a != enfrentamiento.puntos_internos_b:
+        return "Desempate: suma de puntos internos."
+    if int(enfrentamiento.td_atacante_a) != int(enfrentamiento.td_atacante_b):
+        return "Desempate: TD anotados por los atacantes."
+    diferencia_a = int(enfrentamiento.td_favor_a) - int(enfrentamiento.td_contra_a)
+    diferencia_b = int(enfrentamiento.td_favor_b) - int(enfrentamiento.td_contra_b)
+    if diferencia_a != diferencia_b:
+        return "Desempate: diferencia global de TD."
+    return "El enfrentamiento terminó empatado tras aplicar todos los desempates."
+
+
+def _textos_transiciones_comunidades(session, enfrentamiento):
+    transiciones = (
+        session.query(GestorSQL.ComunidadesHistorialTransicion)
+        .filter(
+            GestorSQL.ComunidadesHistorialTransicion.enfrentamiento_id
+            == int(enfrentamiento.id)
+        )
+        .order_by(GestorSQL.ComunidadesHistorialTransicion.equipo_id)
+        .all()
+    )
+    lineas, anuncios = [], []
+    for transicion in transiciones:
+        equipo = transicion.equipo
+        anterior = _estado_con_emojis_comunidades(
+            transicion.estado_temporal_anterior,
+            bool(transicion.es_zombie_anterior),
+        )
+        posterior = _estado_con_emojis_comunidades(
+            transicion.estado_temporal_posterior,
+            bool(transicion.es_zombie_posterior),
+        )
+        nombre = _texto_discord_seguro(equipo.nombre)
+        lineas.append(
+            f"- **{nombre}**: {anterior} → {posterior} (`{transicion.motivo}`)"
+        )
+        if not transicion.es_zombie_anterior and transicion.es_zombie_posterior:
+            anuncios.append(f"{EMOJI_ZOMBIE} **{nombre} ha sido zombificado**.")
+        if transicion.estado_temporal_posterior == "CAZADOR":
+            anuncios.append(f"{EMOJI_CAZADOR} **{nombre} es nuevo cazador**.")
+        elif transicion.estado_temporal_posterior == "CAZADOR_Z":
+            anuncios.append(f"{EMOJI_CAZADOR_Z} **{nombre} es nuevo cazador Z**.")
+        elif transicion.estado_temporal_posterior == "HERIDO":
+            anuncios.append(f"{EMOJI_HERIDO} **{nombre} queda herido**.")
+        if Decimal(transicion.puntos_comunitarios_generados or 0) > 0:
+            anuncios.append(
+                f"🏆 **{equipo.comunidad.nombre}** suma "
+                f"**{transicion.puntos_comunitarios_generados}** punto de zombificación."
+            )
+        if int(transicion.kills_generadas or 0) > 0:
+            anuncios.append(
+                f"☠️ **{equipo.comunidad.nombre}** mata "
+                f"**{int(transicion.kills_generadas)}** zombie."
+            )
+    return lineas, anuncios
+
+
+def _texto_global_comunidades(session, enfrentamiento, *, para_hub=False) -> str:
+    equipo_a = _texto_discord_seguro(enfrentamiento.equipo_a.nombre)
+    equipo_b = _texto_discord_seguro(enfrentamiento.equipo_b.nombre)
+    if bool(enfrentamiento.es_doble_forfait):
+        desenlace = "doble forfait global"
+    elif enfrentamiento.ganador_equipo_id is None:
+        desenlace = "empate global"
+    else:
+        ganador = equipo_a if int(enfrentamiento.ganador_equipo_id) == int(enfrentamiento.equipo_a_id) else equipo_b
+        desenlace = f"victoria global de **{ganador}**"
+    transiciones, anuncios = _textos_transiciones_comunidades(session, enfrentamiento)
+    titulo = "🌐 **Resultado global de comunidades**" if para_hub else "✅ **Enfrentamiento cerrado**"
+    partes = [
+        titulo,
+        f"Mesa **{int(enfrentamiento.mesa_numero)}** · {equipo_a} vs {equipo_b}: {desenlace}.",
+        f"Puntos internos: **{equipo_a} {enfrentamiento.puntos_internos_a} - {enfrentamiento.puntos_internos_b} {equipo_b}**.",
+        _desempate_enfrentamiento_comunidades(enfrentamiento),
+        f"Puntos de clasificación: **{equipo_a} {enfrentamiento.puntos_clasificacion_a} - {enfrentamiento.puntos_clasificacion_b} {equipo_b}**.",
+    ]
+    if transiciones:
+        partes.extend(("**Transiciones de estado:**", *transiciones))
+    if anuncios:
+        partes.extend(("**Efectos:**", *anuncios))
+    return "\n".join(partes)
+
+
+async def publicar_transferencia_comunidades_en_hub(ctx, transferencia) -> bool:
+    """Helper para que el futuro flujo de transferencias publique sin duplicados."""
+    torneo = transferencia.comunidad.torneo
+    canal = await _resolver_canal_notificacion_comunidades(ctx, torneo.canal_hub_id)
+    emoji = EMOJI_CAZADOR_Z if transferencia.tipo == "CAZADOR_Z" else EMOJI_CAZADOR
+    marca = _marca_publicacion_comunidades("transferencia-hub", transferencia.id)
+    contenido = (
+        f"{emoji} **Transferencia de estado**\n"
+        f"Comunidad: **{_texto_discord_seguro(transferencia.comunidad.nombre)}** · "
+        f"Origen: **{_texto_discord_seguro(transferencia.equipo_origen.nombre)}** · "
+        f"Destino: **{_texto_discord_seguro(transferencia.equipo_destino.nombre)}** · "
+        f"Tipo: **{transferencia.tipo}**"
+    )
+    return await _enviar_unico_comunidades(canal, marca, contenido)
+
+
+async def publicar_resultado_partido_comunidades(
+    ctx, session, partido_id: int, *, match=None
+):
+    """Publica un partido consolidado y, si es el segundo, todos sus efectos.
+
+    La función se llama después del commit. Cada destino se protege con una marca
+    estable en Discord, por lo que un fallo parcial puede reintentarse sin repetir
+    las publicaciones que ya llegaron a enviarse.
+    """
+    partido = session.query(GestorSQL.ComunidadesPartido).get(int(partido_id))
+    if partido is None or partido.estado not in {PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO}:
+        return []
+    avisos = []
+    canal_individual = await _resolver_canal_notificacion_comunidades(
+        ctx, partido.canal_discord_id
+    )
+    try:
+        await _enviar_unico_comunidades(
+            canal_individual,
+            _marca_publicacion_comunidades("partido-canal", partido.id),
+            _texto_partido_comunidades(partido),
+        )
+    except Exception as exc:
+        avisos.append(f"canal individual del partido {partido.id}: {exc}")
+
+    try:
+        guild = getattr(ctx, "guild", None)
+        foro = discord.utils.get(getattr(guild, "channels", []), id=FORO_RESULTADOS_ID)
+        if foro is None and guild is not None:
+            foro = await _resolver_canal_notificacion_comunidades(ctx, FORO_RESULTADOS_ID)
+        if foro is None or not isinstance(foro, discord.ForumChannel):
+            raise RuntimeError("foro de resultados no disponible")
+        titulo = f"{partido.enfrentamiento.torneo.nombre} J{partido.enfrentamiento.ronda.numero}"
+        hilo = await _buscar_hilo_resultados_comunidades(foro, titulo)
+        if hilo is None:
+            creado = await foro.create_thread(name=titulo, content=f"Resultados de {titulo}")
+            hilo = creado.thread
+        elif getattr(hilo, "archived", False):
+            await hilo.edit(archived=False)
+        marca = _marca_publicacion_comunidades("partido-foro", partido.id)
+        if not await _canal_contiene_marca_comunidades(hilo, marca):
+            ruta = _crear_imagen_resultado_comunidades(session, partido, match)
+            if not ruta:
+                raise RuntimeError("no se pudo generar la imagen")
+            try:
+                with open(ruta, "rb") as imagen:
+                    await hilo.send(marca, file=File(imagen))
+            finally:
+                Imagenes.eliminar_imagen(ruta)
+    except Exception as exc:
+        avisos.append(f"foro del partido {partido.id}: {exc}")
+
+    enfrentamiento = partido.enfrentamiento
+    if enfrentamiento.estado not in {ENFRENTAMIENTO_CERRADO, ENFRENTAMIENTO_ADMINISTRADO}:
+        return avisos
+    canal_general = await _resolver_canal_notificacion_comunidades(
+        ctx, enfrentamiento.canal_general_discord_id
+    )
+    try:
+        await _enviar_unico_comunidades(
+            canal_general,
+            _marca_publicacion_comunidades("global-general", enfrentamiento.id),
+            _texto_global_comunidades(session, enfrentamiento),
+        )
+    except Exception as exc:
+        avisos.append(f"canal general del enfrentamiento {enfrentamiento.id}: {exc}")
+    canal_hub = await _resolver_canal_notificacion_comunidades(
+        ctx, enfrentamiento.torneo.canal_hub_id
+    )
+    try:
+        await _enviar_unico_comunidades(
+            canal_hub,
+            _marca_publicacion_comunidades("global-hub", enfrentamiento.id),
+            _texto_global_comunidades(session, enfrentamiento, para_hub=True),
+        )
+    except Exception as exc:
+        avisos.append(f"hub del enfrentamiento {enfrentamiento.id}: {exc}")
+    return avisos
+
+
+async def _reintentar_publicaciones_ronda_comunidades(ctx, session, ronda_id: int, matches=()):
+    por_uuid = {
+        str(match.get("uuid")): match
+        for match in matches
+        if isinstance(match, dict) and match.get("uuid")
+    }
+    avisos = []
+    partidos = (
+        session.query(GestorSQL.ComunidadesPartido)
+        .join(GestorSQL.ComunidadesEnfrentamiento)
+        .filter(
+            GestorSQL.ComunidadesEnfrentamiento.ronda_id == int(ronda_id),
+            GestorSQL.ComunidadesPartido.estado.in_((PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO)),
+        )
+        .order_by(GestorSQL.ComunidadesPartido.id)
+        .all()
+    )
+    for partido in partidos:
+        avisos.extend(
+            await publicar_resultado_partido_comunidades(
+                ctx,
+                session,
+                partido.id,
+                match=por_uuid.get(str(partido.partido_bloodbowl_id)),
+            )
+        )
+    return avisos
 
 
 async def _resolver_canal_notificacion_comunidades(ctx, canal_id):
@@ -5151,11 +5549,8 @@ async def comunidades_admin_partido(
             )
             if resultado.idempotente:
                 session.rollback()
-                await ctx.send(
-                    "❌ El partido ya había sido cerrado y no puede administrarse de nuevo."
-                )
-                return
-            session.commit()
+            else:
+                session.commit()
         except ErrorRegistroResultadoComunidades as exc:
             session.rollback()
             await ctx.send(
@@ -5163,35 +5558,22 @@ async def comunidades_admin_partido(
             )
             return
 
-        mensaje = _mensaje_resultado_admin_comunidades(resultado, tipo.strip().lower())
-        destinos = (
-            ("individual", resultado.partido.canal_discord_id),
-            ("general", resultado.enfrentamiento.canal_general_discord_id),
+        avisos = await publicar_resultado_partido_comunidades(
+            ctx, session, resultado.partido.id
         )
-        avisos = []
-        enviados = set()
-        for nombre, canal_id in destinos:
-            if canal_id is None:
-                avisos.append(f"canal {nombre} no disponible")
-                continue
-            if int(canal_id) in enviados:
-                continue
-            canal = await _resolver_canal_notificacion_comunidades(ctx, canal_id)
-            if canal is None:
-                avisos.append(f"canal {nombre} inaccesible (`{int(canal_id)}`)")
-                continue
-            try:
-                await canal.send(mensaje)
-                enviados.add(int(canal_id))
-            except Exception as exc:
-                avisos.append(f"falló el aviso al canal {nombre}: {exc}")
-
-        confirmacion = (
-            f"✅ Partido `{partido_indice}` del enfrentamiento `{enfrentamiento_id}` "
-            "administrado correctamente."
-        )
+        if resultado.idempotente:
+            confirmacion = (
+                f"ℹ️ El partido `{partido_indice}` del enfrentamiento "
+                f"`{enfrentamiento_id}` ya estaba consolidado; se reintentaron "
+                "sus publicaciones pendientes."
+            )
+        else:
+            confirmacion = (
+                f"✅ Partido `{partido_indice}` del enfrentamiento `{enfrentamiento_id}` "
+                "administrado correctamente."
+            )
         if avisos:
-            confirmacion += "\n⚠️ " + "; ".join(avisos) + "."
+            confirmacion += "\n⚠️ Pendiente de reintento: " + "; ".join(avisos) + "."
         await ctx.send(confirmacion)
     except Exception as exc:
         session.rollback()
