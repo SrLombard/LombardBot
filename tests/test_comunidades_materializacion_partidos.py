@@ -228,7 +228,7 @@ def test_materializa_dos_canales_con_permisos_mensajes_y_estado():
 
         assert resultado.canales_creados == 2
         assert len(guild.creaciones) == 2
-        assert guild.general.mensajes == ["Se van a crear los encuentros"]
+        assert guild.general.mensajes == []
         assert all(creacion["category"] is guild.categoria for creacion in guild.creaciones)
         assert set(guild.creaciones[0]["overwrites"]) == {
             guild.default_role,

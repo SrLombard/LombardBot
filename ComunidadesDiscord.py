@@ -436,8 +436,6 @@ async def materializar_partidos_comunidades(
         cantidad=len(pendientes),
     )
 
-    await canal_general.send("Se van a crear los encuentros")
-
     canales_creados = 0
     for partido, categoria in zip(pendientes, categorias):
         miembros = miembros_por_partido[int(partido.id)]
@@ -500,3 +498,230 @@ async def materializar_partidos_comunidades(
         canal_ids=(int(partidos[0].canal_discord_id), int(partidos[1].canal_discord_id)),
         canales_creados=canales_creados,
     )
+
+
+def texto_discord_seguro_comunidades(valor: object) -> str:
+    """Evita menciones accidentales al presentar nombres configurables."""
+    return str(valor or "").replace("@", "@\u200b")
+
+
+def mencion_usuario_comunidades(usuario: Any) -> str:
+    """Construye una mención desde un usuario persistido por comunidades."""
+    discord_id = getattr(usuario, "id_discord", None)
+    if discord_id is None:
+        return texto_discord_seguro_comunidades(
+            getattr(usuario, "nombre_discord", "Jugador")
+        )
+    return f"<@{int(discord_id)}>"
+
+
+def mensaje_eleccion_ephemeral_comunidades(resultado: Any) -> str:
+    """Presenta únicamente al equipo que eligió sus identidades privadas."""
+    return (
+        f"**Equipo:** {texto_discord_seguro_comunidades(resultado.equipo_nombre)}\n"
+        f"**Atacante:** {mencion_usuario_comunidades(resultado.atacante)}\n"
+        f"**Defensor:** {mencion_usuario_comunidades(resultado.defensor)}"
+    )
+
+
+async def _responder_ephemeral_comunidades(interaction: Any, mensaje: str) -> None:
+    respuesta = interaction.response
+    if respuesta.is_done():
+        await interaction.followup.send(mensaje, ephemeral=True)
+    else:
+        await respuesta.send_message(mensaje, ephemeral=True)
+
+
+_MENSAJES_ERROR_SELECCION_COMUNIDADES = {
+    "ENFRENTAMIENTO_NO_EXISTE": (
+        "Este canal no corresponde al canal general de un enfrentamiento activo."
+    ),
+    "CANAL_ENFRENTAMIENTO_AMBIGUO": (
+        "Este canal no permite identificar un único enfrentamiento activo."
+    ),
+    "ENFRENTAMIENTO_NO_ACTIVO": "El enfrentamiento de este canal no está activo.",
+    "ACTOR_NO_PERTENECE": "No perteneces a ninguno de los equipos de este enfrentamiento.",
+    "ATACANTE_NO_PERTENECE": "Solo puedes elegir a un miembro de tu propio equipo.",
+    "EQUIPO_INCOMPLETO": "Tu equipo no tiene exactamente dos miembros configurados.",
+    "ELECCIONES_BLOQUEADAS": "Las elecciones ya están completas y no se pueden modificar.",
+}
+
+
+def resolver_enfrentamiento_id_por_canal_comunidades(
+    session: Any, canal_general_discord_id: int
+) -> int:
+    """Traduce el contexto Discord a una única referencia de dominio."""
+    from ComunidadesCore import ErrorSeleccionAtacanteComunidades
+    from GestorSQL import ComunidadesEnfrentamiento
+
+    enfrentamientos = (
+        session.query(ComunidadesEnfrentamiento.id)
+        .filter(
+            ComunidadesEnfrentamiento.canal_general_discord_id
+            == canal_general_discord_id
+        )
+        .limit(2)
+        .all()
+    )
+    if not enfrentamientos:
+        raise ErrorSeleccionAtacanteComunidades(
+            "ENFRENTAMIENTO_NO_EXISTE",
+            "No existe un enfrentamiento asociado al canal indicado.",
+        )
+    if len(enfrentamientos) != 1:
+        raise ErrorSeleccionAtacanteComunidades(
+            "CANAL_ENFRENTAMIENTO_AMBIGUO",
+            "El canal está asociado a más de un enfrentamiento.",
+        )
+    return int(enfrentamientos[0][0])
+
+
+async def ejecutar_seleccion_atacante_comunidades(
+    interaction: Any,
+    usuario: Any,
+    *,
+    session_factory: Any,
+    servicio_eleccion: Any = None,
+    servicio_materializacion: Any = None,
+    servicio_resolucion_enfrentamiento: Any = None,
+    notificar_administracion: Any = None,
+    elegido_en: Optional[datetime] = None,
+) -> Optional[Any]:
+    """Orquesta el slash command sin reproducir reglas de dominio.
+
+    Cada servicio recibe una sesión independiente. La elección queda confirmada
+    y su sesión se cierra antes de publicar en Discord o crear canales.
+    """
+    from ComunidadesCore import (
+        ErrorSeleccionAtacanteComunidades,
+        registrar_eleccion_atacante_comunidades,
+    )
+
+    if servicio_eleccion is None:
+        servicio_eleccion = registrar_eleccion_atacante_comunidades
+    if servicio_materializacion is None:
+        servicio_materializacion = materializar_partidos_comunidades
+    if servicio_resolucion_enfrentamiento is None:
+        servicio_resolucion_enfrentamiento = resolver_enfrentamiento_id_por_canal_comunidades
+
+    guild = getattr(interaction, "guild", None)
+    channel = getattr(interaction, "channel", None)
+    actor = getattr(interaction, "user", None)
+    if guild is None or channel is None or actor is None:
+        await _responder_ephemeral_comunidades(
+            interaction, "Este comando solo puede utilizarse en el servidor."
+        )
+        return None
+
+    session = session_factory()
+    try:
+        enfrentamiento_id = servicio_resolucion_enfrentamiento(
+            session, int(channel.id)
+        )
+        resultado = servicio_eleccion(
+            session,
+            enfrentamiento_id=enfrentamiento_id,
+            actor_discord_id=int(actor.id),
+            atacante_discord_id=int(usuario.id),
+            elegido_en=elegido_en,
+        )
+        enfrentamiento_id = int(resultado.eleccion.enfrentamiento_id)
+        mensaje_privado = mensaje_eleccion_ephemeral_comunidades(resultado)
+        mensaje_publico = (
+            "El equipo "
+            f"{texto_discord_seguro_comunidades(resultado.equipo_nombre)} "
+            "ha elegido atacante"
+        )
+        requiere_materializacion = bool(resultado.requiere_crear_partidos)
+    except ErrorSeleccionAtacanteComunidades as exc:
+        await _responder_ephemeral_comunidades(
+            interaction,
+            _MENSAJES_ERROR_SELECCION_COMUNIDADES.get(
+                exc.codigo, "No se pudo registrar la elección indicada."
+            ),
+        )
+        return None
+    except Exception as exc:
+        try:
+            session.rollback()
+        finally:
+            if notificar_administracion is not None:
+                await notificar_administracion(
+                    "Fallo al registrar una elección de comunidades "
+                    f"en el canal `{int(channel.id)}` ({type(exc).__name__}: {exc})."
+                )
+        await _responder_ephemeral_comunidades(
+            interaction, "No se pudo registrar la elección. Inténtalo de nuevo más tarde."
+        )
+        return None
+    finally:
+        session.close()
+
+    try:
+        await _responder_ephemeral_comunidades(interaction, mensaje_privado)
+    except Exception as exc:
+        if notificar_administracion is not None:
+            await notificar_administracion(
+                "La elección quedó persistida, pero falló la respuesta privada "
+                f"del enfrentamiento `{enfrentamiento_id}` ({type(exc).__name__}: {exc})."
+            )
+
+    try:
+        await channel.send(mensaje_publico)
+    except Exception as exc:
+        if notificar_administracion is not None:
+            await notificar_administracion(
+                "La elección quedó persistida, pero falló el aviso público "
+                f"del enfrentamiento `{enfrentamiento_id}` ({type(exc).__name__}: {exc})."
+            )
+
+    if not requiere_materializacion:
+        return resultado
+
+    try:
+        await channel.send("Se van a crear los encuentros")
+    except Exception as exc:
+        if notificar_administracion is not None:
+            await notificar_administracion(
+                "Las elecciones quedaron bloqueadas, pero falló el aviso previo "
+                f"del enfrentamiento `{enfrentamiento_id}` ({type(exc).__name__}: {exc})."
+            )
+
+    session_materializacion = session_factory()
+    try:
+        materializacion = await servicio_materializacion(
+            session_materializacion,
+            guild,
+            enfrentamiento_id=enfrentamiento_id,
+        )
+    except Exception as exc:
+        session_materializacion.rollback()
+        if notificar_administracion is not None:
+            await notificar_administracion(
+                "Las elecciones del enfrentamiento "
+                f"`{enfrentamiento_id}` permanecen bloqueadas, pero la materialización "
+                f"no se completó ({type(exc).__name__}: {exc})."
+            )
+        try:
+            await _responder_ephemeral_comunidades(
+                interaction,
+                "La elección se guardó, pero no se pudieron crear todos los encuentros. "
+                "La administración ha sido avisada.",
+            )
+        except Exception:
+            pass
+        return resultado
+    finally:
+        session_materializacion.close()
+
+    canales = " y ".join(f"<#{int(canal_id)}>" for canal_id in materializacion.canal_ids)
+    try:
+        await channel.send(f"Encuentros creados: {canales}")
+    except Exception as exc:
+        if notificar_administracion is not None:
+            await notificar_administracion(
+                "Los encuentros del enfrentamiento "
+                f"`{enfrentamiento_id}` se materializaron, pero falló su confirmación "
+                f"pública ({type(exc).__name__}: {exc})."
+            )
+    return resultado

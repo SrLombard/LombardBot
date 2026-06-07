@@ -68,6 +68,7 @@ from ComunidadesCore import (
 )
 from ComunidadesDiscord import (
     ErrorSeleccionCategoriaComunidades,
+    ejecutar_seleccion_atacante_comunidades,
     parsear_decimal,
     parsear_fecha_limite,
     planificar_categorias_comunidades,
@@ -4604,6 +4605,31 @@ async def _publicar_error_administrativo_comunidades(ctx, mensaje: str) -> None:
     except Exception as exc:
         print(f"No se pudo publicar la incidencia de comunidades en administración: {exc}")
     await UtilesDiscord.enviar_mensaje_largo(ctx, texto)
+
+
+@bot.tree.command(
+    name="comunidades_seleccion_atacante",
+    description="Elige secretamente al atacante de tu equipo para este enfrentamiento",
+)
+@app_commands.describe(usuario="Miembro de tu equipo que actuará como atacante")
+async def comunidades_seleccion_atacante(
+    interaction: discord.Interaction,
+    usuario: discord.Member,
+):
+    SessionComunidades = sessionmaker(bind=GestorSQL.conexionEngine())
+
+    async def notificar_administracion(mensaje: str) -> None:
+        await UtilesDiscord.mensaje_administradores(
+            "❌ **Incidencia en selección de atacante de comunidades**\n" + mensaje
+        )
+
+    await ejecutar_seleccion_atacante_comunidades(
+        interaction,
+        usuario,
+        session_factory=SessionComunidades,
+        notificar_administracion=notificar_administracion,
+        elegido_en=datetime.now(ZoneInfo("UTC")).replace(tzinfo=None),
+    )
 
 
 async def _resolver_miembro_guild_comunidades(guild, discord_id: int):

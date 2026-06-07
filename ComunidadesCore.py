@@ -1449,8 +1449,10 @@ class ResultadoSeleccionAtacanteComunidades:
     eleccion: Any
     atacante: Any
     defensor: Any
+    equipo_nombre: str
     ambas_elecciones_completas: bool
     requiere_crear_partidos: bool
+    acaba_de_completar_elecciones: bool
 
 
 def _error_seleccion_atacante(codigo: str, detalle: str) -> None:
@@ -1506,7 +1508,8 @@ def registrar_eleccion_atacante_comunidades(
     session: Any,
     *,
     actor_discord_id: int,
-    atacante_usuario_id: int,
+    atacante_usuario_id: Optional[int] = None,
+    atacante_discord_id: Optional[int] = None,
     enfrentamiento_id: Optional[int] = None,
     canal_general_discord_id: Optional[int] = None,
     elegido_en: Optional[datetime] = None,
@@ -1528,7 +1531,17 @@ def registrar_eleccion_atacante_comunidades(
         _error_seleccion_atacante(
             "ACTOR_INVALIDO", "El ID Discord del actor debe ser un entero mayor que cero."
         )
-    if type(atacante_usuario_id) is not int or atacante_usuario_id <= 0:
+    if (atacante_usuario_id is None) == (atacante_discord_id is None):
+        _error_seleccion_atacante(
+            "ATACANTE_INVALIDO",
+            "Debe indicarse exactamente un ID interno o un ID Discord del atacante.",
+        )
+    atacante_referencia = (
+        atacante_usuario_id
+        if atacante_usuario_id is not None
+        else atacante_discord_id
+    )
+    if type(atacante_referencia) is not int or atacante_referencia <= 0:
         _error_seleccion_atacante(
             "ATACANTE_INVALIDO", "El ID del atacante debe ser un entero mayor que cero."
         )
@@ -1557,6 +1570,12 @@ def registrar_eleccion_atacante_comunidades(
         )
         session.expire_all()
         enfrentamiento = session.get(ComunidadesEnfrentamiento, identificador)
+
+        if enfrentamiento.ronda is None or enfrentamiento.ronda.estado != "ABIERTA":
+            _error_seleccion_atacante(
+                "ENFRENTAMIENTO_NO_ACTIVO",
+                "El enfrentamiento no pertenece a una ronda activa.",
+            )
 
         equipo_ids = (int(enfrentamiento.equipo_a_id), int(enfrentamiento.equipo_b_id))
         miembros = (
@@ -1591,7 +1610,16 @@ def registrar_eleccion_atacante_comunidades(
             (
                 miembro
                 for miembro in miembros_equipo
-                if int(miembro.usuario_id) == atacante_usuario_id
+                if (
+                    atacante_usuario_id is not None
+                    and int(miembro.usuario_id) == atacante_usuario_id
+                )
+                or (
+                    atacante_discord_id is not None
+                    and miembro.usuario is not None
+                    and miembro.usuario.id_discord is not None
+                    and int(miembro.usuario.id_discord) == atacante_discord_id
+                )
             ),
             None,
         )
@@ -1600,10 +1628,11 @@ def registrar_eleccion_atacante_comunidades(
                 "ATACANTE_NO_PERTENECE",
                 "El atacante seleccionado no pertenece al equipo del actor.",
             )
+        atacante_usuario_id_resuelto = int(atacante_miembro.usuario_id)
         defensor_miembro = next(
             miembro
             for miembro in miembros_equipo
-            if int(miembro.usuario_id) != atacante_usuario_id
+            if int(miembro.usuario_id) != atacante_usuario_id_resuelto
         )
 
         eleccion = (
@@ -1615,20 +1644,6 @@ def registrar_eleccion_atacante_comunidades(
             .one_or_none()
         )
         if enfrentamiento.estado != ENFRENTAMIENTO_PENDIENTE_ELECCIONES:
-            if (
-                enfrentamiento.estado == ENFRENTAMIENTO_ELECCIONES_COMPLETAS
-                and eleccion is not None
-                and int(eleccion.atacante_usuario_id) == atacante_usuario_id
-                and bool(eleccion.bloqueada)
-            ):
-                session.commit()
-                return ResultadoSeleccionAtacanteComunidades(
-                    eleccion=eleccion,
-                    atacante=atacante_miembro.usuario,
-                    defensor=defensor_miembro.usuario,
-                    ambas_elecciones_completas=True,
-                    requiere_crear_partidos=True,
-                )
             _error_seleccion_atacante(
                 "ELECCIONES_BLOQUEADAS",
                 "Las elecciones del enfrentamiento ya no se pueden modificar.",
@@ -1640,7 +1655,7 @@ def registrar_eleccion_atacante_comunidades(
                 torneo_id=enfrentamiento.torneo_id,
                 enfrentamiento_id=identificador,
                 equipo_id=equipo_id,
-                atacante_usuario_id=atacante_usuario_id,
+                atacante_usuario_id=atacante_usuario_id_resuelto,
                 defensor_usuario_id=int(defensor_miembro.usuario_id),
                 elegido_por_discord_id=actor_discord_id,
                 elegido_en=ahora,
@@ -1653,7 +1668,7 @@ def registrar_eleccion_atacante_comunidades(
                     "ELECCIONES_BLOQUEADAS",
                     "La elección del equipo ya está bloqueada.",
                 )
-            eleccion.atacante_usuario_id = atacante_usuario_id
+            eleccion.atacante_usuario_id = atacante_usuario_id_resuelto
             eleccion.defensor_usuario_id = int(defensor_miembro.usuario_id)
             eleccion.elegido_por_discord_id = actor_discord_id
             eleccion.elegido_en = ahora
@@ -1676,8 +1691,10 @@ def registrar_eleccion_atacante_comunidades(
             eleccion=eleccion,
             atacante=atacante_miembro.usuario,
             defensor=defensor_miembro.usuario,
+            equipo_nombre=str(atacante_miembro.equipo.nombre),
             ambas_elecciones_completas=completas,
             requiere_crear_partidos=completas,
+            acaba_de_completar_elecciones=completas,
         )
     except Exception:
         session.rollback()

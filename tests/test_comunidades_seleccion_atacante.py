@@ -146,7 +146,7 @@ def test_resuelve_por_canal_registra_actor_y_deriva_defensor():
             session,
             canal_general_discord_id=555,
             actor_discord_id=101,
-            atacante_usuario_id=11,
+            atacante_discord_id=101,
             elegido_en=fecha,
         )
 
@@ -243,7 +243,7 @@ def test_segunda_eleccion_bloquea_ambas_y_marca_materializacion_pendiente():
         assert resultado.defensor.idUsuarios == 21
 
 
-def test_repeticion_identica_es_idempotente_y_cambio_posterior_se_rechaza():
+def test_cualquier_repeticion_posterior_al_bloqueo_se_rechaza():
     engine = _engine()
     enfrentamiento_id = _crear_escenario(engine)
 
@@ -254,32 +254,25 @@ def test_repeticion_identica_es_idempotente_y_cambio_posterior_se_rechaza():
             actor_discord_id=101,
             atacante_usuario_id=11,
         )
-        original = registrar_eleccion_atacante_comunidades(
-            session,
-            enfrentamiento_id=enfrentamiento_id,
-            actor_discord_id=201,
-            atacante_usuario_id=21,
-        )
-        repetida = registrar_eleccion_atacante_comunidades(
+        registrar_eleccion_atacante_comunidades(
             session,
             enfrentamiento_id=enfrentamiento_id,
             actor_discord_id=201,
             atacante_usuario_id=21,
         )
 
-        assert repetida.eleccion.id == original.eleccion.id
-        assert repetida.ambas_elecciones_completas is True
-        assert session.query(ComunidadesEleccionAtacante).count() == 2
+        for actor, atacante in ((201, 21), (202, 22)):
+            with pytest.raises(ErrorSeleccionAtacanteComunidades) as error:
+                registrar_eleccion_atacante_comunidades(
+                    session,
+                    enfrentamiento_id=enfrentamiento_id,
+                    actor_discord_id=actor,
+                    atacante_usuario_id=atacante,
+                )
+            assert error.value.codigo == "ELECCIONES_BLOQUEADAS"
 
-        with pytest.raises(ErrorSeleccionAtacanteComunidades) as error:
-            registrar_eleccion_atacante_comunidades(
-                session,
-                enfrentamiento_id=enfrentamiento_id,
-                actor_discord_id=202,
-                atacante_usuario_id=22,
-            )
-        assert error.value.codigo == "ELECCIONES_BLOQUEADAS"
         elecciones = session.query(ComunidadesEleccionAtacante).all()
+        assert len(elecciones) == 2
         assert {eleccion.atacante_usuario_id for eleccion in elecciones} == {11, 21}
 
 
