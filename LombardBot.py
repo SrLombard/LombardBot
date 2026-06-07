@@ -74,10 +74,22 @@ from ComunidadesCore import (
 from ComunidadesConstantes import (
     ENFRENTAMIENTO_EN_CURSO,
     ENFRENTAMIENTO_PARTIDOS_CREADOS,
+    PARTIDO_ADMINISTRADO,
     PARTIDO_EN_CURSO,
+    PARTIDO_FINALIZADO,
     PARTIDO_PENDIENTE,
+    RESULTADO_ORIGEN_ADMIN,
     RESULTADO_ORIGEN_API,
     RONDA_ABIERTA,
+    TIPO_ADMIN_DOBLE_FORFEIT,
+    TIPO_ADMIN_EMPATE,
+    TIPO_ADMIN_FORFEIT_LOCAL,
+    TIPO_ADMIN_FORFEIT_VISITANTE,
+    TIPO_ADMIN_MANUAL,
+    TIPO_FORFAIT_DOBLE,
+    TIPO_FORFAIT_LOCAL,
+    TIPO_FORFAIT_VISITANTE,
+    TIPOS_ADMINISTRATIVOS,
     TORNEO_EN_CURSO,
 )
 from ComunidadesDiscord import (
@@ -5013,6 +5025,244 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
             "❌ No se pudo completar la actualización de comunidades. "
             f"Los {encontrados} resultados ya confirmados permanecen guardados ({exc})."
         )
+    finally:
+        session.close()
+
+
+async def _resolver_canal_notificacion_comunidades(ctx, canal_id):
+    if canal_id is None:
+        return None
+    canal_id = int(canal_id)
+    guild = getattr(ctx, "guild", None)
+    canal = guild.get_channel(canal_id) if guild is not None else None
+    if canal is None:
+        canal = bot.get_channel(canal_id)
+    if canal is not None:
+        return canal
+    fetch_channel = getattr(guild, "fetch_channel", None)
+    if not callable(fetch_channel):
+        return None
+    try:
+        return await fetch_channel(canal_id)
+    except Exception:
+        return None
+
+
+def _datos_resultado_admin_comunidades(tipo, td_local, td_visitante):
+    tipo = str(tipo or "").strip().lower()
+    if tipo not in TIPOS_ADMINISTRATIVOS:
+        tipos = ", ".join(f"`{valor}`" for valor in sorted(TIPOS_ADMINISTRATIVOS))
+        raise ValueError(f"Tipo inválido. Usa uno de: {tipos}.")
+
+    if tipo == TIPO_ADMIN_MANUAL:
+        if td_local is None or td_visitante is None:
+            raise ValueError("Para `manual` debes indicar `td_local` y `td_visitante`.")
+        if td_local < 0 or td_visitante < 0:
+            raise ValueError("Los TD manuales deben ser enteros mayores o iguales que cero.")
+        return td_local, td_visitante, None
+
+    if td_local is not None or td_visitante is not None:
+        raise ValueError("Los TD solo se admiten con el tipo `manual`.")
+    if tipo == TIPO_ADMIN_FORFEIT_LOCAL:
+        return 1, 0, TIPO_FORFAIT_LOCAL
+    if tipo == TIPO_ADMIN_FORFEIT_VISITANTE:
+        return 0, 1, TIPO_FORFAIT_VISITANTE
+    if tipo == TIPO_ADMIN_DOBLE_FORFEIT:
+        return 0, 0, TIPO_FORFAIT_DOBLE
+    if tipo == TIPO_ADMIN_EMPATE:
+        return 0, 0, None
+    raise AssertionError("Tipo administrativo validado sin traducción.")
+
+
+def _mensaje_resultado_admin_comunidades(resultado, tipo):
+    partido = resultado.partido
+    enfrentamiento = resultado.enfrentamiento
+    local = _texto_discord_seguro(partido.equipo_local.nombre)
+    visitante = _texto_discord_seguro(partido.equipo_visitante.nombre)
+    mensaje = (
+        f"🛠️ **Partido {int(partido.indice)} administrado**\n"
+        f"{local} **{int(partido.td_local)}-{int(partido.td_visitante)}** {visitante}\n"
+        f"Tipo: `{tipo}` · Puntos internos: "
+        f"**{partido.puntos_internos_local}-{partido.puntos_internos_visitante}** · "
+        "Origen: **ADMIN**"
+    )
+    if not resultado.enfrentamiento_resuelto:
+        return mensaje + "\nEl enfrentamiento continúa pendiente del otro partido."
+
+    global_ = resultado.resultado_global
+    equipo_a = _texto_discord_seguro(enfrentamiento.equipo_a.nombre)
+    equipo_b = _texto_discord_seguro(enfrentamiento.equipo_b.nombre)
+    if bool(enfrentamiento.es_doble_forfait):
+        desenlace = "doble forfait global"
+    elif global_.ganador is None:
+        desenlace = "empate global"
+    else:
+        ganador = equipo_a if global_.ganador.value == "A" else equipo_b
+        desenlace = f"victoria global de **{ganador}**"
+    return (
+        f"{mensaje}\n"
+        f"✅ Enfrentamiento cerrado: {desenlace}.\n"
+        f"Puntos internos: **{equipo_a} {global_.puntos_internos_a} - "
+        f"{global_.puntos_internos_b} {equipo_b}** · "
+        f"Puntos de clasificación: **{global_.puntos_clasificacion_a}-"
+        f"{global_.puntos_clasificacion_b}**."
+    )
+
+
+@bot.command(name="comunidades_admin_partido")
+async def comunidades_admin_partido(
+    ctx,
+    torneo_id: int,
+    ronda_numero: int,
+    enfrentamiento_id: int,
+    partido_indice: int,
+    tipo: str,
+    td_local: Optional[int] = None,
+    td_visitante: Optional[int] = None,
+):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+    try:
+        marcador_local, marcador_visitante, tipo_forfait = (
+            _datos_resultado_admin_comunidades(tipo, td_local, td_visitante)
+        )
+    except ValueError as exc:
+        await ctx.send(
+            f"❌ {exc}\nUso: `!comunidades_admin_partido <torneo_id> <ronda> "
+            "<enfrentamiento> <partido> <tipo> [td_local] [td_visitante]`."
+        )
+        return
+    if partido_indice not in {1, 2}:
+        await ctx.send("❌ El índice de partido debe ser `1` o `2`.")
+        return
+
+    SessionComunidades = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = SessionComunidades()
+    try:
+        torneo = (
+            session.query(GestorSQL.ComunidadesTorneo)
+            .filter(GestorSQL.ComunidadesTorneo.id == torneo_id)
+            .one_or_none()
+        )
+        if torneo is None:
+            await ctx.send(f"❌ No existe un torneo de comunidades con ID `{torneo_id}`.")
+            return
+        if torneo.estado != TORNEO_EN_CURSO:
+            await ctx.send(
+                f"❌ El torneo `{torneo_id}` está en estado `{torneo.estado}`; "
+                "solo se administran partidos de torneos EN_CURSO."
+            )
+            return
+
+        ronda = (
+            session.query(GestorSQL.ComunidadesRonda)
+            .filter(
+                GestorSQL.ComunidadesRonda.torneo_id == torneo_id,
+                GestorSQL.ComunidadesRonda.numero == ronda_numero,
+            )
+            .one_or_none()
+        )
+        if ronda is None:
+            await ctx.send(
+                f"❌ No existe la ronda `{ronda_numero}` en el torneo `{torneo_id}`."
+            )
+            return
+        if ronda.estado != RONDA_ABIERTA:
+            await ctx.send(
+                f"❌ La ronda `{ronda_numero}` está en estado `{ronda.estado}`; "
+                "solo se administran partidos de rondas ABIERTAS."
+            )
+            return
+
+        enfrentamiento = (
+            session.query(GestorSQL.ComunidadesEnfrentamiento)
+            .filter(
+                GestorSQL.ComunidadesEnfrentamiento.id == enfrentamiento_id,
+                GestorSQL.ComunidadesEnfrentamiento.torneo_id == torneo_id,
+                GestorSQL.ComunidadesEnfrentamiento.ronda_id == ronda.id,
+            )
+            .one_or_none()
+        )
+        if enfrentamiento is None:
+            await ctx.send(
+                f"❌ No existe el enfrentamiento `{enfrentamiento_id}` en la ronda "
+                f"`{ronda_numero}` del torneo `{torneo_id}`."
+            )
+            return
+
+        partido = (
+            session.query(GestorSQL.ComunidadesPartido)
+            .filter(
+                GestorSQL.ComunidadesPartido.torneo_id == torneo_id,
+                GestorSQL.ComunidadesPartido.enfrentamiento_id == enfrentamiento.id,
+                GestorSQL.ComunidadesPartido.indice == partido_indice,
+            )
+            .one_or_none()
+        )
+        if partido is None:
+            await ctx.send(
+                f"❌ El enfrentamiento `{enfrentamiento_id}` no tiene creado el partido "
+                f"`{partido_indice}`."
+            )
+            return
+        if partido.estado in {PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO}:
+            await ctx.send(
+                f"❌ El partido `{partido_indice}` ya está cerrado con estado "
+                f"`{partido.estado}` y no puede administrarse de nuevo."
+            )
+            return
+
+        try:
+            resultado = registrar_resultado_partido_comunidades(
+                session,
+                partido_id=int(partido.id),
+                td_local=marcador_local,
+                td_visitante=marcador_visitante,
+                origen=RESULTADO_ORIGEN_ADMIN,
+                tipo_forfait=tipo_forfait,
+            )
+            if resultado.idempotente:
+                session.rollback()
+                await ctx.send("❌ El partido ya había sido cerrado y no puede administrarse de nuevo.")
+                return
+            session.commit()
+        except ErrorRegistroResultadoComunidades as exc:
+            session.rollback()
+            await ctx.send(f"❌ No se pudo administrar el partido: [{exc.codigo}] {exc.detalle}")
+            return
+
+        mensaje = _mensaje_resultado_admin_comunidades(resultado, tipo.strip().lower())
+        destinos = (
+            ("individual", resultado.partido.canal_discord_id),
+            ("general", resultado.enfrentamiento.canal_general_discord_id),
+        )
+        avisos = []
+        enviados = set()
+        for nombre, canal_id in destinos:
+            if canal_id is None or int(canal_id) in enviados:
+                avisos.append(f"canal {nombre} no disponible")
+                continue
+            canal = await _resolver_canal_notificacion_comunidades(ctx, canal_id)
+            if canal is None:
+                avisos.append(f"canal {nombre} inaccesible (`{int(canal_id)}`)")
+                continue
+            try:
+                await canal.send(mensaje)
+                enviados.add(int(canal_id))
+            except Exception as exc:
+                avisos.append(f"falló el aviso al canal {nombre}: {exc}")
+
+        confirmacion = (
+            f"✅ Partido `{partido_indice}` del enfrentamiento `{enfrentamiento_id}` "
+            "administrado correctamente."
+        )
+        if avisos:
+            confirmacion += "\n⚠️ " + "; ".join(avisos) + "."
+        await ctx.send(confirmacion)
+    except Exception as exc:
+        session.rollback()
+        await ctx.send(f"❌ Error inesperado al administrar el partido: {exc}")
     finally:
         session.close()
 
