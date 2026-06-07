@@ -78,6 +78,7 @@ from ComunidadesCore import (
     ErrorTransferenciaComunidades,
     forzar_elecciones_comunidades,
     generar_ronda_comunidades,
+    procesar_cierre_ronda_comunidades_si_corresponde,
     registrar_resultado_partido_comunidades,
     transferir_cazador_comunidades,
 )
@@ -4851,10 +4852,34 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
         if torneo is None:
             await ctx.send(f"❌ No existe un torneo de comunidades con ID `{torneo_id}`.")
             return
+        if torneo.estado == "FINALIZADO":
+            ronda_cerrada = (
+                session.query(GestorSQL.ComunidadesRonda)
+                .filter_by(torneo_id=torneo_id, estado="CERRADA")
+                .order_by(GestorSQL.ComunidadesRonda.numero.desc())
+                .first()
+            )
+            if ronda_cerrada is None:
+                await ctx.send(
+                    f"❌ El torneo `{torneo_id}` está FINALIZADO pero no tiene una ronda cerrada."
+                )
+                return
+            cierre = _consolidar_cierre_ronda_comunidades(
+                session, torneo_id, int(ronda_cerrada.numero)
+            )
+            avisos = await _post_cierre_ronda_comunidades(ctx, session, cierre)
+            mensaje = (
+                f"ℹ️ Torneo `{torneo_id}` ya finalizado; se reintentó el cierre "
+                f"de la ronda {int(ronda_cerrada.numero)}."
+            )
+            if avisos:
+                mensaje += "\n⚠️ " + "; ".join(avisos) + "."
+            await ctx.send(mensaje)
+            return
         if torneo.estado != TORNEO_EN_CURSO:
             await ctx.send(
                 f"❌ El torneo `{torneo_id}` está en estado `{torneo.estado}`; "
-                "solo se actualizan torneos EN_CURSO."
+                "solo se actualizan torneos EN_CURSO o se reintenta un cierre FINALIZADO."
             )
             return
         if not torneo.id_competicion_bbowl:
@@ -4873,7 +4898,26 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
             .all()
         )
         if not rondas_abiertas:
-            await ctx.send(f"❌ No hay una ronda ABIERTA para el torneo `{torneo_id}`.")
+            ronda_cerrada = (
+                session.query(GestorSQL.ComunidadesRonda)
+                .filter_by(torneo_id=torneo_id, estado="CERRADA")
+                .order_by(GestorSQL.ComunidadesRonda.numero.desc())
+                .first()
+            )
+            if ronda_cerrada is None:
+                await ctx.send(f"❌ No hay una ronda ABIERTA para el torneo `{torneo_id}`.")
+                return
+            cierre = _consolidar_cierre_ronda_comunidades(
+                session, torneo_id, int(ronda_cerrada.numero)
+            )
+            avisos = await _post_cierre_ronda_comunidades(ctx, session, cierre)
+            mensaje = (
+                f"ℹ️ No hay ronda ABIERTA; se reintentó el cierre de la ronda "
+                f"{int(ronda_cerrada.numero)} sin generar la siguiente."
+            )
+            if avisos:
+                mensaje += "\n⚠️ " + "; ".join(avisos) + "."
+            await ctx.send(mensaje)
             return
         if len(rondas_abiertas) != 1:
             await ctx.send(
@@ -4911,9 +4955,17 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
             .all()
         )
         if not partidos_pendientes:
+            cierre = _consolidar_cierre_ronda_comunidades(
+                session, torneo_id, int(ronda.numero)
+            )
+            avisos_cierre = await _post_cierre_ronda_comunidades(
+                ctx, session, cierre
+            )
             mensaje = f"ℹ️ No hay partidos individuales pendientes en la ronda {ronda.numero}."
-            if avisos_previos:
-                mensaje += "\n⚠️ " + "; ".join(avisos_previos) + "."
+            if cierre.get("cerrada"):
+                mensaje += " La ronda quedó consolidada."
+            if avisos_previos or avisos_cierre:
+                mensaje += "\n⚠️ " + "; ".join(avisos_previos + avisos_cierre) + "."
             else:
                 mensaje += " Se comprobaron también las publicaciones consolidadas."
             await ctx.send(mensaje)
@@ -5031,6 +5083,15 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
                 for aviso in avisos_publicacion
             )
 
+        cierre = _consolidar_cierre_ronda_comunidades(
+            session, torneo_id, int(ronda.numero)
+        )
+        avisos_cierre = await _post_cierre_ronda_comunidades(ctx, session, cierre)
+        if avisos_cierre:
+            detalles.extend(
+                f"cierre pendiente para reintento: {aviso}" for aviso in avisos_cierre
+            )
+
         resumen = (
             f"📊 **Actualización de comunidades — torneo {torneo_id}, ronda {ronda.numero}**\n"
             f"- Encontrados y registrados: **{encontrados}**\n"
@@ -5095,6 +5156,28 @@ async def _enviar_unico_comunidades(canal, marca: str, contenido: str, **kwargs)
     texto = f"{contenido}\n{marca}" if contenido else marca
     await canal.send(texto, **kwargs)
     return True
+
+
+async def _enviar_largo_unico_comunidades(
+    canal, tipo: str, registro_id: int, contenido: str
+) -> bool:
+    """Publica texto largo en partes, cada una idempotente por separado."""
+    partes = UtilesDiscord.dividir_mensaje_discord(contenido, limite=1800)
+    enviado = False
+    total = len(partes)
+    for indice, parte in enumerate(partes, start=1):
+        cabecera = f"**Parte {indice}/{total}**\n" if total > 1 else ""
+        enviado = (
+            await _enviar_unico_comunidades(
+                canal,
+                _marca_publicacion_comunidades(
+                    f"{tipo}-parte-{indice}", registro_id
+                ),
+                cabecera + parte,
+            )
+            or enviado
+        )
+    return enviado
 
 
 async def _buscar_hilo_resultados_comunidades(canal_foro, titulo: str):
@@ -5675,6 +5758,126 @@ async def _reintentar_publicaciones_ronda_comunidades(ctx, session, ronda_id: in
     return avisos
 
 
+async def _eliminar_canales_ronda_comunidades(ctx, session, ronda_id: int):
+    """Elimina solo canales persistidos de la ronda y permite reintentos."""
+    enfrentamientos = (
+        session.query(GestorSQL.ComunidadesEnfrentamiento)
+        .filter(GestorSQL.ComunidadesEnfrentamiento.ronda_id == int(ronda_id))
+        .order_by(GestorSQL.ComunidadesEnfrentamiento.id)
+        .all()
+    )
+    avisos = []
+    torneo = enfrentamientos[0].torneo if enfrentamientos else None
+    ids_protegidos = {FORO_RESULTADOS_ID}
+    if torneo is not None and torneo.canal_hub_id is not None:
+        ids_protegidos.add(int(torneo.canal_hub_id))
+
+    registros = []
+    for enfrentamiento in enfrentamientos:
+        registros.append((enfrentamiento, "canal_general_discord_id", "general"))
+        for partido in enfrentamiento.partidos:
+            registros.append((partido, "canal_discord_id", "individual"))
+
+    for registro, atributo, tipo in registros:
+        canal_id = getattr(registro, atributo)
+        if canal_id is None:
+            continue
+        canal_id = int(canal_id)
+        if canal_id in ids_protegidos:
+            avisos.append(
+                f"se rechazó eliminar el canal protegido {canal_id} almacenado como {tipo}"
+            )
+            continue
+        canal = await _resolver_canal_notificacion_comunidades(ctx, canal_id)
+        try:
+            if canal is not None:
+                await canal.delete(
+                    reason=f"Cierre de ronda de comunidades {int(ronda_id)}"
+                )
+            setattr(registro, atributo, None)
+            session.commit()
+        except Exception as exc:
+            session.rollback()
+            avisos.append(f"canal {tipo} {canal_id}: {exc}")
+    return avisos
+
+
+async def _post_cierre_ronda_comunidades(ctx, session, cierre: dict):
+    """Publica clasificaciones y limpia Discord tras confirmar el cierre BD."""
+    if not cierre.get("cerrada"):
+        return []
+    torneo_id = int(cierre["torneo_id"])
+    ronda_numero = int(cierre["ronda_numero"])
+    ronda_id = int(cierre["ronda_id"])
+    avisos = []
+    canal_hub = await _resolver_canal_notificacion_comunidades(
+        ctx, cierre.get("canal_hub_id")
+    )
+    try:
+        equipos = consultar_clasificacion_equipos_comunidades(
+            session, torneo_id=torneo_id, ronda=ronda_numero
+        )
+        titulo = (
+            f"🏆 **Clasificación final de equipos · ronda {ronda_numero}**"
+            if cierre["es_ultima_ronda"]
+            else f"✅ **Cierre de ronda {ronda_numero} · clasificación de equipos**"
+        )
+        await _enviar_largo_unico_comunidades(
+            canal_hub,
+            "cierre-equipos",
+            ronda_id,
+            titulo + "\n" + _formatear_equipos_publico(equipos),
+        )
+    except Exception as exc:
+        avisos.append(f"clasificación de equipos en hub: {exc}")
+    try:
+        comunidades = consultar_clasificacion_comunidades_comunidades(
+            session, torneo_id=torneo_id, ronda=ronda_numero
+        )
+        titulo = (
+            f"🏆 **Clasificación final de comunidades · ronda {ronda_numero}**"
+            if cierre["es_ultima_ronda"]
+            else f"✅ **Cierre de ronda {ronda_numero} · clasificación de comunidades**"
+        )
+        siguiente = cierre.get("siguiente_ronda_numero")
+        pie = (
+            "\n\n🏁 **Torneo finalizado.**"
+            if cierre["es_ultima_ronda"]
+            else (
+                f"\n\n➡️ La ronda **{int(siguiente)}** queda pendiente de generación "
+                "manual por un comisario."
+            )
+        )
+        await _enviar_largo_unico_comunidades(
+            canal_hub,
+            "cierre-comunidades",
+            ronda_id,
+            titulo + "\n" + _formatear_comunidades_publico(comunidades) + pie,
+        )
+    except Exception as exc:
+        avisos.append(f"clasificación de comunidades en hub: {exc}")
+
+    avisos.extend(
+        await _eliminar_canales_ronda_comunidades(ctx, session, ronda_id)
+    )
+    return avisos
+
+
+def _consolidar_cierre_ronda_comunidades(session, torneo_id: int, ronda_numero: int):
+    """Confirma el paso de base de datos antes de cualquier operación Discord."""
+    cierre = procesar_cierre_ronda_comunidades_si_corresponde(
+        session, torneo_id, ronda_numero
+    )
+    if cierre.get("cerrada"):
+        session.commit()
+        torneo = session.get(GestorSQL.ComunidadesTorneo, int(torneo_id))
+        cierre["torneo_id"] = int(torneo_id)
+        cierre["canal_hub_id"] = (
+            None if torneo is None else torneo.canal_hub_id
+        )
+    return cierre
+
+
 async def _resolver_canal_notificacion_comunidades(ctx, canal_id):
     if canal_id is None:
         return None
@@ -5811,6 +6014,10 @@ async def comunidades_admin_partido(
         avisos = await publicar_resultado_partido_comunidades(
             ctx, session, resultado.partido.id
         )
+        cierre = _consolidar_cierre_ronda_comunidades(
+            session, torneo_id, ronda_numero
+        )
+        avisos.extend(await _post_cierre_ronda_comunidades(ctx, session, cierre))
         if resultado.idempotente:
             confirmacion = (
                 f"ℹ️ El partido `{partido_indice}` del enfrentamiento "
@@ -6059,6 +6266,11 @@ async def comunidades_generar_ronda(ctx, torneo_id: int, ronda_numero: int):
             except Exception as exc:
                 fallos.append(f"No se pudo publicar el resumen en el hub `{torneo.canal_hub_id}` ({exc}).")
 
+        cierre = _consolidar_cierre_ronda_comunidades(
+            session, torneo_id, ronda_numero
+        )
+        fallos.extend(await _post_cierre_ronda_comunidades(ctx, session, cierre))
+
         if fallos:
             await _publicar_error_administrativo_comunidades(
                 ctx,
@@ -6066,9 +6278,13 @@ async def comunidades_generar_ronda(ctx, torneo_id: int, ronda_numero: int):
                 + "\n".join(f"- {fallo}" for fallo in fallos),
             )
         else:
+            cierre_texto = (
+                " y cerrada automáticamente al contener solo byes"
+                if cierre.get("cerrada") else ""
+            )
             await ctx.send(
                 f"✅ Ronda {ronda_numero} generada: {len(enfrentamientos)} canales creados "
-                f"y resumen publicado en <#{int(torneo.canal_hub_id)}>."
+                f"y resumen publicado en <#{int(torneo.canal_hub_id)}>{cierre_texto}."
             )
     except ErrorSeleccionCategoriaComunidades as exc:
         session.rollback()

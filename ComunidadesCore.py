@@ -3671,6 +3671,225 @@ def calcular_clasificacion_comunidades(
 
 
 # ---------------------------------------------------------------------------
+# Cierre de ronda
+# ---------------------------------------------------------------------------
+
+def _guardar_snapshots_cierre_comunidades(
+    session: Any,
+    *,
+    torneo_id: int,
+    ronda: Any,
+    clasificacion_equipos: list[FilaClasificacion],
+    clasificacion_comunidades: list[FilaClasificacion],
+) -> tuple[int, int]:
+    """Guarda una única fotografía de cada clasificación para la ronda.
+
+    La ronda y sus dos conjuntos de filas se confirman en la misma transacción.
+    Si el cierre se reintenta, se reutilizan los snapshots completos existentes;
+    un conjunto parcial se considera una inconsistencia y nunca se completa con
+    datos potencialmente calculados en otro momento.
+    """
+    from GestorSQL import (
+        ComunidadesSnapshotClasificacionComunidad,
+        ComunidadesSnapshotClasificacionEquipo,
+    )
+
+    snapshots_equipo = (
+        session.query(ComunidadesSnapshotClasificacionEquipo)
+        .filter_by(torneo_id=torneo_id, ronda_id=ronda.id)
+        .count()
+    )
+    snapshots_comunidad = (
+        session.query(ComunidadesSnapshotClasificacionComunidad)
+        .filter_by(torneo_id=torneo_id, ronda_id=ronda.id)
+        .count()
+    )
+    esperados_equipo = len(clasificacion_equipos)
+    esperados_comunidad = len(clasificacion_comunidades)
+    if snapshots_equipo or snapshots_comunidad:
+        if (snapshots_equipo, snapshots_comunidad) != (
+            esperados_equipo,
+            esperados_comunidad,
+        ):
+            raise RuntimeError(
+                "Los snapshots existentes de la ronda están incompletos "
+                f"(equipos {snapshots_equipo}/{esperados_equipo}, "
+                f"comunidades {snapshots_comunidad}/{esperados_comunidad})."
+            )
+        return snapshots_equipo, snapshots_comunidad
+
+    for fila in clasificacion_equipos:
+        session.add(
+            ComunidadesSnapshotClasificacionEquipo(
+                torneo_id=torneo_id,
+                ronda_id=ronda.id,
+                equipo_id=int(fila["equipo_id"]),
+                posicion=int(fila["posicion"]),
+                puntos_clasificacion=_decimal(fila["puntos"]),
+                buchholz_cut=_decimal(fila["buchholz_cut"]),
+                puntos_enfrentamiento_directo=(
+                    None
+                    if fila.get("h2h_valor") is None
+                    else _decimal(fila["h2h_valor"])
+                ),
+                td_favor=int(fila["td_favor"]),
+                td_contra=int(fila["td_contra"]),
+                partidos_jugados=int(fila["pj"]),
+                victorias=int(fila["pg"]),
+                empates=int(fila["pe"]),
+                derrotas=int(fila["pp"]),
+                cantidad_byes=int(fila["cantidad_byes"]),
+            )
+        )
+    for fila in clasificacion_comunidades:
+        session.add(
+            ComunidadesSnapshotClasificacionComunidad(
+                torneo_id=torneo_id,
+                ronda_id=ronda.id,
+                comunidad_id=int(fila["comunidad_id"]),
+                posicion=int(fila["posicion"]),
+                puntos_zombificaciones=_decimal(fila["puntos_zombificaciones"]),
+                zombies_matados=int(fila["zombies_matados"]),
+                suma_puntos_equipos=_decimal(fila["suma_puntos_equipos"]),
+            )
+        )
+    session.flush()
+    return esperados_equipo, esperados_comunidad
+
+
+def procesar_cierre_ronda_comunidades_si_corresponde(
+    session: Any, torneo_id: int, ronda_numero: int
+) -> dict[str, Any]:
+    """Consolida una ronda resuelta sin realizar operaciones de Discord.
+
+    El cierre de base de datos es atómico e idempotente. La publicación y la
+    limpieza de canales se realizan después del commit desde ``LombardBot``.
+    Según la especificación, una ronda posterior nunca se crea automáticamente.
+    """
+    from GestorSQL import (
+        ComunidadesEnfrentamiento,
+        ComunidadesHistorialTransicion,
+        ComunidadesPartido,
+        ComunidadesRonda,
+        ComunidadesTorneo,
+        ComunidadesTrazaEmparejamiento,
+    )
+
+    torneo = (
+        session.query(ComunidadesTorneo)
+        .filter(ComunidadesTorneo.id == torneo_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if torneo is None:
+        return {
+            "cerrada": False,
+            "motivo": "TORNEO_NO_EXISTE",
+            "ronda_numero": int(ronda_numero),
+        }
+    ronda = (
+        session.query(ComunidadesRonda)
+        .filter_by(torneo_id=torneo_id, numero=ronda_numero)
+        .with_for_update()
+        .one_or_none()
+    )
+    if ronda is None:
+        return {
+            "cerrada": False,
+            "motivo": "RONDA_NO_EXISTE",
+            "ronda_numero": int(ronda_numero),
+        }
+
+    estados_enfrentamiento_resueltos = (
+        ENFRENTAMIENTO_CERRADO,
+        ENFRENTAMIENTO_ADMINISTRADO,
+    )
+    estados_partido_resueltos = (PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO)
+    pendientes_enfrentamiento = (
+        session.query(ComunidadesEnfrentamiento)
+        .filter(
+            ComunidadesEnfrentamiento.ronda_id == ronda.id,
+            ~ComunidadesEnfrentamiento.estado.in_(estados_enfrentamiento_resueltos),
+        )
+        .count()
+    )
+    pendientes_partido = (
+        session.query(ComunidadesPartido)
+        .join(
+            ComunidadesEnfrentamiento,
+            ComunidadesEnfrentamiento.id == ComunidadesPartido.enfrentamiento_id,
+        )
+        .filter(
+            ComunidadesEnfrentamiento.ronda_id == ronda.id,
+            ~ComunidadesPartido.estado.in_(estados_partido_resueltos),
+        )
+        .count()
+    )
+    byes_esperados = (
+        session.query(ComunidadesTrazaEmparejamiento)
+        .filter_by(ronda_id=ronda.id, etapa="SELECCION_BYE")
+        .count()
+    )
+    byes_resueltos = (
+        session.query(ComunidadesHistorialTransicion)
+        .filter_by(ronda_id=ronda.id, enfrentamiento_id=None, motivo="BYE")
+        .count()
+    )
+    pendientes_bye = max(0, int(byes_esperados) - int(byes_resueltos))
+    if pendientes_enfrentamiento or pendientes_partido or pendientes_bye:
+        return {
+            "cerrada": False,
+            "motivo": "HAY_PENDIENTES",
+            "pendientes_enfrentamientos": int(pendientes_enfrentamiento),
+            "pendientes_partidos": int(pendientes_partido),
+            "pendientes_byes": pendientes_bye,
+            "ronda_numero": int(ronda_numero),
+        }
+
+    clasificacion_equipos = calcular_clasificacion_equipos(
+        session, torneo_id, hasta_ronda=ronda_numero
+    )
+    clasificacion_comunidades = calcular_clasificacion_comunidades(
+        session,
+        torneo_id,
+        hasta_ronda=ronda_numero,
+        clasificacion_equipos=clasificacion_equipos,
+    )
+    snapshot_equipos, snapshot_comunidades = _guardar_snapshots_cierre_comunidades(
+        session,
+        torneo_id=torneo_id,
+        ronda=ronda,
+        clasificacion_equipos=clasificacion_equipos,
+        clasificacion_comunidades=clasificacion_comunidades,
+    )
+
+    ya_cerrada = ronda.estado == "CERRADA"
+    if not ya_cerrada:
+        ronda.estado = "CERRADA"
+        ronda.cerrada_en = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    es_ultima_ronda = int(ronda_numero) >= int(torneo.rondas_totales)
+    if es_ultima_ronda:
+        torneo.estado = "FINALIZADO"
+    session.flush()
+    return {
+        "cerrada": True,
+        "motivo": "YA_CERRADA" if ya_cerrada else "CERRADA",
+        "idempotente": ya_cerrada,
+        "ronda_id": int(ronda.id),
+        "ronda_numero": int(ronda_numero),
+        "es_ultima_ronda": es_ultima_ronda,
+        "siguiente_ronda_numero": (
+            None if es_ultima_ronda else int(ronda_numero) + 1
+        ),
+        "snapshot_equipos": int(snapshot_equipos),
+        "snapshot_comunidades": int(snapshot_comunidades),
+        "clasificacion_equipos": clasificacion_equipos,
+        "clasificacion_comunidades": clasificacion_comunidades,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Consultas públicas
 # ---------------------------------------------------------------------------
 
