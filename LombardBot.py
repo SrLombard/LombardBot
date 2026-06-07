@@ -80,6 +80,7 @@ from ComunidadesCore import (
     generar_ronda_comunidades,
     procesar_cierre_ronda_comunidades_si_corresponde,
     registrar_resultado_partido_comunidades,
+    regenerar_ronda_comunidades,
     transferir_cazador_comunidades,
 )
 from ComunidadesConstantes import (
@@ -6100,6 +6101,176 @@ async def comunidades_forzar_crear_partidos(
         session.close()
 
 
+async def _crear_canales_ronda_comunidades(ctx, session, resultado, categorias):
+    """Crea los canales generales y publica el inicio de una ronda persistida."""
+    torneo_id = int(resultado["torneo_id"])
+    ronda_numero = int(resultado["ronda_numero"])
+    ronda = session.get(GestorSQL.ComunidadesRonda, resultado["ronda_id"])
+    torneo = session.get(GestorSQL.ComunidadesTorneo, torneo_id)
+    enfrentamientos = (
+        session.query(GestorSQL.ComunidadesEnfrentamiento)
+        .filter(GestorSQL.ComunidadesEnfrentamiento.ronda_id == ronda.id)
+        .order_by(GestorSQL.ComunidadesEnfrentamiento.mesa_numero)
+        .all()
+    )
+    bye_equipo = (
+        session.get(GestorSQL.ComunidadesEquipo, resultado["bye_equipo_id"])
+        if resultado["bye_equipo_id"] is not None
+        else None
+    )
+    comisario_role = discord.utils.get(ctx.guild.roles, name="Comisario")
+    if comisario_role is None:
+        raise ErrorSeleccionCategoriaComunidades(
+            "ROL_COMISARIO_INEXISTENTE",
+            "No existe el rol Comisario necesario para configurar los permisos.",
+            torneo_id=torneo_id,
+            tipo="enfrentamientos",
+        )
+
+    fallos = []
+    for enfrentamiento, categoria in zip(enfrentamientos, categorias):
+        miembros_discord = []
+        ids_ausentes = []
+        for equipo in (enfrentamiento.equipo_a, enfrentamiento.equipo_b):
+            for miembro in equipo.miembros:
+                discord_id = getattr(miembro.usuario, "id_discord", None)
+                if discord_id is None:
+                    ids_ausentes.append(f"usuario BD {int(miembro.usuario_id)} sin id_discord")
+                    continue
+                miembro_guild = await _resolver_miembro_guild_comunidades(
+                    ctx.guild, int(discord_id)
+                )
+                if miembro_guild is None:
+                    ids_ausentes.append(f"Discord ID {int(discord_id)} no encontrado")
+                else:
+                    miembros_discord.append(miembro_guild)
+        if ids_ausentes:
+            fallos.append(
+                f"Mesa {int(enfrentamiento.mesa_numero)} / enfrentamiento `{int(enfrentamiento.id)}`: "
+                + "; ".join(ids_ausentes)
+            )
+            continue
+
+        overwrites = {
+            ctx.guild.default_role: discord.PermissionOverwrite(
+                view_channel=False, read_messages=False
+            ),
+            comisario_role: discord.PermissionOverwrite(
+                view_channel=True, read_messages=True, send_messages=True
+            ),
+        }
+        for miembro_guild in miembros_discord:
+            overwrites[miembro_guild] = discord.PermissionOverwrite(
+                view_channel=True, read_messages=True, send_messages=True
+            )
+
+        nombre = (
+            f"r{int(ronda.numero)}-m{int(enfrentamiento.mesa_numero)}-"
+            f"{_normalizar_nombre_canal_comunidades(enfrentamiento.equipo_a.nombre)}-vs-"
+            f"{_normalizar_nombre_canal_comunidades(enfrentamiento.equipo_b.nombre)}"
+        )[:100]
+        canal = None
+        try:
+            canal = await ctx.guild.create_text_channel(
+                name=nombre,
+                category=categoria,
+                overwrites=overwrites,
+                reason=(
+                    f"Torneo comunidades {torneo_id}, ronda {ronda_numero}, "
+                    f"enfrentamiento {int(enfrentamiento.id)}"
+                ),
+            )
+            enfrentamiento.canal_general_discord_id = int(canal.id)
+            session.commit()
+            try:
+                await UtilesDiscord.enviar_mensaje_largo(
+                    canal, _mensaje_canal_enfrentamiento_comunidades(torneo, ronda, enfrentamiento)
+                )
+            except Exception as exc:
+                fallos.append(
+                    f"Mesa {int(enfrentamiento.mesa_numero)} / enfrentamiento "
+                    f"`{int(enfrentamiento.id)}` / canal <#{int(canal.id)}>: "
+                    f"canal persistido, pero falló el mensaje inicial ({exc})"
+                )
+        except Exception as exc:
+            session.rollback()
+            limpieza = ""
+            if canal is not None:
+                try:
+                    await canal.delete(reason="Fallo al persistir el canal de comunidades")
+                    limpieza = "; el canal huérfano se eliminó"
+                except Exception as error_limpieza:
+                    limpieza = (
+                        f"; canal huérfano `{int(canal.id)}` pendiente de limpieza "
+                        f"({error_limpieza})"
+                    )
+            fallos.append(
+                f"Mesa {int(enfrentamiento.mesa_numero)} / enfrentamiento "
+                f"`{int(enfrentamiento.id)}` / categoría `{int(categoria.id)}`: "
+                f"no se pudo crear o persistir el canal ({exc}){limpieza}"
+            )
+
+    session.expire_all()
+    enfrentamientos = (
+        session.query(GestorSQL.ComunidadesEnfrentamiento)
+        .filter(GestorSQL.ComunidadesEnfrentamiento.ronda_id == ronda.id)
+        .order_by(GestorSQL.ComunidadesEnfrentamiento.mesa_numero)
+        .all()
+    )
+    resumen = _resumen_ronda_comunidades(torneo, ronda, enfrentamientos, bye_equipo)
+    canal_hub = ctx.guild.get_channel(int(torneo.canal_hub_id)) if torneo.canal_hub_id else None
+    if canal_hub is None and torneo.canal_hub_id:
+        try:
+            canal_hub = await ctx.guild.fetch_channel(int(torneo.canal_hub_id))
+        except Exception:
+            canal_hub = None
+    if canal_hub is None:
+        fallos.append(f"Canal hub `{torneo.canal_hub_id}` inexistente o inaccesible; resumen no publicado.")
+    else:
+        try:
+            await UtilesDiscord.enviar_mensaje_largo(canal_hub, resumen)
+        except Exception as exc:
+            fallos.append(f"No se pudo publicar el resumen en el hub `{torneo.canal_hub_id}` ({exc}).")
+
+    cierre = _consolidar_cierre_ronda_comunidades(session, torneo_id, ronda_numero)
+    fallos.extend(await _post_cierre_ronda_comunidades(ctx, session, cierre))
+    return enfrentamientos, torneo, cierre, fallos
+
+
+async def _eliminar_canales_para_regeneracion_comunidades(
+    ctx, registros, *, canal_hub_id: int, ronda_numero: int
+):
+    """Elimina todos los canales de la ronda; aborta ante cualquier fallo real."""
+    protegidos = {FORO_RESULTADOS_ID, int(canal_hub_id)}
+    eliminados = 0
+    ausentes = 0
+    for tipo, canal_id in registros:
+        if canal_id is None:
+            ausentes += 1
+            continue
+        canal_id = int(canal_id)
+        if canal_id in protegidos:
+            raise ErrorGeneracionRondaComunidades(
+                "CANAL_PROTEGIDO",
+                f"El canal {canal_id} almacenado como {tipo} es foro o hub y no se eliminará.",
+            )
+        canal = await _resolver_canal_notificacion_comunidades(ctx, canal_id)
+        if canal is None:
+            ausentes += 1
+            continue
+        try:
+            await canal.delete(
+                reason=f"Regeneración de ronda de comunidades {int(ronda_numero)}"
+            )
+            eliminados += 1
+        except Exception as exc:
+            raise ErrorGeneracionRondaComunidades(
+                "ERROR_ELIMINANDO_CANALES",
+                f"No se pudo eliminar el canal {tipo} {canal_id}: {exc}",
+            ) from exc
+    return eliminados, ausentes
+
+
 @bot.command(name="comunidades_generar_ronda")
 async def comunidades_generar_ronda(ctx, torneo_id: int, ronda_numero: int):
     if not es_comisario(ctx):
@@ -6128,149 +6299,15 @@ async def comunidades_generar_ronda(ctx, torneo_id: int, ronda_numero: int):
             tipo="enfrentamientos",
             cantidad=cantidad_mesas,
         )
-        comisario_role = discord.utils.get(ctx.guild.roles, name="Comisario")
-        if comisario_role is None:
-            raise ErrorSeleccionCategoriaComunidades(
-                "ROL_COMISARIO_INEXISTENTE",
-                "No existe el rol Comisario necesario para configurar los permisos.",
-                torneo_id=torneo_id,
-                tipo="enfrentamientos",
-            )
         resultado = generar_ronda_comunidades(
             session,
             torneo_id,
             ronda_numero,
             int(ctx.author.id),
         )
-
-        ronda = session.get(GestorSQL.ComunidadesRonda, resultado["ronda_id"])
-        torneo = session.get(GestorSQL.ComunidadesTorneo, torneo_id)
-        enfrentamientos = (
-            session.query(GestorSQL.ComunidadesEnfrentamiento)
-            .filter(GestorSQL.ComunidadesEnfrentamiento.ronda_id == ronda.id)
-            .order_by(GestorSQL.ComunidadesEnfrentamiento.mesa_numero)
-            .all()
+        enfrentamientos, torneo, cierre, fallos = await _crear_canales_ronda_comunidades(
+            ctx, session, resultado, categorias
         )
-        bye_equipo = (
-            session.get(GestorSQL.ComunidadesEquipo, resultado["bye_equipo_id"])
-            if resultado["bye_equipo_id"] is not None
-            else None
-        )
-
-        fallos = []
-        for enfrentamiento, categoria in zip(enfrentamientos, categorias):
-            miembros_discord = []
-            ids_ausentes = []
-            for equipo in (enfrentamiento.equipo_a, enfrentamiento.equipo_b):
-                for miembro in equipo.miembros:
-                    discord_id = getattr(miembro.usuario, "id_discord", None)
-                    if discord_id is None:
-                        ids_ausentes.append(f"usuario BD {int(miembro.usuario_id)} sin id_discord")
-                        continue
-                    miembro_guild = await _resolver_miembro_guild_comunidades(
-                        ctx.guild, int(discord_id)
-                    )
-                    if miembro_guild is None:
-                        ids_ausentes.append(f"Discord ID {int(discord_id)} no encontrado")
-                    else:
-                        miembros_discord.append(miembro_guild)
-            if ids_ausentes:
-                fallos.append(
-                    f"Mesa {int(enfrentamiento.mesa_numero)} / enfrentamiento `{int(enfrentamiento.id)}`: "
-                    + "; ".join(ids_ausentes)
-                )
-                continue
-
-            overwrites = {
-                ctx.guild.default_role: discord.PermissionOverwrite(
-                    view_channel=False, read_messages=False
-                )
-            }
-            if comisario_role is not None:
-                overwrites[comisario_role] = discord.PermissionOverwrite(
-                    view_channel=True, read_messages=True, send_messages=True
-                )
-            for miembro_guild in miembros_discord:
-                overwrites[miembro_guild] = discord.PermissionOverwrite(
-                    view_channel=True, read_messages=True, send_messages=True
-                )
-
-            nombre = (
-                f"r{int(ronda.numero)}-m{int(enfrentamiento.mesa_numero)}-"
-                f"{_normalizar_nombre_canal_comunidades(enfrentamiento.equipo_a.nombre)}-vs-"
-                f"{_normalizar_nombre_canal_comunidades(enfrentamiento.equipo_b.nombre)}"
-            )[:100]
-            canal = None
-            try:
-                canal = await ctx.guild.create_text_channel(
-                    name=nombre,
-                    category=categoria,
-                    overwrites=overwrites,
-                    reason=(
-                        f"Torneo comunidades {torneo_id}, ronda {ronda_numero}, "
-                        f"enfrentamiento {int(enfrentamiento.id)}"
-                    ),
-                )
-                enfrentamiento.canal_general_discord_id = int(canal.id)
-                session.commit()
-                try:
-                    await UtilesDiscord.enviar_mensaje_largo(
-                        canal,
-                        _mensaje_canal_enfrentamiento_comunidades(
-                            torneo, ronda, enfrentamiento
-                        ),
-                    )
-                except Exception as exc:
-                    fallos.append(
-                        f"Mesa {int(enfrentamiento.mesa_numero)} / enfrentamiento "
-                        f"`{int(enfrentamiento.id)}` / canal <#{int(canal.id)}>: "
-                        f"canal persistido, pero falló el mensaje inicial ({exc})"
-                    )
-            except Exception as exc:
-                session.rollback()
-                limpieza = ""
-                if canal is not None:
-                    try:
-                        await canal.delete(reason="Fallo al persistir el canal de comunidades")
-                        limpieza = "; el canal huérfano se eliminó"
-                    except Exception as error_limpieza:
-                        limpieza = (
-                            f"; canal huérfano `{int(canal.id)}` pendiente de limpieza "
-                            f"({error_limpieza})"
-                        )
-                fallos.append(
-                    f"Mesa {int(enfrentamiento.mesa_numero)} / enfrentamiento "
-                    f"`{int(enfrentamiento.id)}` / categoría `{int(categoria.id)}`: "
-                    f"no se pudo crear o persistir el canal ({exc}){limpieza}"
-                )
-
-        session.expire_all()
-        enfrentamientos = (
-            session.query(GestorSQL.ComunidadesEnfrentamiento)
-            .filter(GestorSQL.ComunidadesEnfrentamiento.ronda_id == ronda.id)
-            .order_by(GestorSQL.ComunidadesEnfrentamiento.mesa_numero)
-            .all()
-        )
-        resumen = _resumen_ronda_comunidades(torneo, ronda, enfrentamientos, bye_equipo)
-        canal_hub = ctx.guild.get_channel(int(torneo.canal_hub_id)) if torneo.canal_hub_id else None
-        if canal_hub is None and torneo.canal_hub_id:
-            try:
-                canal_hub = await ctx.guild.fetch_channel(int(torneo.canal_hub_id))
-            except Exception:
-                canal_hub = None
-        if canal_hub is None:
-            fallos.append(f"Canal hub `{torneo.canal_hub_id}` inexistente o inaccesible; resumen no publicado.")
-        else:
-            try:
-                await UtilesDiscord.enviar_mensaje_largo(canal_hub, resumen)
-            except Exception as exc:
-                fallos.append(f"No se pudo publicar el resumen en el hub `{torneo.canal_hub_id}` ({exc}).")
-
-        cierre = _consolidar_cierre_ronda_comunidades(
-            session, torneo_id, ronda_numero
-        )
-        fallos.extend(await _post_cierre_ronda_comunidades(ctx, session, cierre))
-
         if fallos:
             await _publicar_error_administrativo_comunidades(
                 ctx,
@@ -6300,6 +6337,134 @@ async def comunidades_generar_ronda(ctx, torneo_id: int, ronda_numero: int):
         session.rollback()
         await _publicar_error_administrativo_comunidades(
             ctx, f"Torneo `{torneo_id}`, ronda `{ronda_numero}`: error inesperado ({exc})."
+        )
+    finally:
+        session.close()
+
+
+@bot.command(name="comunidades_regenerar_ronda")
+async def comunidades_regenerar_ronda(ctx, torneo_id: int, ronda_numero: int):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+    if ctx.guild is None:
+        await ctx.send("❌ Este comando solo puede ejecutarse dentro de un servidor.")
+        return
+
+    SessionComunidades = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = SessionComunidades()
+    try:
+        ronda = (
+            session.query(GestorSQL.ComunidadesRonda)
+            .filter_by(torneo_id=torneo_id, numero=ronda_numero)
+            .one_or_none()
+        )
+        if ronda is None:
+            raise ErrorGeneracionRondaComunidades(
+                "RONDA_INEXISTENTE", "La ronda solicitada no existe."
+            )
+        if ronda.estado != RONDA_ABIERTA:
+            raise ErrorGeneracionRondaComunidades(
+                "RONDA_NO_ABIERTA",
+                "Solo puede regenerarse una ronda ABIERTA y no consolidada.",
+            )
+        if discord.utils.get(ctx.guild.roles, name="Comisario") is None:
+            raise ErrorSeleccionCategoriaComunidades(
+                "ROL_COMISARIO_INEXISTENTE",
+                "No existe el rol Comisario necesario para configurar los permisos.",
+                torneo_id=torneo_id,
+                tipo="enfrentamientos",
+            )
+        posterior = (
+            session.query(GestorSQL.ComunidadesRonda.id)
+            .filter(
+                GestorSQL.ComunidadesRonda.torneo_id == torneo_id,
+                GestorSQL.ComunidadesRonda.numero > ronda_numero,
+            )
+            .first()
+        )
+        if posterior is not None:
+            raise ErrorGeneracionRondaComunidades(
+                "RONDA_HISTORICA",
+                "No puede regenerarse una ronda seguida por rondas posteriores.",
+            )
+
+        registros_canales = []
+        for enfrentamiento in ronda.enfrentamientos:
+            registros_canales.append(("general", enfrentamiento.canal_general_discord_id))
+            registros_canales.extend(
+                ("individual", partido.canal_discord_id)
+                for partido in enfrentamiento.partidos
+            )
+        canal_hub_id = int(ronda.torneo.canal_hub_id)
+        resultado = regenerar_ronda_comunidades(
+            session,
+            torneo_id,
+            ronda_numero,
+            int(ctx.author.id),
+            confirmar=False,
+        )
+        eliminados, ausentes = await _eliminar_canales_para_regeneracion_comunidades(
+            ctx,
+            registros_canales,
+            canal_hub_id=canal_hub_id,
+            ronda_numero=ronda_numero,
+        )
+        cantidad_mesas = (
+            session.query(GestorSQL.ComunidadesEquipo)
+            .filter(GestorSQL.ComunidadesEquipo.torneo_id == torneo_id)
+            .count()
+            // 2
+        )
+        categorias = await planificar_categorias_comunidades(
+            session,
+            ctx.guild,
+            torneo_id=torneo_id,
+            tipo="enfrentamientos",
+            cantidad=cantidad_mesas,
+        )
+        session.commit()
+        enfrentamientos, torneo, cierre, fallos = await _crear_canales_ronda_comunidades(
+            ctx, session, resultado, categorias
+        )
+        detalle_limpieza = (
+            f"Canales anteriores eliminados: `{eliminados}`; "
+            f"ya ausentes o sin registrar: `{ausentes}`."
+        )
+        if fallos:
+            await _publicar_error_administrativo_comunidades(
+                ctx,
+                f"Torneo `{torneo_id}`, ronda `{ronda_numero}` regenerada con incidencias recuperables.\n"
+                f"{detalle_limpieza}\n"
+                + "\n".join(f"- {fallo}" for fallo in fallos),
+            )
+        else:
+            cierre_texto = (
+                " y cerrada automáticamente al contener solo byes"
+                if cierre.get("cerrada") else ""
+            )
+            await ctx.send(
+                f"✅ Ronda {ronda_numero} regenerada con {len(enfrentamientos)} "
+                f"enfrentamientos nuevos{cierre_texto}. {detalle_limpieza}"
+            )
+    except ErrorSeleccionCategoriaComunidades as exc:
+        session.rollback()
+        await _publicar_error_administrativo_comunidades(
+            ctx, _detalle_error_categorias_comunidades(exc)
+        )
+    except ErrorGeneracionRondaComunidades as exc:
+        session.rollback()
+        await _publicar_error_administrativo_comunidades(
+            ctx,
+            f"[{exc.codigo}] Regeneración del torneo `{torneo_id}`, ronda "
+            f"`{ronda_numero}`: {exc.detalle}",
+        )
+    except Exception as exc:
+        session.rollback()
+        await _publicar_error_administrativo_comunidades(
+            ctx,
+            f"Regeneración del torneo `{torneo_id}`, ronda `{ronda_numero}`: "
+            f"error inesperado ({exc}).",
         )
     finally:
         session.close()
