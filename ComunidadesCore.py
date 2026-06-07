@@ -1701,6 +1701,283 @@ def registrar_eleccion_atacante_comunidades(
         raise
 
 
+class ErrorAdministracionEleccionesComunidades(ValueError):
+    """Error de dominio para consultar o imponer elecciones administrativas."""
+
+    def __init__(self, codigo: str, detalle: str):
+        super().__init__(detalle)
+        self.codigo = codigo
+        self.detalle = detalle
+
+
+@dataclass(frozen=True)
+class EleccionEquipoAdministrativaComunidades:
+    equipo: Any
+    atacante: Optional[Any]
+    defensor: Optional[Any]
+    pendiente: bool
+    bloqueada: bool
+    actor_discord_id: Optional[int]
+    elegido_en: Optional[datetime]
+
+
+@dataclass(frozen=True)
+class EleccionesEnfrentamientoAdministrativasComunidades:
+    enfrentamiento: Any
+    elecciones: tuple[
+        EleccionEquipoAdministrativaComunidades,
+        EleccionEquipoAdministrativaComunidades,
+    ]
+
+
+def _error_administracion_elecciones(codigo: str, detalle: str) -> None:
+    raise ErrorAdministracionEleccionesComunidades(codigo, detalle)
+
+
+def consultar_elecciones_comunidades(
+    session: Any, *, torneo_id: int, ronda_numero: int
+) -> tuple[EleccionesEnfrentamientoAdministrativasComunidades, ...]:
+    """Devuelve las elecciones de una ronda; el llamador debe validar permisos antes."""
+    from GestorSQL import (
+        ComunidadesEleccionAtacante,
+        ComunidadesEnfrentamiento,
+        ComunidadesRonda,
+        ComunidadesTorneo,
+    )
+
+    for valor, nombre in ((torneo_id, "torneo_id"), (ronda_numero, "ronda")):
+        if type(valor) is not int or valor <= 0:
+            _error_administracion_elecciones(
+                "VALOR_INVALIDO", f"{nombre} debe ser un entero mayor que cero."
+            )
+    torneo = session.get(ComunidadesTorneo, torneo_id)
+    if torneo is None:
+        _error_administracion_elecciones(
+            "TORNEO_NO_EXISTE", f"No existe el torneo de comunidades {torneo_id}."
+        )
+    ronda = (
+        session.query(ComunidadesRonda)
+        .filter(
+            ComunidadesRonda.torneo_id == torneo_id,
+            ComunidadesRonda.numero == ronda_numero,
+        )
+        .one_or_none()
+    )
+    if ronda is None:
+        _error_administracion_elecciones(
+            "RONDA_NO_EXISTE",
+            f"No existe la ronda {ronda_numero} del torneo {torneo_id}.",
+        )
+
+    enfrentamientos = (
+        session.query(ComunidadesEnfrentamiento)
+        .filter(ComunidadesEnfrentamiento.ronda_id == ronda.id)
+        .order_by(ComunidadesEnfrentamiento.mesa_numero)
+        .all()
+    )
+    resultado = []
+    for enfrentamiento in enfrentamientos:
+        elecciones = (
+            session.query(ComunidadesEleccionAtacante)
+            .filter(
+                ComunidadesEleccionAtacante.enfrentamiento_id == enfrentamiento.id
+            )
+            .all()
+        )
+        por_equipo = {int(eleccion.equipo_id): eleccion for eleccion in elecciones}
+        detalles = []
+        for equipo in (enfrentamiento.equipo_a, enfrentamiento.equipo_b):
+            eleccion = por_equipo.get(int(equipo.id))
+            detalles.append(
+                EleccionEquipoAdministrativaComunidades(
+                    equipo=equipo,
+                    atacante=(eleccion.atacante_usuario if eleccion else None),
+                    defensor=(eleccion.defensor_usuario if eleccion else None),
+                    pendiente=eleccion is None,
+                    bloqueada=bool(eleccion.bloqueada) if eleccion else False,
+                    actor_discord_id=(
+                        int(eleccion.elegido_por_discord_id) if eleccion else None
+                    ),
+                    elegido_en=eleccion.elegido_en if eleccion else None,
+                )
+            )
+        resultado.append(
+            EleccionesEnfrentamientoAdministrativasComunidades(
+                enfrentamiento=enfrentamiento,
+                elecciones=(detalles[0], detalles[1]),
+            )
+        )
+    return tuple(resultado)
+
+
+def forzar_elecciones_comunidades(
+    session: Any,
+    *,
+    torneo_id: int,
+    ronda_numero: int,
+    enfrentamiento_id: int,
+    atacante_equipo_a_discord_id: int,
+    atacante_equipo_b_discord_id: int,
+    actor_discord_id: int,
+    elegido_en: Optional[datetime] = None,
+):
+    """Impone y bloquea las dos elecciones sin confirmar la transacción."""
+    from GestorSQL import (
+        ComunidadesEleccionAtacante,
+        ComunidadesEnfrentamiento,
+        ComunidadesMiembro,
+        ComunidadesPartido,
+        ComunidadesRonda,
+        ComunidadesTorneo,
+    )
+
+    for valor, nombre in (
+        (torneo_id, "torneo_id"),
+        (ronda_numero, "ronda"),
+        (enfrentamiento_id, "enfrentamiento"),
+        (atacante_equipo_a_discord_id, "atacante_equipo_a"),
+        (atacante_equipo_b_discord_id, "atacante_equipo_b"),
+        (actor_discord_id, "actor_discord_id"),
+    ):
+        if type(valor) is not int or valor <= 0:
+            _error_administracion_elecciones(
+                "VALOR_INVALIDO", f"{nombre} debe ser un entero mayor que cero."
+            )
+    if elegido_en is not None and not isinstance(elegido_en, datetime):
+        _error_administracion_elecciones(
+            "FECHA_INVALIDA", "elegido_en debe ser datetime o None."
+        )
+    if session.get(ComunidadesTorneo, torneo_id) is None:
+        _error_administracion_elecciones(
+            "TORNEO_NO_EXISTE", f"No existe el torneo de comunidades {torneo_id}."
+        )
+    ronda = (
+        session.query(ComunidadesRonda)
+        .filter(
+            ComunidadesRonda.torneo_id == torneo_id,
+            ComunidadesRonda.numero == ronda_numero,
+        )
+        .one_or_none()
+    )
+    if ronda is None:
+        _error_administracion_elecciones(
+            "RONDA_NO_EXISTE",
+            f"No existe la ronda {ronda_numero} del torneo {torneo_id}.",
+        )
+    enfrentamiento = (
+        session.query(ComunidadesEnfrentamiento)
+        .filter(
+            ComunidadesEnfrentamiento.id == enfrentamiento_id,
+            ComunidadesEnfrentamiento.torneo_id == torneo_id,
+            ComunidadesEnfrentamiento.ronda_id == ronda.id,
+        )
+        .with_for_update()
+        .one_or_none()
+    )
+    if enfrentamiento is None:
+        _error_administracion_elecciones(
+            "ENFRENTAMIENTO_NO_EXISTE",
+            "El enfrentamiento no pertenece al torneo y ronda indicados.",
+        )
+
+    miembros = (
+        session.query(ComunidadesMiembro)
+        .filter(
+            ComunidadesMiembro.torneo_id == torneo_id,
+            ComunidadesMiembro.equipo_id.in_(
+                (enfrentamiento.equipo_a_id, enfrentamiento.equipo_b_id)
+            ),
+        )
+        .all()
+    )
+    por_equipo = {}
+    for equipo_id, discord_id, lado in (
+        (int(enfrentamiento.equipo_a_id), atacante_equipo_a_discord_id, "A"),
+        (int(enfrentamiento.equipo_b_id), atacante_equipo_b_discord_id, "B"),
+    ):
+        miembros_equipo = [m for m in miembros if int(m.equipo_id) == equipo_id]
+        if len(miembros_equipo) != 2:
+            _error_administracion_elecciones(
+                "EQUIPO_INCOMPLETO", f"El equipo del lado {lado} no tiene dos miembros."
+            )
+        atacante = next(
+            (
+                m
+                for m in miembros_equipo
+                if m.usuario is not None
+                and m.usuario.id_discord is not None
+                and int(m.usuario.id_discord) == discord_id
+            ),
+            None,
+        )
+        if atacante is None:
+            _error_administracion_elecciones(
+                "ATACANTE_NO_PERTENECE",
+                f"El atacante indicado para el equipo {lado} no pertenece a ese equipo.",
+            )
+        defensor = next(m for m in miembros_equipo if m is not atacante)
+        por_equipo[equipo_id] = (atacante, defensor)
+
+    partidos = (
+        session.query(ComunidadesPartido)
+        .filter(ComunidadesPartido.enfrentamiento_id == enfrentamiento_id)
+        .order_by(ComunidadesPartido.indice)
+        .all()
+    )
+    elecciones = (
+        session.query(ComunidadesEleccionAtacante)
+        .filter(ComunidadesEleccionAtacante.enfrentamiento_id == enfrentamiento_id)
+        .all()
+    )
+    elecciones_por_equipo = {int(e.equipo_id): e for e in elecciones}
+    if partidos:
+        if len(partidos) != 2 or [int(p.indice) for p in partidos] != [1, 2]:
+            _error_administracion_elecciones(
+                "PARTIDOS_INCOMPLETOS",
+                "El enfrentamiento tiene una materialización parcial o inconsistente.",
+            )
+        coinciden = all(
+            equipo_id in elecciones_por_equipo
+            and int(elecciones_por_equipo[equipo_id].atacante_usuario_id)
+            == int(por_equipo[equipo_id][0].usuario_id)
+            for equipo_id in por_equipo
+        )
+        if not coinciden:
+            _error_administracion_elecciones(
+                "PARTIDOS_YA_CREADOS",
+                "Los partidos ya existen y no pueden sustituirse con otros atacantes.",
+            )
+        return enfrentamiento
+
+    if enfrentamiento.estado not in {
+        ENFRENTAMIENTO_PENDIENTE_ELECCIONES,
+        ENFRENTAMIENTO_ELECCIONES_COMPLETAS,
+    }:
+        _error_administracion_elecciones(
+            "ENFRENTAMIENTO_NO_ADMITE_CREACION",
+            f"El enfrentamiento está en estado {enfrentamiento.estado}.",
+        )
+
+    ahora = elegido_en or datetime.now(timezone.utc).replace(tzinfo=None)
+    for equipo_id, (atacante, defensor) in por_equipo.items():
+        eleccion = elecciones_por_equipo.get(equipo_id)
+        if eleccion is None:
+            eleccion = ComunidadesEleccionAtacante(
+                torneo_id=torneo_id,
+                enfrentamiento_id=enfrentamiento_id,
+                equipo_id=equipo_id,
+            )
+            session.add(eleccion)
+        eleccion.atacante_usuario_id = int(atacante.usuario_id)
+        eleccion.defensor_usuario_id = int(defensor.usuario_id)
+        eleccion.elegido_por_discord_id = actor_discord_id
+        eleccion.elegido_en = ahora
+        eleccion.bloqueada = True
+    enfrentamiento.estado = ENFRENTAMIENTO_ELECCIONES_COMPLETAS
+    session.flush()
+    return enfrentamiento
+
+
 class ErrorMaterializacionPartidosComunidades(ValueError):
     """Error de dominio al fijar las identidades de los partidos."""
 

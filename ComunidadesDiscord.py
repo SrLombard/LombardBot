@@ -340,13 +340,14 @@ async def materializar_partidos_comunidades(
     guild: Any,
     *,
     enfrentamiento_id: int,
+    atomico: bool = False,
 ) -> ResultadoMaterializacionDiscordComunidades:
     """Crea de forma reintentable los dos registros y sus canales privados.
 
-    Las identidades se confirman primero. Después cada canal se crea, recibe su
-    mensaje y se asocia al partido en una confirmación independiente. Así, un
-    fallo tras el primer canal deja un estado parcial visible y recuperable sin
-    duplicar el canal ya guardado.
+    Por defecto, las identidades se confirman primero y cada canal se asocia en
+    una confirmación independiente para permitir reintentos sin duplicados. Con
+    ``atomico=True`` identidades, elecciones y canales se confirman juntos; un
+    fallo revierte la base de datos y elimina los canales creados en el intento.
     """
     import discord
     from ComunidadesCore import materializar_identidades_partidos_comunidades
@@ -356,7 +357,10 @@ async def materializar_partidos_comunidades(
         materializar_identidades_partidos_comunidades(
             session, enfrentamiento_id=enfrentamiento_id
         )
-        session.commit()
+        if atomico:
+            session.flush()
+        else:
+            session.commit()
     except Exception:
         session.rollback()
         raise
@@ -437,8 +441,11 @@ async def materializar_partidos_comunidades(
     )
 
     canales_creados = 0
+    canales_creados_en_intento = []
     for partido, categoria in zip(pendientes, categorias):
-        miembros = miembros_por_partido[int(partido.id)]
+        partido_id = int(partido.id)
+        indice_partido = int(partido.indice)
+        miembros = miembros_por_partido[partido_id]
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(
                 view_channel=False, read_messages=False
@@ -463,21 +470,39 @@ async def materializar_partidos_comunidades(
                     f"partido {int(partido.indice)}"
                 ),
             )
+            canales_creados_en_intento.append(canal)
             await canal.send(_mensaje_partido_comunidades(enfrentamiento, partido))
             partido.canal_discord_id = int(canal.id)
-            session.commit()
+            if atomico:
+                session.flush()
+            else:
+                session.commit()
             canales_creados += 1
         except Exception as exc:
             session.rollback()
             limpieza = ""
-            if canal is not None:
+            canales_a_eliminar = (
+                list(reversed(canales_creados_en_intento))
+                if atomico
+                else ([canal] if canal is not None else [])
+            )
+            errores_limpieza = []
+            for canal_creado in canales_a_eliminar:
                 try:
-                    await canal.delete(reason="Fallo al materializar partido de comunidades")
+                    await canal_creado.delete(
+                        reason="Fallo al materializar partido de comunidades"
+                    )
                 except Exception as error_limpieza:
-                    limpieza = f"; no se pudo eliminar el canal huérfano ({error_limpieza})"
+                    errores_limpieza.append(str(error_limpieza))
+            if errores_limpieza:
+                limpieza = (
+                    "; no se pudieron eliminar todos los canales huérfanos ("
+                    + "; ".join(errores_limpieza)
+                    + ")"
+                )
             _error_materializacion_discord(
                 "FALLO_CREACION_CANAL",
-                f"Falló el canal del partido {int(partido.indice)} ({exc}){limpieza}.",
+                f"Falló el canal del partido {indice_partido} ({exc}){limpieza}.",
             )
 
     session.expire_all()

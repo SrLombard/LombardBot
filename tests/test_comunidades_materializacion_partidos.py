@@ -281,3 +281,23 @@ def test_fallo_tras_primer_canal_es_detectable_y_reintento_no_duplica():
         assert session.query(ComunidadesPartido).count() == 2
         assert [partido.canal_discord_id for partido in session.query(ComunidadesPartido).order_by(ComunidadesPartido.indice)] == [901, 903]
         assert session.get(ComunidadesEnfrentamiento, enfrentamiento_id).estado == "PARTIDOS_CREADOS"
+
+
+def test_materializacion_atomica_elimina_primer_canal_y_revierte_partidos_si_falla_el_segundo():
+    engine = _engine()
+    guild = GuildDiscord(fallar_en_creacion=2)
+    with Session(engine) as session:
+        enfrentamiento_id = _crear_escenario(session)
+
+        with pytest.raises(ErrorMaterializacionDiscordComunidades) as error:
+            asyncio.run(
+                materializar_partidos_comunidades(
+                    session, guild, enfrentamiento_id=enfrentamiento_id, atomico=True
+                )
+            )
+
+        assert error.value.codigo == "FALLO_CREACION_CANAL"
+        assert guild.creaciones[0]["canal"].eliminado is True
+        assert guild.categoria.channels == []
+        assert session.query(ComunidadesPartido).count() == 0
+        assert session.get(ComunidadesEnfrentamiento, enfrentamiento_id).estado == "ELECCIONES_COMPLETAS"

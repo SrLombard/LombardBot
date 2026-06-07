@@ -54,6 +54,7 @@ from SuizoCore import (
     obtener_raza_suizo_o_usuario,
 )
 from ComunidadesCore import (
+    ErrorAdministracionEleccionesComunidades,
     ErrorConfiguracionComunidades,
     anadir_categoria_enfrentamientos_comunidades,
     anadir_categoria_partidos_comunidades,
@@ -63,12 +64,17 @@ from ComunidadesCore import (
     configurar_puntos_equipo_comunidades,
     configurar_puntos_individuales_comunidades,
     crear_torneo_comunidades,
+    consultar_elecciones_comunidades,
     ErrorGeneracionRondaComunidades,
+    forzar_elecciones_comunidades,
     generar_ronda_comunidades,
 )
 from ComunidadesDiscord import (
+    ErrorMaterializacionDiscordComunidades,
     ErrorSeleccionCategoriaComunidades,
     ejecutar_seleccion_atacante_comunidades,
+    materializar_partidos_comunidades,
+    mencion_usuario_comunidades,
     parsear_decimal,
     parsear_fecha_limite,
     planificar_categorias_comunidades,
@@ -4643,6 +4649,138 @@ async def _resolver_miembro_guild_comunidades(guild, discord_id: int):
         return await fetch_member(discord_id)
     except Exception:
         return None
+
+
+
+def _es_canal_administrativo_comunidades(ctx) -> bool:
+    """Comprueba el canal hardcodeado antes de construir contenido sensible."""
+    canal_id = getattr(getattr(ctx, "channel", None), "id", None)
+    return canal_id is not None and str(canal_id) in canales_permitidos
+
+
+def _formatear_consulta_elecciones_comunidades(torneo_id, ronda_numero, filas):
+    lineas = [
+        f"🔐 **Elecciones del torneo `{torneo_id}`, ronda `{ronda_numero}`**"
+    ]
+    if not filas:
+        lineas.append("No hay enfrentamientos en esta ronda.")
+        return "\n".join(lineas)
+    for fila in filas:
+        enfrentamiento = fila.enfrentamiento
+        lineas.append(
+            f"\n**Mesa {int(enfrentamiento.mesa_numero)} · "
+            f"enfrentamiento `{int(enfrentamiento.id)}`**"
+        )
+        for eleccion in fila.elecciones:
+            equipo = str(eleccion.equipo.nombre).replace("@", "@\u200b")
+            if eleccion.pendiente:
+                lineas.append(f"- **{equipo}** — ⏳ PENDIENTE")
+                continue
+            estado = "🔒 BLOQUEADA" if eleccion.bloqueada else "📝 ABIERTA"
+            fecha = (
+                eleccion.elegido_en.strftime("%Y-%m-%d %H:%M:%S")
+                if eleccion.elegido_en is not None
+                else "sin fecha"
+            )
+            lineas.append(
+                f"- **{equipo}** — {estado}\n"
+                f"  Atacante: {mencion_usuario_comunidades(eleccion.atacante)} · "
+                f"Defensor: {mencion_usuario_comunidades(eleccion.defensor)}\n"
+                f"  Actor: <@{int(eleccion.actor_discord_id)}> · Fecha UTC: `{fecha}`"
+            )
+    return "\n".join(lineas)
+
+
+@bot.command(name="comunidades_consulta_elecciones")
+async def comunidades_consulta_elecciones(ctx, torneo_id: int, ronda_numero: int):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+    if not _es_canal_administrativo_comunidades(ctx):
+        await ctx.send(
+            "🔒 Este comando solo puede utilizarse en el canal administrativo. "
+            "No se ha consultado ni revelado ninguna elección."
+        )
+        return
+
+    session = Session()
+    try:
+        filas = consultar_elecciones_comunidades(
+            session, torneo_id=torneo_id, ronda_numero=ronda_numero
+        )
+        await UtilesDiscord.enviar_mensaje_largo(
+            ctx.channel,
+            _formatear_consulta_elecciones_comunidades(
+                torneo_id, ronda_numero, filas
+            ),
+        )
+    except ErrorAdministracionEleccionesComunidades as exc:
+        await ctx.send(f"❌ [{exc.codigo}] {exc.detalle}")
+    except Exception as exc:
+        await ctx.send(f"❌ No se pudieron consultar las elecciones ({exc}).")
+    finally:
+        session.close()
+
+
+@bot.command(name="comunidades_forzar_crear_partidos")
+async def comunidades_forzar_crear_partidos(
+    ctx,
+    torneo_id: int,
+    ronda_numero: int,
+    enfrentamiento_id: int,
+    atacante_equipo_a: discord.Member,
+    atacante_equipo_b: discord.Member,
+):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+    if ctx.guild is None:
+        await ctx.send("❌ Este comando solo puede utilizarse dentro del servidor.")
+        return
+
+    session = Session()
+    try:
+        forzar_elecciones_comunidades(
+            session,
+            torneo_id=torneo_id,
+            ronda_numero=ronda_numero,
+            enfrentamiento_id=enfrentamiento_id,
+            atacante_equipo_a_discord_id=int(atacante_equipo_a.id),
+            atacante_equipo_b_discord_id=int(atacante_equipo_b.id),
+            actor_discord_id=int(ctx.author.id),
+        )
+        resultado = await materializar_partidos_comunidades(
+            session,
+            ctx.guild,
+            enfrentamiento_id=enfrentamiento_id,
+            atomico=True,
+        )
+        await ctx.send(
+            "✅ Elecciones impuestas, bloqueadas y partidos materializados.\n"
+            f"Torneo `{torneo_id}` · ronda `{ronda_numero}` · "
+            f"enfrentamiento `{enfrentamiento_id}`\n"
+            f"Equipo A: {atacante_equipo_a.mention} · "
+            f"Equipo B: {atacante_equipo_b.mention}\n"
+            f"Partidos: `{resultado.partido_ids[0]}`, `{resultado.partido_ids[1]}` · "
+            f"Canales: <#{resultado.canal_ids[0]}>, <#{resultado.canal_ids[1]}>\n"
+            f"Actuación administrativa registrada para <@{int(ctx.author.id)}>; "
+            f"canales creados en este intento: `{resultado.canales_creados}`."
+        )
+    except (
+        ErrorAdministracionEleccionesComunidades,
+        ErrorMaterializacionDiscordComunidades,
+        ErrorSeleccionCategoriaComunidades,
+    ) as exc:
+        session.rollback()
+        await ctx.send(f"❌ [{exc.codigo}] {exc.detalle}")
+    except Exception as exc:
+        session.rollback()
+        await ctx.send(
+            "❌ No se pudo completar el forzado; la transacción se revirtió "
+            f"({exc})."
+        )
+    finally:
+        session.close()
 
 
 @bot.command(name="comunidades_generar_ronda")
