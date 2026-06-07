@@ -3668,3 +3668,211 @@ def calcular_clasificacion_comunidades(
             criterio_anterior = criterio
         fila["posicion"] = posicion
     return ordenada
+
+
+# ---------------------------------------------------------------------------
+# Consultas públicas
+# ---------------------------------------------------------------------------
+
+class ErrorConsultaComunidades(ValueError):
+    """Error de dominio legible para las consultas públicas."""
+
+    def __init__(self, codigo: str, detalle: str):
+        super().__init__(detalle)
+        self.codigo = codigo
+        self.detalle = detalle
+
+
+def _error_consulta(codigo: str, detalle: str) -> None:
+    raise ErrorConsultaComunidades(codigo, detalle)
+
+
+def _obtener_torneo_consulta(session: Any, torneo_id: int):
+    from GestorSQL import ComunidadesTorneo
+
+    torneo = session.query(ComunidadesTorneo).filter_by(id=torneo_id).one_or_none()
+    if torneo is None:
+        _error_consulta("TORNEO_INEXISTENTE", f"No existe el torneo de comunidades con ID {torneo_id}.")
+    return torneo
+
+
+def _obtener_ronda_consulta(session: Any, torneo_id: int, numero: Optional[int]):
+    from GestorSQL import ComunidadesRonda
+
+    consulta = session.query(ComunidadesRonda).filter_by(torneo_id=torneo_id)
+    if numero is None:
+        ronda = consulta.order_by(ComunidadesRonda.numero.desc()).first()
+    else:
+        if type(numero) is not int or numero <= 0:
+            _error_consulta("RONDA_INVALIDA", "La ronda debe ser un entero positivo.")
+        ronda = consulta.filter_by(numero=numero).one_or_none()
+    if ronda is None:
+        texto = "última generada" if numero is None else str(numero)
+        _error_consulta("RONDA_INEXISTENTE", f"El torneo {torneo_id} no tiene la ronda {texto}.")
+    return ronda
+
+
+def consultar_clasificacion_equipos_comunidades(
+    session: Any, *, torneo_id: int, ronda: Optional[int] = None
+) -> dict[str, Any]:
+    """Obtiene la clasificación actual del core o un snapshot cerrado."""
+    from GestorSQL import ComunidadesSnapshotClasificacionEquipo
+
+    torneo = _obtener_torneo_consulta(session, torneo_id)
+    if ronda is None:
+        filas = calcular_clasificacion_equipos(session, torneo_id)
+        equipos = {int(e.id): e for e in torneo.equipos}
+        for fila in filas:
+            equipo = equipos[int(fila["equipo_id"])]
+            fila.update(
+                comunidad_nombre=equipo.comunidad.nombre,
+                es_zombie=bool(equipo.es_zombie),
+                estado_temporal=equipo.estado_temporal,
+            )
+        return {"torneo": torneo, "ronda": None, "fuente": "ACTUAL", "filas": filas}
+
+    ronda_db = _obtener_ronda_consulta(session, torneo_id, ronda)
+    snapshots = (
+        session.query(ComunidadesSnapshotClasificacionEquipo)
+        .filter_by(torneo_id=torneo_id, ronda_id=ronda_db.id)
+        .order_by(
+            ComunidadesSnapshotClasificacionEquipo.posicion.asc(),
+            ComunidadesSnapshotClasificacionEquipo.equipo_id.asc(),
+        )
+        .all()
+    )
+    if not snapshots:
+        _error_consulta("SNAPSHOT_INEXISTENTE", f"La ronda {ronda} todavía no tiene snapshot de equipos.")
+    filas = []
+    for snap in snapshots:
+        equipo = snap.equipo
+        filas.append({
+            "posicion": int(snap.posicion), "equipo_id": int(snap.equipo_id),
+            "nombre": equipo.nombre, "comunidad_nombre": equipo.comunidad.nombre,
+            "es_zombie": bool(equipo.es_zombie), "estado_temporal": equipo.estado_temporal,
+            "pj": int(snap.partidos_jugados), "pg": int(snap.victorias),
+            "pe": int(snap.empates), "pp": int(snap.derrotas),
+            "cantidad_byes": int(snap.cantidad_byes), "puntos": _decimal(snap.puntos_clasificacion),
+            "buchholz_cut": _decimal(snap.buchholz_cut),
+            "h2h_valor": None if snap.puntos_enfrentamiento_directo is None else _decimal(snap.puntos_enfrentamiento_directo),
+            "td_favor": int(snap.td_favor), "td_contra": int(snap.td_contra),
+            "diferencia_td": int(snap.td_favor) - int(snap.td_contra),
+        })
+    return {"torneo": torneo, "ronda": ronda_db, "fuente": "SNAPSHOT", "filas": filas}
+
+
+def consultar_clasificacion_comunidades_comunidades(
+    session: Any, *, torneo_id: int, ronda: Optional[int] = None
+) -> dict[str, Any]:
+    """Obtiene la clasificación comunitaria actual o un snapshot cerrado."""
+    from GestorSQL import ComunidadesSnapshotClasificacionComunidad
+
+    torneo = _obtener_torneo_consulta(session, torneo_id)
+    if ronda is None:
+        equipos = calcular_clasificacion_equipos(session, torneo_id)
+        filas = calcular_clasificacion_comunidades(session, torneo_id, clasificacion_equipos=equipos)
+        return {"torneo": torneo, "ronda": None, "fuente": "ACTUAL", "filas": filas}
+
+    ronda_db = _obtener_ronda_consulta(session, torneo_id, ronda)
+    snapshots = (
+        session.query(ComunidadesSnapshotClasificacionComunidad)
+        .filter_by(torneo_id=torneo_id, ronda_id=ronda_db.id)
+        .order_by(
+            ComunidadesSnapshotClasificacionComunidad.posicion.asc(),
+            ComunidadesSnapshotClasificacionComunidad.comunidad_id.asc(),
+        ).all()
+    )
+    if not snapshots:
+        _error_consulta("SNAPSHOT_INEXISTENTE", f"La ronda {ronda} todavía no tiene snapshot de comunidades.")
+    filas = [{
+        "posicion": int(s.posicion), "nombre": s.comunidad.nombre,
+        "puntos_zombificaciones": _decimal(s.puntos_zombificaciones),
+        "zombies_matados": int(s.zombies_matados),
+        "suma_puntos_equipos": _decimal(s.suma_puntos_equipos),
+    } for s in snapshots]
+    return {"torneo": torneo, "ronda": ronda_db, "fuente": "SNAPSHOT", "filas": filas}
+
+
+def consultar_ronda_comunidades(
+    session: Any, *, torneo_id: int, ronda: Optional[int] = None
+) -> dict[str, Any]:
+    """Expone una ronda sin leer elecciones de atacante."""
+    from GestorSQL import ComunidadesEnfrentamiento, ComunidadesFotografiaEstado, ComunidadesHistorialTransicion
+
+    torneo = _obtener_torneo_consulta(session, torneo_id)
+    ronda_db = _obtener_ronda_consulta(session, torneo_id, ronda)
+    enfrentamientos = (
+        session.query(ComunidadesEnfrentamiento)
+        .filter_by(torneo_id=torneo_id, ronda_id=ronda_db.id)
+        .order_by(ComunidadesEnfrentamiento.mesa_numero.asc()).all()
+    )
+    fotos = session.query(ComunidadesFotografiaEstado).filter_by(
+        torneo_id=torneo_id, ronda_id=ronda_db.id
+    ).all()
+    estados = {(int(f.enfrentamiento_id), int(f.equipo_id)): {
+        "es_zombie": bool(f.es_zombie), "estado_temporal": f.estado_temporal
+    } for f in fotos}
+    filas = []
+    for e in enfrentamientos:
+        filas.append({
+            "mesa": int(e.mesa_numero), "equipo_a": e.equipo_a, "equipo_b": e.equipo_b,
+            "estado_a": estados.get((int(e.id), int(e.equipo_a_id)), {"es_zombie": bool(e.equipo_a.es_zombie), "estado_temporal": e.equipo_a.estado_temporal}),
+            "estado_b": estados.get((int(e.id), int(e.equipo_b_id)), {"es_zombie": bool(e.equipo_b.es_zombie), "estado_temporal": e.equipo_b.estado_temporal}),
+            "estado": e.estado, "canal_general_discord_id": e.canal_general_discord_id,
+            "puntos_internos_a": _decimal(e.puntos_internos_a), "puntos_internos_b": _decimal(e.puntos_internos_b),
+            "puntos_clasificacion_a": _decimal(e.puntos_clasificacion_a), "puntos_clasificacion_b": _decimal(e.puntos_clasificacion_b),
+        })
+    bye = session.query(ComunidadesHistorialTransicion).filter_by(
+        torneo_id=torneo_id, ronda_id=ronda_db.id, motivo="BYE"
+    ).one_or_none()
+    return {"torneo": torneo, "ronda": ronda_db, "enfrentamientos": filas,
+            "bye_equipo": None if bye is None else bye.equipo}
+
+
+def consultar_equipo_comunidades(session: Any, *, torneo_id: int, equipo_nombre: str) -> dict[str, Any]:
+    """Obtiene identidad pública, estado y clasificación actual de un equipo."""
+    from GestorSQL import ComunidadesEquipo
+
+    torneo = _obtener_torneo_consulta(session, torneo_id)
+    nombre = str(equipo_nombre or "").strip()
+    equipo = session.query(ComunidadesEquipo).filter_by(torneo_id=torneo_id, nombre=nombre).one_or_none()
+    if equipo is None:
+        _error_consulta("EQUIPO_INEXISTENTE", f"No existe el equipo '{nombre}' en el torneo {torneo_id}.")
+    fila = next((f for f in calcular_clasificacion_equipos(session, torneo_id)
+                 if int(f["equipo_id"]) == int(equipo.id)), None)
+    return {"torneo": torneo, "equipo": equipo,
+            "miembros": sorted(equipo.miembros, key=lambda m: int(m.posicion)),
+            "clasificacion": fila}
+
+
+def consultar_estados_comunidades(session: Any, *, torneo_id: int) -> dict[str, Any]:
+    """Lista estados actuales en el orden exacto del clasificador del core."""
+    from GestorSQL import ComunidadesEquipo
+
+    torneo = _obtener_torneo_consulta(session, torneo_id)
+    equipos = {int(e.id): e for e in session.query(ComunidadesEquipo).filter_by(torneo_id=torneo_id).all()}
+    filas = [{"clasificacion": f, "equipo": equipos[int(f["equipo_id"])]}
+             for f in calcular_clasificacion_equipos(session, torneo_id)]
+    return {"torneo": torneo, "filas": filas}
+
+
+def consultar_estado_canales_comunidades(
+    session: Any, *, torneo_id: int, ronda: Optional[int] = None
+) -> dict[str, Any]:
+    """Expone canales y progreso sin identidades ni roles secretos."""
+    from GestorSQL import ComunidadesEnfrentamiento
+
+    torneo = _obtener_torneo_consulta(session, torneo_id)
+    ronda_db = _obtener_ronda_consulta(session, torneo_id, ronda)
+    enfrentamientos = session.query(ComunidadesEnfrentamiento).filter_by(
+        torneo_id=torneo_id, ronda_id=ronda_db.id
+    ).order_by(ComunidadesEnfrentamiento.mesa_numero.asc()).all()
+    filas = []
+    for e in enfrentamientos:
+        filas.append({
+            "mesa": int(e.mesa_numero), "equipo_a": e.equipo_a, "equipo_b": e.equipo_b,
+            "estado": e.estado, "canal_general_discord_id": e.canal_general_discord_id,
+            "partidos": [{"indice": int(p.indice), "estado": p.estado, "canal_discord_id": p.canal_discord_id}
+                         for p in sorted(e.partidos, key=lambda p: int(p.indice))],
+        })
+    return {"torneo": torneo, "ronda": ronda_db, "filas": filas}

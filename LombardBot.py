@@ -55,6 +55,7 @@ from SuizoCore import (
 )
 from ComunidadesCore import (
     ErrorAdministracionEleccionesComunidades,
+    ErrorConsultaComunidades,
     ErrorConfiguracionComunidades,
     anadir_categoria_enfrentamientos_comunidades,
     anadir_categoria_partidos_comunidades,
@@ -66,6 +67,12 @@ from ComunidadesCore import (
     configurar_puntos_individuales_comunidades,
     crear_torneo_comunidades,
     consultar_elecciones_comunidades,
+    consultar_clasificacion_comunidades_comunidades,
+    consultar_clasificacion_equipos_comunidades,
+    consultar_equipo_comunidades,
+    consultar_estado_canales_comunidades,
+    consultar_estados_comunidades,
+    consultar_ronda_comunidades,
     ErrorGeneracionRondaComunidades,
     ErrorRegistroResultadoComunidades,
     ErrorTransferenciaComunidades,
@@ -5203,6 +5210,179 @@ def _estado_con_emojis_comunidades(estado_temporal: str, es_zombie: bool) -> str
     if emoji_temporal:
         emojis.append(emoji_temporal)
     return " ".join(emojis) or "⚪"
+
+
+ESTADOS_PUBLICOS_COMUNIDADES = {
+    "CREADO": "🆕", "EN_CURSO": "🟢", "FINALIZADO": "🏁",
+    "ABIERTA": "🟢", "BLOQUEADA": "🔒", "CERRADA": "✅",
+    "PENDIENTE_ELECCIONES": "⏳", "ELECCIONES_COMPLETAS": "🔒",
+    "PARTIDOS_CREADOS": "🧩", "PENDIENTE": "⏳", "ADMINISTRADO": "🛠️",
+}
+
+
+def _estado_publico_comunidades(estado: object) -> str:
+    texto = str(estado or "DESCONOCIDO")
+    return f"{ESTADOS_PUBLICOS_COMUNIDADES.get(texto, 'ℹ️')} `{texto}`"
+
+
+def _decimal_publico_comunidades(valor: object) -> str:
+    texto = format(Decimal(str(valor or 0)), "f")
+    return texto.rstrip("0").rstrip(".") if "." in texto else texto
+
+
+def _mencion_publica_comunidades(usuario) -> str:
+    discord_id = getattr(usuario, "id_discord", None)
+    return f"<@{int(discord_id)}>" if discord_id is not None else _texto_discord_seguro(_nombre_usuario_comunidades(usuario))
+
+
+def _cabecera_publica_comunidades(torneo, titulo: str) -> list[str]:
+    return [f"## {titulo}",
+            f"Torneo: **{_texto_discord_seguro(torneo.nombre)}** (`{int(torneo.id)}`)",
+            f"Estado: {_estado_publico_comunidades(torneo.estado)}"]
+
+
+async def _ejecutar_consulta_publica_comunidades(interaction, consulta, formatear):
+    await interaction.response.defer()
+    SessionComunidades = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = SessionComunidades()
+    try:
+        try:
+            mensaje = formatear(consulta(session))
+        except ErrorConsultaComunidades as exc:
+            await interaction.followup.send(f"❌ {exc.detalle}", ephemeral=True)
+            return
+        except Exception as exc:
+            await interaction.followup.send(f"❌ No se pudo completar la consulta: {exc}", ephemeral=True)
+            return
+        await UtilesDiscord.responder_interaction_largo(interaction, mensaje)
+    finally:
+        session.close()
+
+
+def _formatear_ronda_publica(resultado: dict) -> str:
+    torneo, ronda = resultado["torneo"], resultado["ronda"]
+    lineas = _cabecera_publica_comunidades(torneo, f"Ronda {int(ronda.numero)} de comunidades")
+    lineas += [f"Ronda: {_estado_publico_comunidades(ronda.estado)} · 📅 {ronda.fecha_inicio:%Y-%m-%d %H:%M}—{ronda.fecha_fin:%Y-%m-%d %H:%M} UTC", ""]
+    if not resultado["enfrentamientos"]:
+        lineas.append("ℹ️ No hay enfrentamientos en esta ronda.")
+    for fila in resultado["enfrentamientos"]:
+        ea = _estado_con_emojis_comunidades(fila["estado_a"]["estado_temporal"], fila["estado_a"]["es_zombie"])
+        eb = _estado_con_emojis_comunidades(fila["estado_b"]["estado_temporal"], fila["estado_b"]["es_zombie"])
+        canal = f"<#{int(fila['canal_general_discord_id'])}>" if fila["canal_general_discord_id"] else "⚠️ sin canal"
+        lineas += [f"### Mesa {fila['mesa']} · {_estado_publico_comunidades(fila['estado'])}",
+                   f"{ea} **{_texto_discord_seguro(fila['equipo_a'].nombre)}** vs {eb} **{_texto_discord_seguro(fila['equipo_b'].nombre)}**",
+                   f"📺 Canal general: {canal}"]
+        if fila["estado"] in (ENFRENTAMIENTO_CERRADO, ENFRENTAMIENTO_ADMINISTRADO):
+            lineas.append(f"🏁 Internos **{_decimal_publico_comunidades(fila['puntos_internos_a'])}-{_decimal_publico_comunidades(fila['puntos_internos_b'])}** · Clasificación **{_decimal_publico_comunidades(fila['puntos_clasificacion_a'])}-{_decimal_publico_comunidades(fila['puntos_clasificacion_b'])}**")
+        lineas.append("")
+    if resultado["bye_equipo"] is not None:
+        lineas.append(f"🛌 **BYE:** {_texto_discord_seguro(resultado['bye_equipo'].nombre)}")
+    lineas.append("🔐 Las elecciones de atacante no se muestran en esta consulta pública.")
+    return "\n".join(lineas)
+
+
+def _formatear_equipos_publico(resultado: dict) -> str:
+    fuente = f"snapshot de ronda {resultado['ronda'].numero}" if resultado["fuente"] == "SNAPSHOT" else "clasificación actual"
+    lineas = _cabecera_publica_comunidades(resultado["torneo"], "Clasificación de equipos") + [f"📸 Fuente: **{fuente}**", ""]
+    if not resultado["filas"]:
+        lineas.append("ℹ️ Todavía no hay equipos inscritos.")
+    for f in resultado["filas"]:
+        estado = _estado_con_emojis_comunidades(f["estado_temporal"], f["es_zombie"])
+        h2h = "-" if f["h2h_valor"] is None else _decimal_publico_comunidades(f["h2h_valor"])
+        lineas += [f"**{f['posicion']}.** {estado} **{_texto_discord_seguro(f['nombre'])}** · 🏘️ {_texto_discord_seguro(f['comunidad_nombre'])}",
+                   f"🏆 PTS **{_decimal_publico_comunidades(f['puntos'])}** · PJ {f['pj']} ({f['pg']}/{f['pe']}/{f['pp']}) · 🛌 {f['cantidad_byes']} · BH {_decimal_publico_comunidades(f['buchholz_cut'])} · H2H {h2h} · TD {f['td_favor']}-{f['td_contra']} ({f['diferencia_td']:+d})"]
+    if resultado["fuente"] == "SNAPSHOT":
+        lineas.append("\nℹ️ Los puntos son históricos; los emojis muestran el estado actual.")
+    return "\n".join(lineas)
+
+
+def _formatear_comunidades_publico(resultado: dict) -> str:
+    fuente = f"snapshot de ronda {resultado['ronda'].numero}" if resultado["fuente"] == "SNAPSHOT" else "clasificación actual"
+    lineas = _cabecera_publica_comunidades(resultado["torneo"], "Clasificación de comunidades") + [f"📸 Fuente: **{fuente}**", ""]
+    if not resultado["filas"]:
+        lineas.append("ℹ️ Todavía no hay comunidades configuradas.")
+    for f in resultado["filas"]:
+        lineas.append(f"**{f['posicion']}.** 🏘️ **{_texto_discord_seguro(f['nombre'])}** · 🧟 PZ **{_decimal_publico_comunidades(f['puntos_zombificaciones'])}** · ☠️ kills **{f['zombies_matados']}** · 🏆 PTS equipos **{_decimal_publico_comunidades(f['suma_puntos_equipos'])}**")
+    lineas.append("\n🤝 Los criterios idénticos conservan una posición compartida.")
+    return "\n".join(lineas)
+
+
+def _formatear_equipo_publico(resultado: dict) -> str:
+    equipo, fila = resultado["equipo"], resultado["clasificacion"]
+    estado = _estado_con_emojis_comunidades(equipo.estado_temporal, equipo.es_zombie)
+    lineas = _cabecera_publica_comunidades(resultado["torneo"], "Consulta de equipo")
+    lineas += [f"Equipo: {estado} **{_texto_discord_seguro(equipo.nombre)}**", f"🏘️ Comunidad: **{_texto_discord_seguro(equipo.comunidad.nombre)}**", "", "### Integrantes"]
+    for m in resultado["miembros"]:
+        lineas.append(f"{m.posicion}. {_mencion_publica_comunidades(m.usuario)} · 🧬 **{_texto_discord_seguro(m.raza)}**")
+    if fila:
+        h2h = "-" if fila["h2h_valor"] is None else _decimal_publico_comunidades(fila["h2h_valor"])
+        lineas += ["", "### Clasificación actual", f"📊 Posición **{fila['posicion']}** · 🏆 PTS **{_decimal_publico_comunidades(fila['puntos'])}** · PJ {fila['pj']} ({fila['pg']}/{fila['pe']}/{fila['pp']}) · 🛌 {fila['cantidad_byes']}", f"BH {_decimal_publico_comunidades(fila['buchholz_cut'])} · H2H {h2h} · TD {fila['td_favor']}-{fila['td_contra']} ({fila['diferencia_td']:+d})"]
+    return "\n".join(lineas)
+
+
+def _formatear_estados_publico(resultado: dict) -> str:
+    lineas = _cabecera_publica_comunidades(resultado["torneo"], "Estados de equipos") + ["📊 Orden de la clasificación actual del core.", ""]
+    if not resultado["filas"]:
+        lineas.append("ℹ️ Todavía no hay equipos inscritos.")
+    for dato in resultado["filas"]:
+        e, f = dato["equipo"], dato["clasificacion"]
+        lineas.append(f"**{f['posicion']}.** {_estado_con_emojis_comunidades(e.estado_temporal, e.es_zombie)} **{_texto_discord_seguro(e.nombre)}** · 🏘️ {_texto_discord_seguro(e.comunidad.nombre)}")
+    lineas.append("\nLeyenda: ⚪ neutro · 🏹 cazador · 🩸 herido · 🧟 zombie · 🏹🧟 cazador Z.")
+    return "\n".join(lineas)
+
+
+def _formatear_canales_publico(resultado: dict) -> str:
+    ronda = resultado["ronda"]
+    lineas = _cabecera_publica_comunidades(resultado["torneo"], f"Estado de canales · ronda {ronda.numero}") + [f"Ronda: {_estado_publico_comunidades(ronda.estado)}", ""]
+    if not resultado["filas"]:
+        lineas.append("ℹ️ No hay enfrentamientos ni canales en esta ronda.")
+    for f in resultado["filas"]:
+        general = f"<#{int(f['canal_general_discord_id'])}>" if f["canal_general_discord_id"] else "⚠️ sin canal"
+        lineas += [f"### Mesa {f['mesa']} · {_estado_publico_comunidades(f['estado'])}", f"**{_texto_discord_seguro(f['equipo_a'].nombre)}** vs **{_texto_discord_seguro(f['equipo_b'].nombre)}**", f"📺 General: {general}"]
+        if not f["partidos"]:
+            lineas.append("🔐 Individuales: aún no materializados.")
+        for p in f["partidos"]:
+            canal = f"<#{int(p['canal_discord_id'])}>" if p["canal_discord_id"] else "⚠️ sin canal"
+            lineas.append(f"🏟️ Partido {p['indice']}: {_estado_publico_comunidades(p['estado'])} · {canal}")
+        lineas.append("")
+    lineas.append("🔐 No se muestran atacantes, defensores ni elecciones.")
+    return "\n".join(lineas)
+
+
+@bot.tree.command(name="comunidades_consulta_ronda", description="Consulta una ronda de comunidades")
+@app_commands.describe(torneo_id="Identificador del torneo", ronda="Ronda; omitir para la última generada")
+async def comunidades_consulta_ronda(interaction: discord.Interaction, torneo_id: int, ronda: Optional[int] = None):
+    await _ejecutar_consulta_publica_comunidades(interaction, lambda s: consultar_ronda_comunidades(s, torneo_id=torneo_id, ronda=ronda), _formatear_ronda_publica)
+
+
+@bot.tree.command(name="comunidades_clasif_equipos", description="Consulta la clasificación de equipos")
+@app_commands.describe(torneo_id="Identificador del torneo", ronda="Ronda cerrada cuyo snapshot se consulta")
+async def comunidades_clasif_equipos(interaction: discord.Interaction, torneo_id: int, ronda: Optional[int] = None):
+    await _ejecutar_consulta_publica_comunidades(interaction, lambda s: consultar_clasificacion_equipos_comunidades(s, torneo_id=torneo_id, ronda=ronda), _formatear_equipos_publico)
+
+
+@bot.tree.command(name="comunidades_clasif_comunidades", description="Consulta la clasificación de comunidades")
+@app_commands.describe(torneo_id="Identificador del torneo", ronda="Ronda cerrada cuyo snapshot se consulta")
+async def comunidades_clasif_comunidades(interaction: discord.Interaction, torneo_id: int, ronda: Optional[int] = None):
+    await _ejecutar_consulta_publica_comunidades(interaction, lambda s: consultar_clasificacion_comunidades_comunidades(s, torneo_id=torneo_id, ronda=ronda), _formatear_comunidades_publico)
+
+
+@bot.tree.command(name="comunidades_consulta_equipo", description="Consulta un equipo de comunidades")
+@app_commands.describe(torneo_id="Identificador del torneo", equipo="Nombre exacto del equipo")
+async def comunidades_consulta_equipo(interaction: discord.Interaction, torneo_id: int, equipo: str):
+    await _ejecutar_consulta_publica_comunidades(interaction, lambda s: consultar_equipo_comunidades(s, torneo_id=torneo_id, equipo_nombre=equipo), _formatear_equipo_publico)
+
+
+@bot.tree.command(name="comunidades_consulta_estados", description="Consulta los estados de los equipos")
+@app_commands.describe(torneo_id="Identificador del torneo")
+async def comunidades_consulta_estados(interaction: discord.Interaction, torneo_id: int):
+    await _ejecutar_consulta_publica_comunidades(interaction, lambda s: consultar_estados_comunidades(s, torneo_id=torneo_id), _formatear_estados_publico)
+
+
+@bot.tree.command(name="comunidades_estado_canales", description="Consulta canales de una ronda de comunidades")
+@app_commands.describe(torneo_id="Identificador del torneo", ronda="Ronda; omitir para la última generada")
+async def comunidades_estado_canales(interaction: discord.Interaction, torneo_id: int, ronda: Optional[int] = None):
+    await _ejecutar_consulta_publica_comunidades(interaction, lambda s: consultar_estado_canales_comunidades(s, torneo_id=torneo_id, ronda=ronda), _formatear_canales_publico)
 
 
 def _texto_partido_comunidades(partido) -> str:
