@@ -5,7 +5,7 @@ clasificación consultan los modelos propios de comunidades mediante la sesión
 recibida, sin depender de los modelos del torneo suizo individual.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import json
@@ -18,8 +18,18 @@ from ComunidadesConstantes import (
     ESTADO_TEMPORAL_CAZADOR_Z,
     ESTADO_TEMPORAL_HERIDO,
     ESTADO_TEMPORAL_NEUTRO,
+    ENFRENTAMIENTO_ADMINISTRADO,
+    ENFRENTAMIENTO_CERRADO,
     ENFRENTAMIENTO_ELECCIONES_COMPLETAS,
+    ENFRENTAMIENTO_EN_CURSO,
+    ENFRENTAMIENTO_PARTIDOS_CREADOS,
     ENFRENTAMIENTO_PENDIENTE_ELECCIONES,
+    RESULTADO_ORIGEN_ADMIN,
+    RESULTADO_ORIGEN_API,
+    PARTIDO_ADMINISTRADO,
+    PARTIDO_FINALIZADO,
+    TIPO_FORFAIT_DOBLE,
+    TIPOS_FORFAIT,
     PLANTILLA_RONDA1_PENDIENTE,
     PLANTILLA_RONDAS_SIGUIENTES_PENDIENTE,
     RAZAS_VALIDAS,
@@ -2121,6 +2131,517 @@ def materializar_identidades_partidos_comunidades(
     )
 
 
+class ErrorRegistroResultadoComunidades(ValueError):
+    """Error funcional al persistir un resultado individual o resolver su serie."""
+
+    def __init__(self, codigo: str, detalle: str):
+        super().__init__(detalle)
+        self.codigo = codigo
+        self.detalle = detalle
+
+
+def _error_registro_resultado(codigo: str, detalle: str) -> None:
+    raise ErrorRegistroResultadoComunidades(codigo, detalle)
+
+
+@dataclass(frozen=True)
+class ResultadoRegistroPartidoComunidades:
+    """Resultado persistido y posible resolución global disparada por el registro."""
+
+    partido: Any
+    enfrentamiento: Any
+    enfrentamiento_resuelto: bool
+    idempotente: bool
+    resultado_global: Optional[ResultadoEnfrentamiento]
+
+
+def _validar_td_resultado(valor: object, nombre: str) -> int:
+    if type(valor) is not int or valor < 0:
+        _error_registro_resultado(
+            "TD_INVALIDOS", f"{nombre} debe ser un entero mayor o igual que cero."
+        )
+    return valor
+
+
+def _normalizar_id_bloodbowl(valor: object) -> Optional[str]:
+    if valor is None:
+        return None
+    if not isinstance(valor, str) or not valor.strip() or valor != valor.strip():
+        _error_registro_resultado(
+            "ID_BLOODBOWL_INVALIDO",
+            "partido_bloodbowl_id debe ser un texto no vacío y sin espacios exteriores.",
+        )
+    if len(valor) > 45:
+        _error_registro_resultado(
+            "ID_BLOODBOWL_INVALIDO",
+            "partido_bloodbowl_id no puede superar 45 caracteres.",
+        )
+    return valor
+
+
+def _marcador_desde_partido(partido: Any, enfrentamiento: Any) -> MarcadorPartido:
+    """Orienta un partido persistido como equipo A/equipo B."""
+    equipo_a_id = int(enfrentamiento.equipo_a_id)
+    equipo_b_id = int(enfrentamiento.equipo_b_id)
+    local_id = int(partido.equipo_local_id)
+    visitante_id = int(partido.equipo_visitante_id)
+    if (local_id, visitante_id) == (equipo_a_id, equipo_b_id):
+        td_a, td_b = int(partido.td_local), int(partido.td_visitante)
+        equipo_atacante = (
+            Equipo.A
+            if int(partido.atacante_usuario_id) == int(partido.usuario_local_id)
+            else Equipo.B
+        )
+    elif (local_id, visitante_id) == (equipo_b_id, equipo_a_id):
+        td_a, td_b = int(partido.td_visitante), int(partido.td_local)
+        equipo_atacante = (
+            Equipo.B
+            if int(partido.atacante_usuario_id) == int(partido.usuario_local_id)
+            else Equipo.A
+        )
+    else:
+        _error_registro_resultado(
+            "PARTIDO_INCONSISTENTE",
+            "Los equipos del partido no coinciden con los del enfrentamiento.",
+        )
+    if int(partido.atacante_usuario_id) not in {
+        int(partido.usuario_local_id),
+        int(partido.usuario_visitante_id),
+    }:
+        _error_registro_resultado(
+            "PARTIDO_INCONSISTENTE",
+            "El atacante del partido no coincide con ninguno de sus jugadores.",
+        )
+    return MarcadorPartido(td_a, td_b, equipo_atacante)
+
+
+def _puntos_persistidos_desde_partido(
+    partido: Any, enfrentamiento: Any
+) -> PuntosInternosPartido:
+    """Orienta los puntos internos persistidos como equipo A/equipo B."""
+    local_id = int(partido.equipo_local_id)
+    visitante_id = int(partido.equipo_visitante_id)
+    equipo_a_id = int(enfrentamiento.equipo_a_id)
+    equipo_b_id = int(enfrentamiento.equipo_b_id)
+    local = Decimal(partido.puntos_internos_local)
+    visitante = Decimal(partido.puntos_internos_visitante)
+    if (local_id, visitante_id) == (equipo_a_id, equipo_b_id):
+        return PuntosInternosPartido(local, visitante)
+    if (local_id, visitante_id) == (equipo_b_id, equipo_a_id):
+        return PuntosInternosPartido(visitante, local)
+    _error_registro_resultado(
+        "PARTIDO_INCONSISTENTE",
+        "Los equipos del partido no coinciden con los del enfrentamiento.",
+    )
+
+
+def _incrementar_contadores_comunidad(
+    comunidad: Any, *, puntos_zombificacion: Decimal, kills: int
+) -> None:
+    """Punto único de actualización para facilitar auditoría y rollback."""
+    comunidad.puntos_zombificaciones = (
+        Decimal(comunidad.puntos_zombificaciones or 0) + puntos_zombificacion
+    )
+    comunidad.zombies_matados = int(comunidad.zombies_matados or 0) + kills
+
+
+def _aplicar_resultado_equipo(
+    equipo: Any,
+    *,
+    puntos: Decimal,
+    td_favor: int,
+    td_contra: int,
+    resultado: ResultadoGlobal,
+    lado: Equipo,
+    doble_forfait: bool = False,
+) -> None:
+    equipo.partidos_jugados = int(equipo.partidos_jugados or 0) + 1
+    equipo.puntos_clasificacion = Decimal(equipo.puntos_clasificacion or 0) + puntos
+    equipo.td_favor = int(equipo.td_favor or 0) + td_favor
+    equipo.td_contra = int(equipo.td_contra or 0) + td_contra
+    if doble_forfait:
+        equipo.derrotas = int(equipo.derrotas or 0) + 1
+    elif resultado is ResultadoGlobal.EMPATE:
+        equipo.empates = int(equipo.empates or 0) + 1
+    elif (resultado is ResultadoGlobal.VICTORIA_A and lado is Equipo.A) or (
+        resultado is ResultadoGlobal.VICTORIA_B and lado is Equipo.B
+    ):
+        equipo.victorias = int(equipo.victorias or 0) + 1
+    else:
+        equipo.derrotas = int(equipo.derrotas or 0) + 1
+
+
+def _resolver_enfrentamiento_persistido(
+    session: Any, enfrentamiento: Any, partidos: tuple[Any, Any]
+) -> ResultadoEnfrentamiento:
+    from GestorSQL import (
+        ComunidadesComunidad,
+        ComunidadesEquipo,
+        ComunidadesFotografiaEstado,
+        ComunidadesHistorialTransicion,
+    )
+
+    torneo = enfrentamiento.torneo
+    configuracion_individual = ConfiguracionPuntosIndividuales(
+        torneo.puntos_individuales_victoria,
+        torneo.puntos_individuales_empate,
+        torneo.puntos_individuales_derrota,
+    )
+    configuracion_clasificacion = ConfiguracionPuntosClasificacion(
+        torneo.puntos_clasificacion_victoria,
+        torneo.puntos_clasificacion_empate,
+        torneo.puntos_clasificacion_derrota,
+    )
+    resultado = calcular_resultado_enfrentamiento(
+        tuple(_marcador_desde_partido(p, enfrentamiento) for p in partidos),
+        configuracion_individual,
+        configuracion_clasificacion,
+    )
+    puntos_persistidos = sumar_puntos_internos(
+        tuple(_puntos_persistidos_desde_partido(p, enfrentamiento) for p in partidos)
+    )
+    decision = decidir_resultado_global(
+        puntos_persistidos.puntos_a,
+        puntos_persistidos.puntos_b,
+        resultado.td_atacante_a,
+        resultado.td_atacante_b,
+        resultado.diferencia_td_a,
+        resultado.diferencia_td_b,
+    )
+    clasificacion_a, clasificacion_b = asignar_puntos_clasificacion(
+        decision.resultado, configuracion_clasificacion
+    )
+    resultado = replace(
+        resultado,
+        puntos_internos_a=puntos_persistidos.puntos_a,
+        puntos_internos_b=puntos_persistidos.puntos_b,
+        resultado=decision.resultado,
+        ganador=decision.ganador,
+        criterio_desempate=decision.criterio,
+        puntos_clasificacion_a=clasificacion_a,
+        puntos_clasificacion_b=clasificacion_b,
+    )
+    doble_forfait = all(p.tipo_forfait == TIPO_FORFAIT_DOBLE for p in partidos)
+    if doble_forfait:
+        resultado = replace(
+            resultado,
+            puntos_clasificacion_a=configuracion_clasificacion.derrota,
+            puntos_clasificacion_b=configuracion_clasificacion.derrota,
+        )
+
+    fotografias = (
+        session.query(ComunidadesFotografiaEstado)
+        .filter(ComunidadesFotografiaEstado.enfrentamiento_id == enfrentamiento.id)
+        .with_for_update()
+        .all()
+    )
+    por_equipo = {int(f.equipo_id): f for f in fotografias}
+    ids_equipos = (int(enfrentamiento.equipo_a_id), int(enfrentamiento.equipo_b_id))
+    if len(fotografias) != 2 or set(por_equipo) != set(ids_equipos):
+        _error_registro_resultado(
+            "FOTOGRAFIA_INCOMPLETA",
+            "El enfrentamiento necesita exactamente una fotografía inicial por equipo.",
+        )
+    equipos = {
+        int(e.id): e
+        for e in session.query(ComunidadesEquipo)
+        .filter(ComunidadesEquipo.id.in_(ids_equipos))
+        .with_for_update()
+        .all()
+    }
+    comunidades_ids = {int(por_equipo[equipo_id].comunidad_id) for equipo_id in ids_equipos}
+    comunidades = {
+        int(c.id): c
+        for c in session.query(ComunidadesComunidad)
+        .filter(ComunidadesComunidad.id.in_(comunidades_ids))
+        .with_for_update()
+        .all()
+    }
+    if len(equipos) != 2 or set(comunidades) != comunidades_ids:
+        _error_registro_resultado(
+            "REFERENCIAS_INCOMPLETAS",
+            "No se pudieron cargar los equipos o comunidades fotografiados.",
+        )
+
+    foto_a, foto_b = (por_equipo[equipo_id] for equipo_id in ids_equipos)
+    inicial_a = EstadoFotografiado(EstadoTemporal(foto_a.estado_temporal), bool(foto_a.es_zombie))
+    inicial_b = EstadoFotografiado(EstadoTemporal(foto_b.estado_temporal), bool(foto_b.es_zombie))
+    transicion = resolver_transicion_estados(
+        inicial_a,
+        inicial_b,
+        resultado.resultado,
+        doble_forfait,
+        int(foto_a.comunidad_id),
+        int(foto_b.comunidad_id),
+    )
+
+    enfrentamiento.puntos_internos_a = resultado.puntos_internos_a
+    enfrentamiento.puntos_internos_b = resultado.puntos_internos_b
+    enfrentamiento.td_favor_a = resultado.td_favor_a
+    enfrentamiento.td_contra_a = resultado.td_contra_a
+    enfrentamiento.td_favor_b = resultado.td_favor_b
+    enfrentamiento.td_contra_b = resultado.td_contra_b
+    enfrentamiento.td_atacante_a = resultado.td_atacante_a
+    enfrentamiento.td_atacante_b = resultado.td_atacante_b
+    enfrentamiento.ganador_equipo_id = (
+        ids_equipos[0]
+        if resultado.ganador is Equipo.A
+        else ids_equipos[1]
+        if resultado.ganador is Equipo.B
+        else None
+    )
+    enfrentamiento.puntos_clasificacion_a = resultado.puntos_clasificacion_a
+    enfrentamiento.puntos_clasificacion_b = resultado.puntos_clasificacion_b
+    enfrentamiento.es_doble_forfait = doble_forfait
+    enfrentamiento.resultado_origen = (
+        RESULTADO_ORIGEN_ADMIN
+        if any(p.resultado_origen == RESULTADO_ORIGEN_ADMIN for p in partidos)
+        else RESULTADO_ORIGEN_API
+    )
+    enfrentamiento.estado = (
+        ENFRENTAMIENTO_ADMINISTRADO
+        if enfrentamiento.resultado_origen == RESULTADO_ORIGEN_ADMIN
+        else ENFRENTAMIENTO_CERRADO
+    )
+
+    equipo_a, equipo_b = (equipos[equipo_id] for equipo_id in ids_equipos)
+    _aplicar_resultado_equipo(
+        equipo_a,
+        puntos=resultado.puntos_clasificacion_a,
+        td_favor=resultado.td_favor_a,
+        td_contra=resultado.td_contra_a,
+        resultado=resultado.resultado,
+        lado=Equipo.A,
+        doble_forfait=doble_forfait,
+    )
+    _aplicar_resultado_equipo(
+        equipo_b,
+        puntos=resultado.puntos_clasificacion_b,
+        td_favor=resultado.td_favor_b,
+        td_contra=resultado.td_contra_b,
+        resultado=resultado.resultado,
+        lado=Equipo.B,
+        doble_forfait=doble_forfait,
+    )
+    finales = (transicion.estado_final_a, transicion.estado_final_b)
+    motivos = (transicion.motivo_a, transicion.motivo_b)
+    efectos_puntos = {Equipo.A: Decimal("0"), Equipo.B: Decimal("0")}
+    efectos_kills = {Equipo.A: 0, Equipo.B: 0}
+    if transicion.punto_zombificacion is not None:
+        efectos_puntos[transicion.punto_zombificacion.equipo] = Decimal("1")
+    if transicion.kill is not None:
+        efectos_kills[transicion.kill.equipo] = 1
+
+    for lado, equipo, foto, final, motivo in zip(
+        (Equipo.A, Equipo.B),
+        (equipo_a, equipo_b),
+        (foto_a, foto_b),
+        finales,
+        motivos,
+    ):
+        equipo.estado_temporal = final.estado_temporal.value
+        equipo.es_zombie = final.es_zombie
+        puntos_generados = efectos_puntos[lado]
+        kills_generadas = efectos_kills[lado]
+        comunidad = comunidades[int(foto.comunidad_id)]
+        _incrementar_contadores_comunidad(
+            comunidad,
+            puntos_zombificacion=puntos_generados,
+            kills=kills_generadas,
+        )
+        session.add(
+            ComunidadesHistorialTransicion(
+                torneo_id=enfrentamiento.torneo_id,
+                ronda_id=enfrentamiento.ronda_id,
+                enfrentamiento_id=enfrentamiento.id,
+                equipo_id=equipo.id,
+                estado_temporal_anterior=foto.estado_temporal,
+                es_zombie_anterior=bool(foto.es_zombie),
+                estado_temporal_posterior=final.estado_temporal.value,
+                es_zombie_posterior=final.es_zombie,
+                motivo=motivo.value,
+                puntos_comunitarios_generados=puntos_generados,
+                kills_generadas=kills_generadas,
+            )
+        )
+    session.flush()
+    return resultado
+
+
+def registrar_resultado_partido_comunidades(
+    session: Any,
+    *,
+    partido_id: int,
+    td_local: int,
+    td_visitante: int,
+    origen: str,
+    partido_bloodbowl_id: Optional[str] = None,
+    tipo_forfait: Optional[str] = None,
+) -> ResultadoRegistroPartidoComunidades:
+    """Registra un partido y resuelve su enfrentamiento al cerrar el segundo.
+
+    La función es la frontera transaccional común para API y administración. Un
+    reintento idéntico devuelve el resultado ya persistido; uno contradictorio
+    se rechaza. La resolución global completa ocurre dentro de un savepoint, de
+    modo que cualquier fallo revierte también el primer registro de ese intento.
+    """
+    from GestorSQL import ComunidadesEnfrentamiento, ComunidadesPartido
+
+    if type(partido_id) is not int or partido_id <= 0:
+        _error_registro_resultado(
+            "PARTIDO_INVALIDO", "partido_id debe ser un entero mayor que cero."
+        )
+    td_local = _validar_td_resultado(td_local, "td_local")
+    td_visitante = _validar_td_resultado(td_visitante, "td_visitante")
+    if origen not in {RESULTADO_ORIGEN_API, RESULTADO_ORIGEN_ADMIN}:
+        _error_registro_resultado("ORIGEN_INVALIDO", "origen debe ser API o ADMIN.")
+    partido_bloodbowl_id = _normalizar_id_bloodbowl(partido_bloodbowl_id)
+    if origen == RESULTADO_ORIGEN_API and partido_bloodbowl_id is None:
+        _error_registro_resultado(
+            "ID_BLOODBOWL_REQUERIDO",
+            "Los resultados de API requieren partido_bloodbowl_id.",
+        )
+    if tipo_forfait is not None and tipo_forfait not in TIPOS_FORFAIT:
+        _error_registro_resultado(
+            "FORFAIT_INVALIDO", "tipo_forfait debe ser LOCAL, VISITANTE o DOBLE."
+        )
+    if origen == RESULTADO_ORIGEN_API and tipo_forfait is not None:
+        _error_registro_resultado(
+            "FORFAIT_INVALIDO", "Los forfeits solo se registran por administración."
+        )
+    if tipo_forfait == TIPO_FORFAIT_DOBLE and (td_local, td_visitante) != (0, 0):
+        _error_registro_resultado(
+            "DOBLE_FORFAIT_INVALIDO", "Un doble forfait debe registrarse con TD 0-0."
+        )
+
+    with session.begin_nested():
+        partido = (
+            session.query(ComunidadesPartido)
+            .filter(ComunidadesPartido.id == partido_id)
+            .with_for_update()
+            .one_or_none()
+        )
+        if partido is None:
+            _error_registro_resultado(
+                "PARTIDO_NO_EXISTE", f"No existe el partido {partido_id}."
+            )
+        enfrentamiento = (
+            session.query(ComunidadesEnfrentamiento)
+            .filter(ComunidadesEnfrentamiento.id == partido.enfrentamiento_id)
+            .with_for_update()
+            .one()
+        )
+        if partido_bloodbowl_id is not None:
+            duplicado = (
+                session.query(ComunidadesPartido.id)
+                .filter(
+                    ComunidadesPartido.partido_bloodbowl_id == partido_bloodbowl_id,
+                    ComunidadesPartido.id != partido.id,
+                )
+                .first()
+            )
+            if duplicado is not None:
+                _error_registro_resultado(
+                    "ID_BLOODBOWL_DUPLICADO",
+                    "El ID de Blood Bowl ya está asociado a otro partido.",
+                )
+
+        estado_cerrado = partido.estado in {PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO}
+        if estado_cerrado:
+            coincide = (
+                int(partido.td_local) == td_local
+                and int(partido.td_visitante) == td_visitante
+                and partido.resultado_origen == origen
+                and partido.tipo_forfait == tipo_forfait
+                and (
+                    partido_bloodbowl_id is None
+                    or partido.partido_bloodbowl_id == partido_bloodbowl_id
+                )
+            )
+            if not coincide:
+                _error_registro_resultado(
+                    "RESULTADO_DUPLICADO_CONFLICTIVO",
+                    "El partido ya tiene un resultado cerrado diferente.",
+                )
+            resuelto = enfrentamiento.estado in {
+                ENFRENTAMIENTO_CERRADO,
+                ENFRENTAMIENTO_ADMINISTRADO,
+            }
+            return ResultadoRegistroPartidoComunidades(
+                partido, enfrentamiento, resuelto, True, None
+            )
+        if enfrentamiento.estado not in {
+            ENFRENTAMIENTO_PARTIDOS_CREADOS,
+            ENFRENTAMIENTO_EN_CURSO,
+        }:
+            _error_registro_resultado(
+                "ENFRENTAMIENTO_NO_ADMITE_RESULTADOS",
+                f"El enfrentamiento está en estado {enfrentamiento.estado}.",
+            )
+        if partido.partido_bloodbowl_id not in {None, partido_bloodbowl_id}:
+            _error_registro_resultado(
+                "ID_BLOODBOWL_CONFLICTIVO",
+                "El partido ya tiene asociado otro ID de Blood Bowl.",
+            )
+
+        configuracion = ConfiguracionPuntosIndividuales(
+            enfrentamiento.torneo.puntos_individuales_victoria,
+            enfrentamiento.torneo.puntos_individuales_empate,
+            enfrentamiento.torneo.puntos_individuales_derrota,
+        )
+        puntos = (
+            PuntosInternosPartido(Decimal("0"), Decimal("0"))
+            if tipo_forfait == TIPO_FORFAIT_DOBLE
+            else convertir_marcador_en_puntos_internos(td_local, td_visitante, configuracion)
+        )
+        partido.td_local = td_local
+        partido.td_visitante = td_visitante
+        partido.puntos_internos_local = puntos.puntos_a
+        partido.puntos_internos_visitante = puntos.puntos_b
+        partido.resultado_origen = origen
+        partido.tipo_forfait = tipo_forfait
+        partido.partido_bloodbowl_id = partido_bloodbowl_id or partido.partido_bloodbowl_id
+        partido.estado = (
+            PARTIDO_ADMINISTRADO
+            if origen == RESULTADO_ORIGEN_ADMIN
+            else PARTIDO_FINALIZADO
+        )
+        session.flush()
+
+        partidos = tuple(
+            session.query(ComunidadesPartido)
+            .filter(ComunidadesPartido.enfrentamiento_id == enfrentamiento.id)
+            .order_by(ComunidadesPartido.indice)
+            .with_for_update()
+            .all()
+        )
+        if len(partidos) != 2:
+            _error_registro_resultado(
+                "PARTIDOS_INCOMPLETOS",
+                "El enfrentamiento debe contener exactamente dos partidos.",
+            )
+        cerrados = [
+            p for p in partidos if p.estado in {PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO}
+        ]
+        if len(cerrados) == 1:
+            enfrentamiento.estado = ENFRENTAMIENTO_EN_CURSO
+            session.flush()
+            return ResultadoRegistroPartidoComunidades(
+                partido, enfrentamiento, False, False, None
+            )
+        if len(cerrados) != 2:
+            _error_registro_resultado(
+                "ESTADO_PARTIDOS_INCONSISTENTE",
+                "Los partidos del enfrentamiento tienen estados incompatibles.",
+            )
+        resultado_global = _resolver_enfrentamiento_persistido(
+            session, enfrentamiento, partidos
+        )
+        return ResultadoRegistroPartidoComunidades(
+            partido, enfrentamiento, True, False, resultado_global
+        )
+
+
 class ErrorGeneracionRondaComunidades(ValueError):
     """Error funcional que cancela por completo la generación de una ronda."""
 
@@ -2635,7 +3156,10 @@ def calcular_clasificacion_equipos(
         rivales[equipo_b_id].append(equipo_a_id)
 
         ganador_id = enfrentamiento.ganador_equipo_id
-        if ganador_id is None:
+        if enfrentamiento.es_doble_forfait:
+            fila_a["pp"] += 1
+            fila_b["pp"] += 1
+        elif ganador_id is None:
             fila_a["pe"] += 1
             fila_b["pe"] += 1
         elif int(ganador_id) == equipo_a_id:

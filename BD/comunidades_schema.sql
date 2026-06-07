@@ -416,6 +416,8 @@ CREATE TABLE IF NOT EXISTS comunidades_historial_transicion (
   kills_generadas INT NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  CONSTRAINT uk_com_transicion_enfrentamiento_equipo
+    UNIQUE (enfrentamiento_id, equipo_id),
   CONSTRAINT ck_com_transicion_zombie_anterior CHECK (es_zombie_anterior IN (0, 1)),
   CONSTRAINT ck_com_transicion_zombie_posterior CHECK (es_zombie_posterior IN (0, 1)),
   CONSTRAINT ck_com_transicion_contadores CHECK (

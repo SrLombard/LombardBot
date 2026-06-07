@@ -75,6 +75,16 @@ ORIGENES_RESULTADO = frozenset({
     RESULTADO_ORIGEN_ADMIN,
 })
 
+# Tipos de forfait persistidos en un partido individual.
+TIPO_FORFAIT_LOCAL = "LOCAL"
+TIPO_FORFAIT_VISITANTE = "VISITANTE"
+TIPO_FORFAIT_DOBLE = "DOBLE"
+TIPOS_FORFAIT = frozenset({
+    TIPO_FORFAIT_LOCAL,
+    TIPO_FORFAIT_VISITANTE,
+    TIPO_FORFAIT_DOBLE,
+})
+
 # Tipos aceptados por el comando de administración de partidos.
 TIPO_ADMIN_FORFEIT_LOCAL = "forfeit_local"
 TIPO_ADMIN_FORFEIT_VISITANTE = "forfeit_visitante"

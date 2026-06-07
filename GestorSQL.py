@@ -775,6 +775,11 @@ class ComunidadesFotografiaEstado(Base):
 class ComunidadesHistorialTransicion(Base):
     __tablename__ = 'comunidades_historial_transicion'
     __table_args__ = (
+        UniqueConstraint(
+            'enfrentamiento_id',
+            'equipo_id',
+            name='uk_com_transicion_enfrentamiento_equipo',
+        ),
         CheckConstraint('es_zombie_anterior IN (0, 1)', name='ck_com_transicion_zombie_anterior'),
         CheckConstraint('es_zombie_posterior IN (0, 1)', name='ck_com_transicion_zombie_posterior'),
         CheckConstraint('puntos_comunitarios_generados >= 0 AND kills_generadas >= 0', name='ck_com_transicion_contadores'),
