@@ -66,8 +66,19 @@ from ComunidadesCore import (
     crear_torneo_comunidades,
     consultar_elecciones_comunidades,
     ErrorGeneracionRondaComunidades,
+    ErrorRegistroResultadoComunidades,
     forzar_elecciones_comunidades,
     generar_ronda_comunidades,
+    registrar_resultado_partido_comunidades,
+)
+from ComunidadesConstantes import (
+    ENFRENTAMIENTO_EN_CURSO,
+    ENFRENTAMIENTO_PARTIDOS_CREADOS,
+    PARTIDO_EN_CURSO,
+    PARTIDO_PENDIENTE,
+    RESULTADO_ORIGEN_API,
+    RONDA_ABIERTA,
+    TORNEO_EN_CURSO,
 )
 from ComunidadesDiscord import (
     ErrorMaterializacionDiscordComunidades,
@@ -4718,6 +4729,290 @@ async def comunidades_consulta_elecciones(ctx, torneo_id: int, ronda_numero: int
         await ctx.send(f"❌ [{exc.codigo}] {exc.detalle}")
     except Exception as exc:
         await ctx.send(f"❌ No se pudieron consultar las elecciones ({exc}).")
+    finally:
+        session.close()
+
+
+def _comunidades_procesar_todos(argumento: Optional[str]) -> bool:
+    if argumento is None:
+        return False
+    valor = str(argumento).strip().lower()
+    if valor in {"todos", "1"}:
+        return True
+    raise ValueError("El argumento opcional debe ser `todos` (también se admite `1`).")
+
+
+def _extraer_resultado_api_comunidades(match):
+    if not isinstance(match, dict):
+        raise ValueError("La entrada de la API no es un objeto.")
+    partido_bloodbowl_id = str(match.get("uuid") or "").strip()
+    if not partido_bloodbowl_id:
+        raise ValueError("El partido no contiene UUID.")
+
+    coaches = match.get("coaches") or []
+    teams = match.get("teams") or []
+    if len(coaches) < 2 or len(teams) < 2:
+        raise ValueError("El partido no contiene dos coaches y dos equipos.")
+
+    coach_ids = tuple(
+        str(coaches[indice].get("idcoach") or "").strip() for indice in range(2)
+    )
+    if not all(coach_ids) or coach_ids[0] == coach_ids[1]:
+        raise ValueError("Los IDs de coach son inválidos o están duplicados.")
+    try:
+        marcadores = tuple(int(teams[indice].get("score", 0)) for indice in range(2))
+    except (TypeError, ValueError):
+        raise ValueError("El marcador de la API no es numérico.")
+    if any(marcador < 0 for marcador in marcadores):
+        raise ValueError("El marcador de la API no puede ser negativo.")
+    return partido_bloodbowl_id, coach_ids, marcadores
+
+
+def _nombre_usuario_comunidades(usuario) -> str:
+    return (
+        getattr(usuario, "nombreAMostrar", None)
+        or getattr(usuario, "nombre_discord", None)
+        or f"usuario {usuario.idUsuarios}"
+    )
+
+
+def _localizar_partido_api_comunidades(partidos, usuario_api_1, usuario_api_2):
+    pareja_api = {int(usuario_api_1.idUsuarios), int(usuario_api_2.idUsuarios)}
+    candidatos = [
+        partido
+        for partido in partidos
+        if partido.estado in {PARTIDO_PENDIENTE, PARTIDO_EN_CURSO}
+        and {int(partido.usuario_local_id), int(partido.usuario_visitante_id)}
+        == pareja_api
+    ]
+    return candidatos
+
+
+def _orientar_marcador_api_comunidades(partido, usuario_api_1, marcadores):
+    if int(partido.usuario_local_id) == int(usuario_api_1.idUsuarios):
+        return marcadores
+    return marcadores[1], marcadores[0]
+
+
+@bot.command(name="comunidades_actualizar")
+async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = None):
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+    try:
+        procesar_todos = _comunidades_procesar_todos(todos)
+    except ValueError as exc:
+        await ctx.send(f"❌ {exc} Uso: `!comunidades_actualizar <torneo_id> [todos]`.")
+        return
+
+    SessionComunidades = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = SessionComunidades()
+    encontrados = 0
+    duplicados = 0
+    sin_usuario = 0
+    sin_partido = 0
+    errores = 0
+    detalles = []
+    try:
+        torneo = (
+            session.query(GestorSQL.ComunidadesTorneo)
+            .filter(GestorSQL.ComunidadesTorneo.id == torneo_id)
+            .first()
+        )
+        if torneo is None:
+            await ctx.send(f"❌ No existe un torneo de comunidades con ID `{torneo_id}`.")
+            return
+        if torneo.estado != TORNEO_EN_CURSO:
+            await ctx.send(
+                f"❌ El torneo `{torneo_id}` está en estado `{torneo.estado}`; "
+                "solo se actualizan torneos EN_CURSO."
+            )
+            return
+        if not torneo.id_competicion_bbowl:
+            await ctx.send(
+                f"❌ El torneo `{torneo_id}` no tiene configurado `idCompBbowl`."
+            )
+            return
+
+        rondas_abiertas = (
+            session.query(GestorSQL.ComunidadesRonda)
+            .filter(
+                GestorSQL.ComunidadesRonda.torneo_id == torneo_id,
+                GestorSQL.ComunidadesRonda.estado == RONDA_ABIERTA,
+            )
+            .order_by(GestorSQL.ComunidadesRonda.numero.asc())
+            .all()
+        )
+        if not rondas_abiertas:
+            await ctx.send(f"❌ No hay una ronda ABIERTA para el torneo `{torneo_id}`.")
+            return
+        if len(rondas_abiertas) != 1:
+            await ctx.send(
+                f"❌ El torneo `{torneo_id}` tiene {len(rondas_abiertas)} rondas ABIERTAS; "
+                "corrige el estado antes de importar resultados."
+            )
+            return
+        ronda = rondas_abiertas[0]
+
+        partidos_pendientes = (
+            session.query(GestorSQL.ComunidadesPartido)
+            .join(
+                GestorSQL.ComunidadesEnfrentamiento,
+                GestorSQL.ComunidadesEnfrentamiento.id
+                == GestorSQL.ComunidadesPartido.enfrentamiento_id,
+            )
+            .filter(
+                GestorSQL.ComunidadesPartido.torneo_id == torneo_id,
+                GestorSQL.ComunidadesEnfrentamiento.ronda_id == ronda.id,
+                GestorSQL.ComunidadesPartido.estado.in_(
+                    (PARTIDO_PENDIENTE, PARTIDO_EN_CURSO)
+                ),
+                GestorSQL.ComunidadesEnfrentamiento.estado.in_(
+                    (ENFRENTAMIENTO_PARTIDOS_CREADOS, ENFRENTAMIENTO_EN_CURSO)
+                ),
+            )
+            .all()
+        )
+        if not partidos_pendientes:
+            await ctx.send(
+                f"ℹ️ No hay partidos individuales pendientes en la ronda {ronda.numero}."
+            )
+            return
+
+        usuarios_pendientes = {
+            usuario.idUsuarios: usuario
+            for partido in partidos_pendientes
+            for usuario in (partido.usuario_local, partido.usuario_visitante)
+        }
+        usuarios_sin_id = [
+            usuario
+            for usuario in usuarios_pendientes.values()
+            if not str(usuario.id_bloodbowl or "").strip()
+        ]
+
+        matches = APIBbowl.obtener_partidos(
+            bbowl_API_token, torneo.id_competicion_bbowl
+        )
+        if matches is None:
+            await ctx.send("❌ La API de Blood Bowl no devolvió una respuesta válida.")
+            return
+        if not matches:
+            await ctx.send("ℹ️ La API no devolvió partidos para la competición configurada.")
+            return
+
+        for match in matches:
+            try:
+                partido_bloodbowl_id, coach_ids, marcadores = (
+                    _extraer_resultado_api_comunidades(match)
+                )
+            except ValueError as exc:
+                errores += 1
+                detalles.append(f"API: {exc}")
+                continue
+
+            if (
+                session.query(GestorSQL.ComunidadesPartido.id)
+                .filter(
+                    GestorSQL.ComunidadesPartido.partido_bloodbowl_id
+                    == partido_bloodbowl_id
+                )
+                .first()
+                is not None
+            ):
+                duplicados += 1
+                continue
+
+            usuarios = (
+                session.query(GestorSQL.Usuario)
+                .filter(GestorSQL.Usuario.id_bloodbowl.in_(coach_ids))
+                .all()
+            )
+            usuarios_por_coach = {
+                str(usuario.id_bloodbowl): usuario for usuario in usuarios
+            }
+            usuario_api_1 = usuarios_por_coach.get(coach_ids[0])
+            usuario_api_2 = usuarios_por_coach.get(coach_ids[1])
+            if usuario_api_1 is None or usuario_api_2 is None:
+                sin_usuario += 1
+                detalles.append(
+                    f"{partido_bloodbowl_id}: coach sin usuario ({coach_ids[0]} / {coach_ids[1]})."
+                )
+                continue
+
+            candidatos = _localizar_partido_api_comunidades(
+                partidos_pendientes, usuario_api_1, usuario_api_2
+            )
+            if len(candidatos) != 1:
+                sin_partido += 1
+                motivo = "ninguno" if not candidatos else f"{len(candidatos)} candidatos"
+                detalles.append(
+                    f"{partido_bloodbowl_id}: enfrentamiento individual no localizado ({motivo})."
+                )
+                continue
+
+            partido = candidatos[0]
+            td_local, td_visitante = _orientar_marcador_api_comunidades(
+                partido, usuario_api_1, marcadores
+            )
+
+            try:
+                resultado = registrar_resultado_partido_comunidades(
+                    session,
+                    partido_id=int(partido.id),
+                    td_local=td_local,
+                    td_visitante=td_visitante,
+                    origen=RESULTADO_ORIGEN_API,
+                    partido_bloodbowl_id=partido_bloodbowl_id,
+                )
+                session.commit()
+                encontrados += 1
+                if resultado.enfrentamiento_resuelto:
+                    detalles.append(
+                        f"{partido_bloodbowl_id}: cerrado partido {partido.id} y "
+                        f"enfrentamiento {resultado.enfrentamiento.id}."
+                    )
+                if not procesar_todos:
+                    break
+            except ErrorRegistroResultadoComunidades as exc:
+                session.rollback()
+                errores += 1
+                detalles.append(f"{partido_bloodbowl_id}: [{exc.codigo}] {exc.detalle}")
+            except Exception as exc:
+                session.rollback()
+                errores += 1
+                detalles.append(f"{partido_bloodbowl_id}: error inesperado ({exc}).")
+
+        resumen = (
+            f"📊 **Actualización de comunidades — torneo {torneo_id}, ronda {ronda.numero}**\n"
+            f"- Encontrados y registrados: **{encontrados}**\n"
+            f"- IDs duplicados: **{duplicados}**\n"
+            f"- Sin usuario: **{sin_usuario}**\n"
+            f"- Sin partido pendiente: **{sin_partido}**\n"
+            f"- Errores: **{errores}**"
+        )
+        if usuarios_sin_id:
+            nombres = ", ".join(
+                _texto_discord_seguro(_nombre_usuario_comunidades(usuario))
+                for usuario in usuarios_sin_id[:10]
+            )
+            resto = len(usuarios_sin_id) - 10
+            resumen += (
+                f"\n- Usuarios pendientes sin `id_bloodbowl`: **{len(usuarios_sin_id)}** "
+                f"({nombres}{f', y {resto} más' if resto else ''})"
+            )
+        if detalles:
+            resumen += "\n\n**Detalle:**\n" + "\n".join(
+                f"- {_texto_discord_seguro(detalle)}" for detalle in detalles[:15]
+            )
+            if len(detalles) > 15:
+                resumen += f"\n- … y {len(detalles) - 15} incidencias más."
+        await UtilesDiscord.enviar_mensaje_largo(ctx, resumen)
+    except Exception as exc:
+        session.rollback()
+        await ctx.send(
+            "❌ No se pudo completar la actualización de comunidades. "
+            f"Los {encontrados} resultados ya confirmados permanecen guardados ({exc})."
+        )
     finally:
         session.close()
 
