@@ -2,11 +2,13 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+import logging
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional, Tuple
 
 
 MAX_CANALES_POR_CATEGORIA_COMUNIDADES = 40
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -350,8 +352,17 @@ async def materializar_partidos_comunidades(
     fallo revierte la base de datos y elimina los canales creados en el intento.
     """
     import discord
-    from ComunidadesCore import materializar_identidades_partidos_comunidades
-    from GestorSQL import ComunidadesEnfrentamiento, ComunidadesPartido
+    from ComunidadesCore import (
+        completar_operacion_idempotente_comunidades,
+        liberar_operacion_idempotente_comunidades,
+        materializar_identidades_partidos_comunidades,
+        reservar_operacion_idempotente_comunidades,
+    )
+    from GestorSQL import (
+        ComunidadesEnfrentamiento,
+        ComunidadesOperacionIdempotente,
+        ComunidadesPartido,
+    )
 
     try:
         materializar_identidades_partidos_comunidades(
@@ -460,6 +471,33 @@ async def materializar_partidos_comunidades(
             )
 
         canal = None
+        clave_operacion = f"canal-partido:{partido_id}"
+        reservada = True
+        if not atomico:
+            reservada = reservar_operacion_idempotente_comunidades(
+                session,
+                clave=clave_operacion,
+                tipo="CANAL_PARTIDO",
+                torneo_id=int(enfrentamiento.torneo_id),
+                ronda_id=int(enfrentamiento.ronda_id),
+                enfrentamiento_id=int(enfrentamiento.id),
+                partido_id=partido_id,
+            )
+            session.commit()
+        if not reservada:
+            operacion = (
+                session.query(ComunidadesOperacionIdempotente)
+                .filter(ComunidadesOperacionIdempotente.clave == clave_operacion)
+                .one()
+            )
+            if operacion.estado == "COMPLETADA" and operacion.recurso_externo_id:
+                partido.canal_discord_id = int(operacion.recurso_externo_id)
+                session.commit()
+                continue
+            _error_materializacion_discord(
+                "MATERIALIZACION_EN_CURSO",
+                "Otro proceso está creando uno de los canales del enfrentamiento.",
+            )
         try:
             canal = await guild.create_text_channel(
                 name=_nombre_canal_partido_comunidades(enfrentamiento, partido),
@@ -476,6 +514,9 @@ async def materializar_partidos_comunidades(
             if atomico:
                 session.flush()
             else:
+                completar_operacion_idempotente_comunidades(
+                    session, clave=clave_operacion, recurso_externo_id=canal.id
+                )
                 session.commit()
             canales_creados += 1
         except Exception as exc:
@@ -494,12 +535,32 @@ async def materializar_partidos_comunidades(
                     )
                 except Exception as error_limpieza:
                     errores_limpieza.append(str(error_limpieza))
-            if errores_limpieza:
-                limpieza = (
-                    "; no se pudieron eliminar todos los canales huérfanos ("
-                    + "; ".join(errores_limpieza)
-                    + ")"
+            if errores_limpieza and canal is not None and not atomico:
+                # Si Discord creó el canal pero no permite borrarlo, persistimos
+                # su ID para que ningún reintento cree un segundo huérfano.
+                partido = session.get(ComunidadesPartido, partido_id)
+                partido.canal_discord_id = int(canal.id)
+                completar_operacion_idempotente_comunidades(
+                    session, clave=clave_operacion, recurso_externo_id=canal.id
                 )
+                session.commit()
+                limpieza = "; el canal creado quedó asociado para su recuperación"
+            elif not atomico:
+                liberar_operacion_idempotente_comunidades(
+                    session, clave=clave_operacion
+                )
+                session.commit()
+            elif errores_limpieza:
+                limpieza = "; Discord no permitió eliminar todos los canales del intento"
+            LOGGER.exception(
+                "Fallo al crear canal de partido",
+                extra={
+                    "torneo_id": int(enfrentamiento.torneo_id),
+                    "ronda_id": int(enfrentamiento.ronda_id),
+                    "enfrentamiento_id": int(enfrentamiento.id),
+                    "partido_id": partido_id,
+                },
+            )
             _error_materializacion_discord(
                 "FALLO_CREACION_CANAL",
                 f"Falló el canal del partido {indice_partido} ({exc}){limpieza}.",

@@ -44,6 +44,7 @@ from sqlalchemy.orm import object_session, sessionmaker, relationship
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql import case,func
 import inspect
+import logging
 import mysql.connector
 import Inscripcion
 import Reformas
@@ -79,6 +80,9 @@ from ComunidadesCore import (
     forzar_elecciones_comunidades,
     generar_ronda_comunidades,
     procesar_cierre_ronda_comunidades_si_corresponde,
+    reservar_operacion_idempotente_comunidades,
+    completar_operacion_idempotente_comunidades,
+    liberar_operacion_idempotente_comunidades,
     registrar_resultado_partido_comunidades,
     regenerar_ronda_comunidades,
     transferir_cazador_comunidades,
@@ -4274,9 +4278,10 @@ async def _ejecutar_configuracion_comunidades(ctx, operacion, mensaje_error: str
     except ErrorConfiguracionComunidades as exc:
         session.rollback()
         await ctx.send(f"❌ {exc.detalle}")
-    except Exception as exc:
+    except Exception:
         session.rollback()
-        await ctx.send(f"❌ {mensaje_error}: {exc}")
+        LOGGER_COMUNIDADES.exception("Fallo de configuración de comunidades")
+        await ctx.send(f"❌ {mensaje_error}. La administración ha sido avisada.")
     finally:
         session.close()
     return None
@@ -5070,10 +5075,21 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
                 session.rollback()
                 errores += 1
                 detalles.append(f"{partido_bloodbowl_id}: [{exc.codigo}] {exc.detalle}")
-            except Exception as exc:
+            except Exception:
                 session.rollback()
                 errores += 1
-                detalles.append(f"{partido_bloodbowl_id}: error inesperado ({exc}).")
+                LOGGER_COMUNIDADES.exception(
+                    "Fallo al registrar resultado API",
+                    extra={
+                        "torneo_id": torneo_id,
+                        "ronda_numero": int(ronda.numero),
+                        "enfrentamiento_id": int(partido.enfrentamiento_id),
+                        "partido_id": int(partido.id),
+                    },
+                )
+                detalles.append(
+                    f"{partido_bloodbowl_id}: error interno; administración avisada."
+                )
 
         avisos_publicacion = await _reintentar_publicaciones_ronda_comunidades(
             ctx, session, ronda.id, matches
@@ -5118,15 +5134,23 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
             if len(detalles) > 15:
                 resumen += f"\n- … y {len(detalles) - 15} incidencias más."
         await UtilesDiscord.enviar_mensaje_largo(ctx, resumen)
-    except Exception as exc:
+    except Exception:
         session.rollback()
+        LOGGER_COMUNIDADES.exception(
+            "Fallo en actualización API de comunidades",
+            extra={"torneo_id": torneo_id, "ronda_numero": None,
+                   "enfrentamiento_id": None, "partido_id": None},
+        )
         await ctx.send(
             "❌ No se pudo completar la actualización de comunidades. "
-            f"Los {encontrados} resultados ya confirmados permanecen guardados ({exc})."
+            f"Los {encontrados} resultados ya confirmados permanecen guardados. "
+            "La administración ha sido avisada."
         )
     finally:
         session.close()
 
+
+LOGGER_COMUNIDADES = logging.getLogger("lombardbot.comunidades")
 
 FORO_RESULTADOS_ID = 1223765590146158653
 
@@ -5148,15 +5172,127 @@ async def _canal_contiene_marca_comunidades(canal, marca: str) -> bool:
     return False
 
 
+def _contexto_publicacion_comunidades(session, tipo: str, registro_id: int):
+    """Resuelve el contexto de una clave de publicación sin confiar en Discord."""
+    if tipo.startswith("partido-"):
+        partido = session.get(GestorSQL.ComunidadesPartido, registro_id)
+        if partido is None:
+            raise LookupError("partido de publicación inexistente")
+        enfrentamiento = partido.enfrentamiento
+        return {
+            "torneo_id": int(partido.torneo_id),
+            "ronda_id": int(enfrentamiento.ronda_id),
+            "enfrentamiento_id": int(partido.enfrentamiento_id),
+            "partido_id": int(partido.id),
+        }
+    if tipo.startswith("global-"):
+        enfrentamiento = session.get(GestorSQL.ComunidadesEnfrentamiento, registro_id)
+        if enfrentamiento is None:
+            raise LookupError("enfrentamiento de publicación inexistente")
+        return {
+            "torneo_id": int(enfrentamiento.torneo_id),
+            "ronda_id": int(enfrentamiento.ronda_id),
+            "enfrentamiento_id": int(enfrentamiento.id),
+        }
+    if tipo.startswith("transferencia-"):
+        transferencia = session.get(
+            GestorSQL.ComunidadesHistorialTransferencia, registro_id
+        )
+        if transferencia is None:
+            raise LookupError("transferencia de publicación inexistente")
+        return {
+            "torneo_id": int(transferencia.torneo_id),
+            "ronda_id": int(transferencia.ronda_id),
+        }
+    if tipo.startswith("cierre-") or tipo == "hilo-foro":
+        ronda = session.get(GestorSQL.ComunidadesRonda, registro_id)
+        if ronda is None:
+            raise LookupError("ronda de publicación inexistente")
+        return {"torneo_id": int(ronda.torneo_id), "ronda_id": int(ronda.id)}
+    raise ValueError(f"tipo de publicación no registrado: {tipo}")
+
+
+def _reservar_publicacion_comunidades(marca: str, *, lease_segundos: int = 300):
+    coincidencia = re.fullmatch(
+        r"\|\|pub:comunidades:(?P<tipo>[^:]+):(?P<id>\d+)\|\|", marca
+    )
+    if coincidencia is None:
+        raise ValueError("marca de publicación de comunidades inválida")
+    tipo = coincidencia.group("tipo")
+    registro_id = int(coincidencia.group("id"))
+    clave = f"publicacion:{tipo}:{registro_id}"
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        contexto = _contexto_publicacion_comunidades(session, tipo, registro_id)
+        reservada = reservar_operacion_idempotente_comunidades(
+            session,
+            clave=clave,
+            tipo="PUBLICACION",
+            lease_segundos=lease_segundos,
+            **contexto,
+        )
+        session.commit()
+        return clave, reservada, contexto
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def _finalizar_publicacion_comunidades(
+    clave: str, *, mensaje_id=None, liberar: bool = False
+):
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        if liberar:
+            liberar_operacion_idempotente_comunidades(session, clave=clave)
+        else:
+            completar_operacion_idempotente_comunidades(
+                session, clave=clave, recurso_externo_id=mensaje_id
+            )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 async def _enviar_unico_comunidades(canal, marca: str, contenido: str, **kwargs) -> bool:
-    """Publica una vez usando una marca estable que también sobrevive a reintentos."""
+    """Publica una vez con reserva persistida y marca verificable en Discord."""
     if canal is None:
         raise RuntimeError("canal de publicación no disponible")
     if await _canal_contiene_marca_comunidades(canal, marca):
+        clave, reservada, _ = _reservar_publicacion_comunidades(
+            marca, lease_segundos=0
+        )
+        if reservada:
+            _finalizar_publicacion_comunidades(clave)
+        return False
+    clave, reservada, contexto = _reservar_publicacion_comunidades(marca)
+    if not reservada:
         return False
     texto = f"{contenido}\n{marca}" if contenido else marca
-    await canal.send(texto, **kwargs)
-    return True
+    try:
+        mensaje = await canal.send(texto, **kwargs)
+        _finalizar_publicacion_comunidades(
+            clave, mensaje_id=getattr(mensaje, "id", None)
+        )
+        return True
+    except Exception:
+        try:
+            _finalizar_publicacion_comunidades(clave, liberar=True)
+        except Exception:
+            LOGGER_COMUNIDADES.exception(
+                "No se pudo liberar una publicación fallida", extra=contexto
+            )
+        LOGGER_COMUNIDADES.exception(
+            "Fallo al publicar un efecto de comunidades", extra=contexto
+        )
+        raise
 
 
 async def _enviar_largo_unico_comunidades(
@@ -5335,8 +5471,11 @@ async def _ejecutar_consulta_publica_comunidades(interaction, consulta, formatea
         except ErrorConsultaComunidades as exc:
             await interaction.followup.send(f"❌ {exc.detalle}", ephemeral=True)
             return
-        except Exception as exc:
-            await interaction.followup.send(f"❌ No se pudo completar la consulta: {exc}", ephemeral=True)
+        except Exception:
+            LOGGER_COMUNIDADES.exception("Fallo en consulta pública de comunidades")
+            await interaction.followup.send(
+                "❌ No se pudo completar la consulta.", ephemeral=True
+            )
             return
         await UtilesDiscord.responder_interaction_largo(interaction, mensaje)
     finally:
@@ -5603,14 +5742,21 @@ async def comunidades_transferir_cazador(
                 torneo_id=torneo_id,
                 equipo_destino_nombre=equipo_destino,
                 actor_discord_id=int(interaction.user.id),
+                clave_idempotencia=f"discord-transferencia:{int(interaction.id)}",
             )
         except ErrorTransferenciaComunidades as exc:
             await interaction.followup.send(f"❌ {exc.detalle}", ephemeral=True)
             return
-        except Exception as exc:
+        except Exception:
             session.rollback()
+            LOGGER_COMUNIDADES.exception(
+                "Fallo al transferir estado",
+                extra={"torneo_id": torneo_id, "ronda_numero": None,
+                       "enfrentamiento_id": None, "partido_id": None},
+            )
             await interaction.followup.send(
-                f"❌ No se pudo transferir el estado: {exc}", ephemeral=True
+                "❌ No se pudo transferir el estado. La administración ha sido avisada.",
+                ephemeral=True,
             )
             return
 
@@ -5683,22 +5829,43 @@ async def publicar_resultado_partido_comunidades(
         if foro is None or not isinstance(foro, discord.ForumChannel):
             raise RuntimeError("foro de resultados no disponible")
         titulo = f"{partido.enfrentamiento.torneo.nombre} J{partido.enfrentamiento.ronda.numero}"
+        ronda_id = int(partido.enfrentamiento.ronda_id)
+        marca_hilo = _marca_publicacion_comunidades("hilo-foro", ronda_id)
+        clave_hilo, reserva_hilo, _ = _reservar_publicacion_comunidades(
+            marca_hilo
+        )
         hilo = await _buscar_hilo_resultados_comunidades(foro, titulo)
-        if hilo is None:
-            creado = await foro.create_thread(name=titulo, content=f"Resultados de {titulo}")
-            hilo = creado.thread
-        elif getattr(hilo, "archived", False):
+        if hilo is None and reserva_hilo:
+            try:
+                creado = await foro.create_thread(
+                    name=titulo, content=f"Resultados de {titulo}\n{marca_hilo}"
+                )
+                hilo = creado.thread
+                _finalizar_publicacion_comunidades(
+                    clave_hilo, mensaje_id=getattr(hilo, "id", None)
+                )
+            except Exception:
+                _finalizar_publicacion_comunidades(clave_hilo, liberar=True)
+                raise
+        elif hilo is None:
+            raise RuntimeError("otro proceso está creando el hilo de resultados")
+        elif reserva_hilo:
+            _finalizar_publicacion_comunidades(
+                clave_hilo, mensaje_id=getattr(hilo, "id", None)
+            )
+        if getattr(hilo, "archived", False):
             await hilo.edit(archived=False)
         marca = _marca_publicacion_comunidades("partido-foro", partido.id)
-        if not await _canal_contiene_marca_comunidades(hilo, marca):
-            ruta = _crear_imagen_resultado_comunidades(session, partido, match)
-            if not ruta:
-                raise RuntimeError("no se pudo generar la imagen")
-            try:
-                with open(ruta, "rb") as imagen:
-                    await hilo.send(marca, file=File(imagen))
-            finally:
-                Imagenes.eliminar_imagen(ruta)
+        ruta = _crear_imagen_resultado_comunidades(session, partido, match)
+        if not ruta:
+            raise RuntimeError("no se pudo generar la imagen")
+        try:
+            with open(ruta, "rb") as imagen:
+                await _enviar_unico_comunidades(
+                    hilo, marca, "", file=File(imagen)
+                )
+        finally:
+            Imagenes.eliminar_imagen(ruta)
     except Exception as exc:
         avisos.append(f"foro del partido {partido.id}: {exc}")
 
@@ -6033,9 +6200,20 @@ async def comunidades_admin_partido(
         if avisos:
             confirmacion += "\n⚠️ Pendiente de reintento: " + "; ".join(avisos) + "."
         await ctx.send(confirmacion)
-    except Exception as exc:
+    except Exception:
         session.rollback()
-        await ctx.send(f"❌ Error inesperado al administrar el partido: {exc}")
+        LOGGER_COMUNIDADES.exception(
+            "Fallo al administrar partido",
+            extra={
+                "torneo_id": torneo_id,
+                "ronda_numero": ronda_numero,
+                "enfrentamiento_id": enfrentamiento_id,
+                "partido_id": None,
+            },
+        )
+        await ctx.send(
+            "❌ Error interno al administrar el partido. La administración ha sido avisada."
+        )
     finally:
         session.close()
 

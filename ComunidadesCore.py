@@ -13,6 +13,8 @@ from enum import Enum
 from functools import cmp_to_key
 from typing import Any, Iterable, Optional
 
+from sqlalchemy.exc import IntegrityError
+
 from ComunidadesConstantes import (
     ESTADO_TEMPORAL_CAZADOR,
     ESTADO_TEMPORAL_CAZADOR_Z,
@@ -38,6 +40,93 @@ from ComunidadesConstantes import (
     TORNEO_EN_CURSO,
     validar_puntuacion,
 )
+
+
+def reservar_operacion_idempotente_comunidades(
+    session: Any,
+    *,
+    clave: str,
+    tipo: str,
+    torneo_id: int,
+    ronda_id: Optional[int] = None,
+    enfrentamiento_id: Optional[int] = None,
+    partido_id: Optional[int] = None,
+    lease_segundos: int = 300,
+) -> bool:
+    """Reserva una operación externa; permite recuperar leases abandonados."""
+    from GestorSQL import ComunidadesOperacionIdempotente
+
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+    operacion = (
+        session.query(ComunidadesOperacionIdempotente)
+        .filter(ComunidadesOperacionIdempotente.clave == clave)
+        .with_for_update()
+        .one_or_none()
+    )
+    if operacion is None:
+        try:
+            with session.begin_nested():
+                session.add(
+                    ComunidadesOperacionIdempotente(
+                        clave=clave,
+                        tipo=tipo,
+                        torneo_id=torneo_id,
+                        ronda_id=ronda_id,
+                        enfrentamiento_id=enfrentamiento_id,
+                        partido_id=partido_id,
+                    )
+                )
+                session.flush()
+            return True
+        except IntegrityError:
+            operacion = (
+                session.query(ComunidadesOperacionIdempotente)
+                .filter(ComunidadesOperacionIdempotente.clave == clave)
+                .with_for_update()
+                .one()
+            )
+    if operacion.estado == "COMPLETADA":
+        return False
+    actualizado = operacion.updated_at or operacion.created_at or ahora
+    if ahora - actualizado < timedelta(seconds=lease_segundos):
+        return False
+    operacion.updated_at = ahora
+    operacion.tipo = tipo
+    operacion.torneo_id = torneo_id
+    operacion.ronda_id = ronda_id
+    operacion.enfrentamiento_id = enfrentamiento_id
+    operacion.partido_id = partido_id
+    session.flush()
+    return True
+
+
+def completar_operacion_idempotente_comunidades(
+    session: Any, *, clave: str, recurso_externo_id: Optional[object] = None
+) -> None:
+    from GestorSQL import ComunidadesOperacionIdempotente
+
+    operacion = (
+        session.query(ComunidadesOperacionIdempotente)
+        .filter(ComunidadesOperacionIdempotente.clave == clave)
+        .with_for_update()
+        .one()
+    )
+    operacion.estado = "COMPLETADA"
+    operacion.recurso_externo_id = (
+        None if recurso_externo_id is None else str(recurso_externo_id)
+    )
+    session.flush()
+
+
+def liberar_operacion_idempotente_comunidades(session: Any, *, clave: str) -> None:
+    """Libera solo reservas pendientes para que el siguiente reintento continúe."""
+    from GestorSQL import ComunidadesOperacionIdempotente
+
+    session.query(ComunidadesOperacionIdempotente).filter(
+        ComunidadesOperacionIdempotente.clave == clave,
+        ComunidadesOperacionIdempotente.estado == "PENDIENTE",
+    ).delete(synchronize_session=False)
+    session.flush()
 
 
 class ErrorConfiguracionComunidades(ValueError):
@@ -1770,6 +1859,7 @@ def transferir_cazador_comunidades(
     torneo_id: int,
     equipo_destino_nombre: str,
     actor_discord_id: int,
+    clave_idempotencia: str,
 ):
     """Transfiere atómicamente un cazador obtenido en la ronda vigente.
 
@@ -1795,6 +1885,28 @@ def transferir_cazador_comunidades(
         _error_transferencia(
             "ACTOR_INVALIDO", "El ID Discord del actor debe ser un entero mayor que cero."
         )
+    clave_idempotencia = str(clave_idempotencia or "").strip()
+    if not clave_idempotencia or len(clave_idempotencia) > 190:
+        _error_transferencia(
+            "CLAVE_IDEMPOTENCIA_INVALIDA",
+            "La transferencia requiere una clave idempotente válida.",
+        )
+    existente = (
+        session.query(ComunidadesHistorialTransferencia)
+        .filter(
+            ComunidadesHistorialTransferencia.clave_idempotencia
+            == clave_idempotencia
+        )
+        .one_or_none()
+    )
+    if existente is not None:
+        if int(existente.torneo_id) != torneo_id:
+            _error_transferencia(
+                "CLAVE_IDEMPOTENCIA_CONFLICTIVA",
+                "La clave idempotente pertenece a otro torneo.",
+            )
+        return existente
+
     equipo_destino_nombre = str(equipo_destino_nombre or "").strip()
     if not equipo_destino_nombre:
         _error_transferencia(
@@ -1830,7 +1942,6 @@ def transferir_cazador_comunidades(
                 ComunidadesEquipo.torneo_id == torneo_id,
                 Usuario.id_discord == actor_discord_id,
             )
-            .with_for_update()
             .one_or_none()
         )
         if origen is None:
@@ -1845,7 +1956,6 @@ def transferir_cazador_comunidades(
                 ComunidadesEquipo.torneo_id == torneo_id,
                 ComunidadesEquipo.nombre == equipo_destino_nombre,
             )
-            .with_for_update()
             .one_or_none()
         )
         if destino is None:
@@ -1857,6 +1967,16 @@ def transferir_cazador_comunidades(
             _error_transferencia(
                 "MISMO_EQUIPO", "El equipo origen y el destino deben ser distintos."
             )
+        equipos_bloqueados = (
+            session.query(ComunidadesEquipo)
+            .filter(ComunidadesEquipo.id.in_(sorted((int(origen.id), int(destino.id)))))
+            .order_by(ComunidadesEquipo.id)
+            .with_for_update()
+            .all()
+        )
+        por_id = {int(equipo.id): equipo for equipo in equipos_bloqueados}
+        origen = por_id[int(origen.id)]
+        destino = por_id[int(destino.id)]
         if int(origen.comunidad_id) != int(destino.comunidad_id):
             _error_transferencia(
                 "COMUNIDAD_DISTINTA",
@@ -1952,11 +2072,25 @@ def transferir_cazador_comunidades(
             equipo_destino_id=destino.id,
             tipo=tipo,
             ejecutada_por_discord_id=actor_discord_id,
+            clave_idempotencia=clave_idempotencia,
         )
         session.add(transferencia)
         session.flush()
         session.commit()
         return transferencia
+    except IntegrityError:
+        session.rollback()
+        existente = (
+            session.query(ComunidadesHistorialTransferencia)
+            .filter(
+                ComunidadesHistorialTransferencia.clave_idempotencia
+                == clave_idempotencia
+            )
+            .one_or_none()
+        )
+        if existente is not None:
+            return existente
+        raise
     except Exception:
         session.rollback()
         raise
@@ -2766,22 +2900,44 @@ def registrar_resultado_partido_comunidades(
         )
 
     with session.begin_nested():
-        partido = (
-            session.query(ComunidadesPartido)
+        referencia = (
+            session.query(
+                ComunidadesPartido.id, ComunidadesPartido.enfrentamiento_id
+            )
             .filter(ComunidadesPartido.id == partido_id)
-            .with_for_update()
             .one_or_none()
+        )
+        if referencia is None:
+            _error_registro_resultado(
+                "PARTIDO_NO_EXISTE", f"No existe el partido {partido_id}."
+            )
+        # Todos los resultados del mismo enfrentamiento bloquean primero la
+        # misma fila padre y después sus partidos en orden estable. Así dos
+        # resultados simultáneos no invierten el orden de locks ni resuelven
+        # dos veces los contadores globales.
+        enfrentamiento = (
+            session.query(ComunidadesEnfrentamiento)
+            .filter(ComunidadesEnfrentamiento.id == referencia.enfrentamiento_id)
+            .with_for_update()
+            .one()
+        )
+        partidos_bloqueados = tuple(
+            session.query(ComunidadesPartido)
+            .filter(
+                ComunidadesPartido.enfrentamiento_id == enfrentamiento.id
+            )
+            .order_by(ComunidadesPartido.id)
+            .with_for_update()
+            .all()
+        )
+        partido = next(
+            (item for item in partidos_bloqueados if int(item.id) == partido_id),
+            None,
         )
         if partido is None:
             _error_registro_resultado(
                 "PARTIDO_NO_EXISTE", f"No existe el partido {partido_id}."
             )
-        enfrentamiento = (
-            session.query(ComunidadesEnfrentamiento)
-            .filter(ComunidadesEnfrentamiento.id == partido.enfrentamiento_id)
-            .with_for_update()
-            .one()
-        )
         if partido_bloodbowl_id is not None:
             duplicado = (
                 session.query(ComunidadesPartido.id)
@@ -2860,11 +3016,7 @@ def registrar_resultado_partido_comunidades(
         session.flush()
 
         partidos = tuple(
-            session.query(ComunidadesPartido)
-            .filter(ComunidadesPartido.enfrentamiento_id == enfrentamiento.id)
-            .order_by(ComunidadesPartido.indice)
-            .with_for_update()
-            .all()
+            sorted(partidos_bloqueados, key=lambda item: int(item.indice))
         )
         if len(partidos) != 2:
             _error_registro_resultado(

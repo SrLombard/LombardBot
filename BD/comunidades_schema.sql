@@ -175,6 +175,7 @@ CREATE TABLE IF NOT EXISTS comunidades_enfrentamiento (
   CONSTRAINT uk_comunidades_enfrentamiento_ronda_mesa UNIQUE (ronda_id, mesa_numero),
   CONSTRAINT uk_comunidades_enfrentamiento_ronda_equipo_a UNIQUE (ronda_id, equipo_a_id),
   CONSTRAINT uk_comunidades_enfrentamiento_ronda_equipo_b UNIQUE (ronda_id, equipo_b_id),
+  CONSTRAINT uk_com_enfrentamiento_canal UNIQUE (canal_general_discord_id),
   CONSTRAINT ck_comunidades_enfrentamiento_mesa CHECK (mesa_numero > 0),
   CONSTRAINT ck_comunidades_enfrentamiento_equipos CHECK (equipo_a_id <> equipo_b_id),
   CONSTRAINT ck_comunidades_enfrentamiento_ganador CHECK (
@@ -313,6 +314,7 @@ CREATE TABLE IF NOT EXISTS comunidades_partido (
   CONSTRAINT uk_com_partido_enfrentamiento_indice
     UNIQUE (enfrentamiento_id, indice),
   CONSTRAINT uk_com_partido_bloodbowl UNIQUE (partido_bloodbowl_id),
+  CONSTRAINT uk_com_partido_canal UNIQUE (canal_discord_id),
   CONSTRAINT ck_com_partido_indice CHECK (indice IN (1, 2)),
   CONSTRAINT ck_com_partido_equipos CHECK (equipo_local_id <> equipo_visitante_id),
   CONSTRAINT ck_com_partido_usuarios CHECK (usuario_local_id <> usuario_visitante_id),
@@ -455,8 +457,10 @@ CREATE TABLE IF NOT EXISTS comunidades_historial_transferencia (
   equipo_destino_id INT NOT NULL,
   tipo ENUM('CAZADOR','CAZADOR_Z') NOT NULL,
   ejecutada_por_discord_id BIGINT NOT NULL,
+  clave_idempotencia VARCHAR(190) NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  CONSTRAINT uk_com_transferencia_idempotencia UNIQUE (clave_idempotencia),
   CONSTRAINT ck_com_transferencia_equipos
     CHECK (equipo_origen_id <> equipo_destino_id),
   KEY idx_com_transferencia_ronda_torneo (ronda_id, torneo_id),
@@ -544,6 +548,30 @@ CREATE TABLE IF NOT EXISTS comunidades_snapshot_clasificacion_comunidad (
   CONSTRAINT fk_com_snap_com_comunidad
     FOREIGN KEY (comunidad_id, torneo_id)
     REFERENCES comunidades_comunidad(id, torneo_id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Claves idempotentes persistidas para efectos que no comparten transacción
+-- con MySQL (Discord/API). Una clave PENDIENTE funciona como lease recuperable;
+-- COMPLETADA conserva el ID externo y evita repetir el efecto tras reinicios.
+CREATE TABLE IF NOT EXISTS comunidades_operacion_idempotente (
+  id INT AUTO_INCREMENT,
+  clave VARCHAR(190) NOT NULL,
+  tipo VARCHAR(45) NOT NULL,
+  estado ENUM('PENDIENTE','COMPLETADA') NOT NULL DEFAULT 'PENDIENTE',
+  torneo_id INT NOT NULL,
+  ronda_id INT NULL,
+  enfrentamiento_id INT NULL,
+  partido_id INT NULL,
+  recurso_externo_id VARCHAR(120) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT uk_com_operacion_clave UNIQUE (clave),
+  KEY idx_com_operacion_contexto
+    (torneo_id, ronda_id, enfrentamiento_id, partido_id),
+  CONSTRAINT fk_com_operacion_torneo
+    FOREIGN KEY (torneo_id) REFERENCES comunidades_torneo(id)
     ON DELETE CASCADE
 ) ENGINE=InnoDB;
 

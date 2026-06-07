@@ -594,6 +594,7 @@ class ComunidadesEnfrentamiento(Base):
         UniqueConstraint('ronda_id', 'mesa_numero', name='uk_comunidades_enfrentamiento_ronda_mesa'),
         UniqueConstraint('ronda_id', 'equipo_a_id', name='uk_comunidades_enfrentamiento_ronda_equipo_a'),
         UniqueConstraint('ronda_id', 'equipo_b_id', name='uk_comunidades_enfrentamiento_ronda_equipo_b'),
+        UniqueConstraint('canal_general_discord_id', name='uk_com_enfrentamiento_canal'),
         CheckConstraint('mesa_numero > 0', name='ck_comunidades_enfrentamiento_mesa'),
         CheckConstraint('equipo_a_id <> equipo_b_id', name='ck_comunidades_enfrentamiento_equipos'),
         CheckConstraint('ganador_equipo_id IS NULL OR ganador_equipo_id IN (equipo_a_id, equipo_b_id)', name='ck_comunidades_enfrentamiento_ganador'),
@@ -704,6 +705,7 @@ class ComunidadesPartido(Base):
     __table_args__ = (
         UniqueConstraint('enfrentamiento_id', 'indice', name='uk_com_partido_enfrentamiento_indice'),
         UniqueConstraint('partido_bloodbowl_id', name='uk_com_partido_bloodbowl'),
+        UniqueConstraint('canal_discord_id', name='uk_com_partido_canal'),
         CheckConstraint('indice IN (1, 2)', name='ck_com_partido_indice'),
         CheckConstraint('equipo_local_id <> equipo_visitante_id', name='ck_com_partido_equipos'),
         CheckConstraint('usuario_local_id <> usuario_visitante_id', name='ck_com_partido_usuarios'),
@@ -810,6 +812,9 @@ class ComunidadesHistorialTransicion(Base):
 class ComunidadesHistorialTransferencia(Base):
     __tablename__ = 'comunidades_historial_transferencia'
     __table_args__ = (
+        UniqueConstraint(
+            'clave_idempotencia', name='uk_com_transferencia_idempotencia'
+        ),
         CheckConstraint('equipo_origen_id <> equipo_destino_id', name='ck_com_transferencia_equipos'),
         ForeignKeyConstraint(['comunidad_id', 'torneo_id'], ['comunidades_comunidad.id', 'comunidades_comunidad.torneo_id'], name='fk_com_transferencia_comunidad', ondelete='CASCADE'),
         ForeignKeyConstraint(['equipo_origen_id', 'torneo_id'], ['comunidades_equipo.id', 'comunidades_equipo.torneo_id'], name='fk_com_transferencia_origen', ondelete='CASCADE'),
@@ -824,6 +829,7 @@ class ComunidadesHistorialTransferencia(Base):
     equipo_destino_id = Column(Integer, nullable=False)
     tipo = Column(_comunidades_enum('CAZADOR', 'CAZADOR_Z', name='comunidades_transferencia_tipo'), nullable=False)
     ejecutada_por_discord_id = Column(BigInteger, nullable=False)
+    clave_idempotencia = Column(String(190), nullable=False)
     created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
 
     comunidad = relationship('ComunidadesComunidad', back_populates='transferencias', foreign_keys=[comunidad_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
@@ -880,6 +886,46 @@ class ComunidadesSnapshotClasificacionComunidad(Base):
     created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
 
     comunidad = relationship('ComunidadesComunidad', back_populates='snapshots_clasificacion', foreign_keys=[comunidad_id, torneo_id], overlaps=_COMUNIDADES_RELATIONSHIP_OVERLAPS)
+
+
+class ComunidadesOperacionIdempotente(Base):
+    """Reserva persistida para coordinar efectos externos y reintentos.
+
+    La clave es estable y legible (por ejemplo ``publicacion:global-hub:42`` o
+    ``canal-partido:81``). El estado PENDIENTE actúa como lease recuperable y
+    COMPLETADA conserva el identificador del recurso externo creado.
+    """
+
+    __tablename__ = 'comunidades_operacion_idempotente'
+    __table_args__ = (
+        UniqueConstraint('clave', name='uk_com_operacion_clave'),
+        CheckConstraint(
+            "estado IN ('PENDIENTE','COMPLETADA')",
+            name='ck_com_operacion_estado',
+        ),
+        Index(
+            'idx_com_operacion_contexto',
+            'torneo_id', 'ronda_id', 'enfrentamiento_id', 'partido_id',
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    clave = Column(String(190), nullable=False)
+    tipo = Column(String(45), nullable=False)
+    estado = Column(
+        _comunidades_enum(
+            'PENDIENTE', 'COMPLETADA', name='comunidades_operacion_estado'
+        ),
+        nullable=False,
+        server_default=text("'PENDIENTE'"),
+    )
+    torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
+    ronda_id = Column(Integer, nullable=True)
+    enfrentamiento_id = Column(Integer, nullable=True)
+    partido_id = Column(Integer, nullable=True)
+    recurso_externo_id = Column(String(120), nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_at = Column(DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
 
 class ComunidadesTrazaEmparejamiento(Base):
