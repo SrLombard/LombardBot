@@ -33,7 +33,9 @@ from ComunidadesConstantes import (
     PLANTILLA_RONDA1_PENDIENTE,
     PLANTILLA_RONDAS_SIGUIENTES_PENDIENTE,
     RAZAS_VALIDAS,
+    RONDA_ABIERTA,
     TORNEO_CREADO,
+    TORNEO_EN_CURSO,
     validar_puntuacion,
 )
 
@@ -2640,6 +2642,133 @@ def registrar_resultado_partido_comunidades(
         return ResultadoRegistroPartidoComunidades(
             partido, enfrentamiento, True, False, resultado_global
         )
+
+
+def administrar_partido_comunidades(
+    session: Any,
+    *,
+    torneo_id: int,
+    ronda_numero: int,
+    enfrentamiento_id: int,
+    partido_indice: int,
+    td_local: int,
+    td_visitante: int,
+    tipo_forfait: Optional[str] = None,
+) -> ResultadoRegistroPartidoComunidades:
+    """Resuelve un partido administrativo y usa el cierre común de resultados.
+
+    Este servicio valida que los cuatro identificadores pertenezcan al mismo
+    contexto operativo. La persistencia del marcador y, al cerrar el segundo
+    partido, la resolución global se delegan sin duplicación en
+    :func:`registrar_resultado_partido_comunidades`, la misma frontera usada
+    por la actualización desde la API.
+    """
+    from GestorSQL import (
+        ComunidadesEnfrentamiento,
+        ComunidadesPartido,
+        ComunidadesRonda,
+        ComunidadesTorneo,
+    )
+
+    for valor, nombre in (
+        (torneo_id, "torneo_id"),
+        (ronda_numero, "ronda_numero"),
+        (enfrentamiento_id, "enfrentamiento_id"),
+    ):
+        if type(valor) is not int or valor <= 0:
+            _error_registro_resultado(
+                "IDENTIFICADOR_INVALIDO",
+                f"{nombre} debe ser un entero mayor que cero.",
+            )
+    if type(partido_indice) is not int or partido_indice not in {1, 2}:
+        _error_registro_resultado(
+            "INDICE_PARTIDO_INVALIDO",
+            "El índice de partido debe ser 1 o 2.",
+        )
+
+    torneo = (
+        session.query(ComunidadesTorneo)
+        .filter(ComunidadesTorneo.id == torneo_id)
+        .one_or_none()
+    )
+    if torneo is None:
+        _error_registro_resultado(
+            "TORNEO_NO_EXISTE",
+            f"No existe un torneo de comunidades con ID {torneo_id}.",
+        )
+    if torneo.estado != TORNEO_EN_CURSO:
+        _error_registro_resultado(
+            "TORNEO_NO_EN_CURSO",
+            f"El torneo {torneo_id} está en estado {torneo.estado}; "
+            "solo se administran partidos de torneos EN_CURSO.",
+        )
+
+    ronda = (
+        session.query(ComunidadesRonda)
+        .filter(
+            ComunidadesRonda.torneo_id == torneo_id,
+            ComunidadesRonda.numero == ronda_numero,
+        )
+        .one_or_none()
+    )
+    if ronda is None:
+        _error_registro_resultado(
+            "RONDA_NO_EXISTE",
+            f"No existe la ronda {ronda_numero} en el torneo {torneo_id}.",
+        )
+    if ronda.estado != RONDA_ABIERTA:
+        _error_registro_resultado(
+            "RONDA_NO_ABIERTA",
+            f"La ronda {ronda_numero} está en estado {ronda.estado}; "
+            "solo se administran partidos de rondas ABIERTAS.",
+        )
+
+    enfrentamiento = (
+        session.query(ComunidadesEnfrentamiento)
+        .filter(
+            ComunidadesEnfrentamiento.id == enfrentamiento_id,
+            ComunidadesEnfrentamiento.torneo_id == torneo_id,
+            ComunidadesEnfrentamiento.ronda_id == ronda.id,
+        )
+        .one_or_none()
+    )
+    if enfrentamiento is None:
+        _error_registro_resultado(
+            "ENFRENTAMIENTO_NO_EXISTE",
+            f"No existe el enfrentamiento {enfrentamiento_id} en la ronda "
+            f"{ronda_numero} del torneo {torneo_id}.",
+        )
+
+    partido = (
+        session.query(ComunidadesPartido)
+        .filter(
+            ComunidadesPartido.torneo_id == torneo_id,
+            ComunidadesPartido.enfrentamiento_id == enfrentamiento_id,
+            ComunidadesPartido.indice == partido_indice,
+        )
+        .one_or_none()
+    )
+    if partido is None:
+        _error_registro_resultado(
+            "PARTIDO_NO_EXISTE",
+            f"El enfrentamiento {enfrentamiento_id} no tiene creado el partido "
+            f"{partido_indice}.",
+        )
+    if partido.estado in {PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO}:
+        _error_registro_resultado(
+            "PARTIDO_YA_CERRADO",
+            f"El partido {partido_indice} ya está cerrado con estado "
+            f"{partido.estado} y no puede administrarse de nuevo.",
+        )
+
+    return registrar_resultado_partido_comunidades(
+        session,
+        partido_id=int(partido.id),
+        td_local=td_local,
+        td_visitante=td_visitante,
+        origen=RESULTADO_ORIGEN_ADMIN,
+        tipo_forfait=tipo_forfait,
+    )
 
 
 class ErrorGeneracionRondaComunidades(ValueError):

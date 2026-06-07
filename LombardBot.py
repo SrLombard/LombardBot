@@ -60,6 +60,7 @@ from ComunidadesCore import (
     anadir_categoria_partidos_comunidades,
     anadir_comunidad_comunidades,
     anadir_equipo_comunidades,
+    administrar_partido_comunidades,
     configurar_competicion_comunidades,
     configurar_puntos_equipo_comunidades,
     configurar_puntos_individuales_comunidades,
@@ -74,11 +75,8 @@ from ComunidadesCore import (
 from ComunidadesConstantes import (
     ENFRENTAMIENTO_EN_CURSO,
     ENFRENTAMIENTO_PARTIDOS_CREADOS,
-    PARTIDO_ADMINISTRADO,
     PARTIDO_EN_CURSO,
-    PARTIDO_FINALIZADO,
     PARTIDO_PENDIENTE,
-    RESULTADO_ORIGEN_ADMIN,
     RESULTADO_ORIGEN_API,
     RONDA_ABIERTA,
     TIPO_ADMIN_DOBLE_FORFEIT,
@@ -5140,96 +5138,29 @@ async def comunidades_admin_partido(
     SessionComunidades = sessionmaker(bind=GestorSQL.conexionEngine())
     session = SessionComunidades()
     try:
-        torneo = (
-            session.query(GestorSQL.ComunidadesTorneo)
-            .filter(GestorSQL.ComunidadesTorneo.id == torneo_id)
-            .one_or_none()
-        )
-        if torneo is None:
-            await ctx.send(f"❌ No existe un torneo de comunidades con ID `{torneo_id}`.")
-            return
-        if torneo.estado != TORNEO_EN_CURSO:
-            await ctx.send(
-                f"❌ El torneo `{torneo_id}` está en estado `{torneo.estado}`; "
-                "solo se administran partidos de torneos EN_CURSO."
-            )
-            return
-
-        ronda = (
-            session.query(GestorSQL.ComunidadesRonda)
-            .filter(
-                GestorSQL.ComunidadesRonda.torneo_id == torneo_id,
-                GestorSQL.ComunidadesRonda.numero == ronda_numero,
-            )
-            .one_or_none()
-        )
-        if ronda is None:
-            await ctx.send(
-                f"❌ No existe la ronda `{ronda_numero}` en el torneo `{torneo_id}`."
-            )
-            return
-        if ronda.estado != RONDA_ABIERTA:
-            await ctx.send(
-                f"❌ La ronda `{ronda_numero}` está en estado `{ronda.estado}`; "
-                "solo se administran partidos de rondas ABIERTAS."
-            )
-            return
-
-        enfrentamiento = (
-            session.query(GestorSQL.ComunidadesEnfrentamiento)
-            .filter(
-                GestorSQL.ComunidadesEnfrentamiento.id == enfrentamiento_id,
-                GestorSQL.ComunidadesEnfrentamiento.torneo_id == torneo_id,
-                GestorSQL.ComunidadesEnfrentamiento.ronda_id == ronda.id,
-            )
-            .one_or_none()
-        )
-        if enfrentamiento is None:
-            await ctx.send(
-                f"❌ No existe el enfrentamiento `{enfrentamiento_id}` en la ronda "
-                f"`{ronda_numero}` del torneo `{torneo_id}`."
-            )
-            return
-
-        partido = (
-            session.query(GestorSQL.ComunidadesPartido)
-            .filter(
-                GestorSQL.ComunidadesPartido.torneo_id == torneo_id,
-                GestorSQL.ComunidadesPartido.enfrentamiento_id == enfrentamiento.id,
-                GestorSQL.ComunidadesPartido.indice == partido_indice,
-            )
-            .one_or_none()
-        )
-        if partido is None:
-            await ctx.send(
-                f"❌ El enfrentamiento `{enfrentamiento_id}` no tiene creado el partido "
-                f"`{partido_indice}`."
-            )
-            return
-        if partido.estado in {PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO}:
-            await ctx.send(
-                f"❌ El partido `{partido_indice}` ya está cerrado con estado "
-                f"`{partido.estado}` y no puede administrarse de nuevo."
-            )
-            return
-
         try:
-            resultado = registrar_resultado_partido_comunidades(
+            resultado = administrar_partido_comunidades(
                 session,
-                partido_id=int(partido.id),
+                torneo_id=torneo_id,
+                ronda_numero=ronda_numero,
+                enfrentamiento_id=enfrentamiento_id,
+                partido_indice=partido_indice,
                 td_local=marcador_local,
                 td_visitante=marcador_visitante,
-                origen=RESULTADO_ORIGEN_ADMIN,
                 tipo_forfait=tipo_forfait,
             )
             if resultado.idempotente:
                 session.rollback()
-                await ctx.send("❌ El partido ya había sido cerrado y no puede administrarse de nuevo.")
+                await ctx.send(
+                    "❌ El partido ya había sido cerrado y no puede administrarse de nuevo."
+                )
                 return
             session.commit()
         except ErrorRegistroResultadoComunidades as exc:
             session.rollback()
-            await ctx.send(f"❌ No se pudo administrar el partido: [{exc.codigo}] {exc.detalle}")
+            await ctx.send(
+                f"❌ No se pudo administrar el partido: [{exc.codigo}] {exc.detalle}"
+            )
             return
 
         mensaje = _mensaje_resultado_admin_comunidades(resultado, tipo.strip().lower())
@@ -5240,8 +5171,10 @@ async def comunidades_admin_partido(
         avisos = []
         enviados = set()
         for nombre, canal_id in destinos:
-            if canal_id is None or int(canal_id) in enviados:
+            if canal_id is None:
                 avisos.append(f"canal {nombre} no disponible")
+                continue
+            if int(canal_id) in enviados:
                 continue
             canal = await _resolver_canal_notificacion_comunidades(ctx, canal_id)
             if canal is None:
