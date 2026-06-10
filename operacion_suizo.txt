@@ -1,0 +1,825 @@
+GUÍA DE OPERACIÓN DEL TORNEO SUIZO POR PAREJAS Y COMUNIDADES
+==============================================================
+
+Documento para la prueba inicial y para la administración ordinaria del torneo.
+Los comandos con ! son comandos de administración y requieren el rol "Comisario".
+Los comandos con / son comandos slash de Discord; salvo la transferencia y la selección,
+son consultas públicas.
+
+IMPORTANTE
+----------
+
+1. La unidad competitiva es el EQUIPO de dos jugadores, no el jugador individual.
+2. Cada equipo pertenece a una comunidad.
+3. Nunca se emparejan equipos de la misma comunidad.
+4. Cada enfrentamiento de equipos crea dos partidos individuales:
+   - atacante del equipo A contra defensor del equipo B;
+   - atacante del equipo B contra defensor del equipo A.
+5. La ronda siguiente NO se genera automáticamente. Cuando una ronda se cierre, un
+   comisario debe lanzar manualmente !comunidades_generar_ronda para la siguiente.
+6. No se pueden añadir comunidades ni equipos después de generar la ronda 1.
+7. Los nombres de equipo y comunidad deben escribirse exactamente igual en los comandos
+   posteriores.
+8. Los horarios que muestran las consultas de ronda están expresados en UTC.
+
+
+1. PREPARACIÓN ÚNICA DE LA BASE DE DATOS
+========================================
+
+Este apartado se realiza una sola vez por instalación, no una vez por torneo.
+
+1.1. Hacer una copia de seguridad de la base de datos.
+
+1.2. Ejecutar completo el script:
+
+    BD/comunidades_schema.sql
+
+El script crea todas las tablas comunidades_* y modifica usuarios.id_discord a BIGINT.
+Puede ejecutarse desde phpMyAdmin, abriendo la base de datos usada por LombardBot y usando
+la opción Importar, o desde MySQL/MariaDB:
+
+    mysql -u USUARIO -p NOMBRE_BASE_DATOS < BD/comunidades_schema.sql
+
+El esquema está preparado para MySQL 8.0.16+ y MariaDB 10.11+.
+
+1.3. Reiniciar el bot después de aplicar el esquema.
+
+1.4. Comprobar que Discord ha sincronizado los slash commands comunidades_*.
+
+1.5. Canales hardcodeados que deben existir y ser accesibles para el bot:
+
+    Canal administrativo: 457740100097540106
+    Foro de resultados:   1223765590146158653
+
+El canal administrativo se usa para incidencias y para consultar elecciones secretas.
+El foro se usa para publicar las imágenes de los resultados individuales.
+
+
+2. PREPARACIÓN DE DISCORD ANTES DE CREAR EL TORNEO
+==================================================
+
+Crear o identificar:
+
+- Un canal hub del torneo. Recibirá rondas, clasificaciones, resultados globales,
+  zombificaciones, kills y transferencias.
+- Una o más categorías para los canales generales de enfrentamientos.
+- Una o más categorías para los canales de partidos individuales.
+- El rol "Comisario", que debe existir exactamente con ese nombre.
+
+Cada categoría admite como máximo 40 canales para esta herramienta. El bot cuenta TODOS
+los canales presentes en la categoría, aunque no pertenezcan al torneo. Si una categoría
+alcanza 40 canales, intenta usar la siguiente en el orden en que fue configurada.
+
+Para copiar el ID de un canal o categoría, activar el modo desarrollador de Discord y usar
+"Copiar ID".
+
+
+3. CREAR EL TORNEO
+==================
+
+Sintaxis:
+
+    !comunidades_crear "NOMBRE" RONDAS FECHA_FIN_R1 HORA_FIN_R1 DIAS_POR_RONDA CANAL_HUB_ID
+
+Ejemplo:
+
+    !comunidades_crear "Prueba Comunidades" 3 2026-07-01 23:59 7 1497290209505710120
+
+Argumentos:
+
+- NOMBRE: usar comillas si tiene espacios.
+- RONDAS: número total de rondas, mayor que cero.
+- FECHA_FIN_R1: YYYY-MM-DD.
+- HORA_FIN_R1: HH:MM.
+- DIAS_POR_RONDA: duración de las siguientes rondas.
+- CANAL_HUB_ID: ID numérico del canal hub.
+
+El bot responderá con el ID interno del torneo. Guardar ese valor; en los ejemplos de esta
+guía se usará TORNEO_ID=1, pero debe sustituirse por el ID real.
+
+El torneo se crea en estado CREADO con estos valores iniciales:
+
+- Clasificación de equipos: victoria 3, empate 1, derrota 0, bye 1.5.
+- Puntuación interna de partidos: victoria 3, empate 1, derrota 0.
+
+
+4. CONFIGURACIÓN OBLIGATORIA ANTES DE LA RONDA 1
+================================================
+
+4.1. Configurar la competición de Blood Bowl
+--------------------------------------------
+
+    !comunidades_set_competicion TORNEO_ID ID_COMPETICION_BBOWL
+
+Ejemplo:
+
+    !comunidades_set_competicion 1 01234567-89ab-cdef-0123-456789abcdef
+
+Este identificador es el que usa !comunidades_actualizar para consultar la API.
+
+4.2. Configurar la puntuación de la clasificación de equipos
+-------------------------------------------------------------
+
+    !comunidades_set_puntos_equipo TORNEO_ID WIN DRAW LOSS BYE
+
+Ejemplo:
+
+    !comunidades_set_puntos_equipo 1 3 1 0 1.5
+
+Estos puntos se conceden por el resultado GLOBAL de los dos partidos.
+
+4.3. Configurar la puntuación interna de los partidos individuales
+------------------------------------------------------------------
+
+    !comunidades_set_puntos_individuales TORNEO_ID WIN DRAW LOSS
+
+Ejemplo:
+
+    !comunidades_set_puntos_individuales 1 3 1 0
+
+Estos puntos solo sirven para decidir quién gana el enfrentamiento entre equipos. No hay
+clasificación individual.
+
+4.4. Configurar manualmente los mensajes en base de datos
+---------------------------------------------------------
+
+En la versión actual no existe un comando para editar los mensajes de inicio. Hay que
+actualizar ambos campos antes de generar la ronda 1:
+
+    UPDATE comunidades_torneo
+    SET plantilla_mensaje_ronda1 =
+            'Bienvenidos a la primera ronda del torneo de comunidades.',
+        plantilla_mensaje_rondas_siguientes =
+            'Bienvenidos a una nueva ronda del torneo de comunidades.'
+    WHERE id = TORNEO_ID;
+
+Ejemplo para el torneo 1:
+
+    UPDATE comunidades_torneo
+    SET plantilla_mensaje_ronda1 =
+            'Bienvenidos a la primera ronda del torneo de comunidades.',
+        plantilla_mensaje_rondas_siguientes =
+            'Bienvenidos a una nueva ronda del torneo de comunidades.'
+    WHERE id = 1;
+
+El bot añadirá automáticamente debajo de esta plantilla la mesa, menciones, plazo,
+estados y reglas de selección. No hacen falta marcadores ni placeholders en el texto.
+
+Comprobación recomendada:
+
+    SELECT id, nombre, estado, id_competicion_bbowl, canal_hub_id,
+           plantilla_mensaje_ronda1, plantilla_mensaje_rondas_siguientes
+    FROM comunidades_torneo
+    WHERE id = TORNEO_ID;
+
+No generar la ronda 1 si las plantillas conservan textos PENDIENTE_CONFIGURACION_*.
+
+
+5. AÑADIR LAS COMUNIDADES
+=========================
+
+Sintaxis:
+
+    !comunidades_add_comunidad TORNEO_ID NOMBRE
+
+Ejemplo:
+
+    !comunidades_add_comunidad 1 Butter
+    !comunidades_add_comunidad 1 Hispana
+    !comunidades_add_comunidad 1 PdM
+
+Pueden definirse otros nombres para futuros torneos. Una vez generada la ronda 1 no se
+pueden añadir más comunidades.
+
+
+6. CONFIGURAR LAS CATEGORÍAS DE DISCORD
+=======================================
+
+6.1. Categorías para canales generales de enfrentamientos
+----------------------------------------------------------
+
+    !comunidades_add_categoria_enfrentamientos TORNEO_ID CATEGORIA_ID
+
+Ejemplo:
+
+    !comunidades_add_categoria_enfrentamientos 1 111111111111111111
+    !comunidades_add_categoria_enfrentamientos 1 222222222222222222
+
+6.2. Categorías para canales de partidos individuales
+------------------------------------------------------
+
+    !comunidades_add_categoria_partidos TORNEO_ID CATEGORIA_ID
+
+Ejemplo:
+
+    !comunidades_add_categoria_partidos 1 333333333333333333
+    !comunidades_add_categoria_partidos 1 444444444444444444
+
+Se pueden añadir varias categorías de cada tipo. El bot las usa en el orden de alta.
+No existe comando para eliminarlas o reordenarlas; una corrección excepcional debe hacerse
+a mano en las tablas comunidades_categoria_enfrentamiento y
+comunidades_categoria_partido antes de iniciar el torneo.
+
+
+7. INSCRIBIR EQUIPOS
+====================
+
+Sintaxis:
+
+    !comunidades_add_equipo TORNEO_ID "NOMBRE_EQUIPO" COMUNIDAD @JUGADOR1 "RAZA1" @JUGADOR2 "RAZA2"
+
+Ejemplo:
+
+    !comunidades_add_equipo 1 "Butter Alfa" Butter @Jugador1 "Orcos" @Jugador2 "Skaven"
+    !comunidades_add_equipo 1 "Butter Beta" Butter @Jugador3 "Humanos" @Jugador4 "Enanos"
+    !comunidades_add_equipo 1 "Hispana Alfa" Hispana @Jugador5 "Amazonas" @Jugador6 "Nurgle"
+    !comunidades_add_equipo 1 "Hispana Beta" Hispana @Jugador7 "Vampiros" @Jugador8 "Khorne"
+    !comunidades_add_equipo 1 "PdM Alfa" PdM @Jugador9 "Nordicos" @Jugador10 "Renegados"
+    !comunidades_add_equipo 1 "PdM Beta" PdM @Jugador11 "Inframundo" @Jugador12 "Stunty"
+
+Las razas deben escribirse exactamente como una de estas opciones:
+
+    Alianza V. Mundo
+    Amazonas
+    Caos Elegido
+    Elfos Oscuros
+    Elfos Silvanos
+    Enanos del Caos
+    Enanos
+    Hombres Lagarto
+    Horror Nigromantico
+    Humanos
+    Inframundo
+    Khorne
+    No muertos
+    Nobleza Imperial
+    Nordicos
+    Nurgle
+    Orcos negros
+    Orcos
+    Renegados
+    Skaven
+    Stunty
+    Union Elfica
+    Vampiros
+
+Usar comillas para las razas con espacios.
+
+Si un Discord no existe en usuarios, el comando lo crea con id_bloodbowl y
+nombre_bloodbowl a NULL. Antes de jugar hay que completar esos datos manualmente.
+
+Comprobación recomendada:
+
+    SELECT idUsuarios, nombre_discord, id_discord,
+           nombre_bloodbowl, id_bloodbowl
+    FROM usuarios
+    WHERE id_discord IN (ID_DISCORD_1, ID_DISCORD_2, ...);
+
+Actualización manual de ejemplo:
+
+    UPDATE usuarios
+    SET nombre_bloodbowl = 'NombreCoachBB',
+        id_bloodbowl = 123456
+    WHERE id_discord = 123456789012345678;
+
+Todos los participantes deben tener un id_bloodbowl correcto antes de usar
+!comunidades_actualizar.
+
+Restricciones:
+
+- Cada equipo tiene exactamente dos jugadores.
+- Un usuario solo puede estar en un equipo del mismo torneo.
+- El nombre del equipo es único dentro del torneo.
+- No hay comando de modificación, sustitución, baja o alta tardía.
+- Las correcciones excepcionales deben hacerse antes de la ronda 1 y con extremo cuidado.
+
+
+8. LISTA DE COMPROBACIÓN ANTES DE GENERAR LA RONDA 1
+====================================================
+
+[ ] Se ejecutó BD/comunidades_schema.sql.
+[ ] El bot está reiniciado y los slash commands están sincronizados.
+[ ] Existe el rol Comisario.
+[ ] Existe y es accesible el canal hub.
+[ ] Existe el canal administrativo hardcodeado.
+[ ] Existe el foro de resultados hardcodeado.
+[ ] El torneo tiene id_competicion_bbowl.
+[ ] Ambas puntuaciones son correctas.
+[ ] Las dos plantillas de mensajes se editaron en BD.
+[ ] Todas las comunidades están creadas.
+[ ] Hay categorías de enfrentamientos y de partidos con capacidad.
+[ ] Todos los equipos están inscritos.
+[ ] Ningún usuario está repetido.
+[ ] Todos los usuarios tienen id_bloodbowl correcto.
+[ ] La distribución de comunidades permite emparejar sin enfrentar la misma comunidad.
+
+Para una prueba inicial se recomiendan 6 equipos: 2 Butter, 2 Hispana y 2 PdM.
+
+
+9. GENERAR LA PRIMERA RONDA
+===========================
+
+    !comunidades_generar_ronda TORNEO_ID 1
+
+Ejemplo:
+
+    !comunidades_generar_ronda 1 1
+
+Al generar la ronda 1:
+
+- El torneo pasa a EN_CURSO.
+- Las comunidades y equipos quedan bloqueados para nuevas altas.
+- Se crean los emparejamientos.
+- Se guarda una fotografía de los estados iniciales.
+- Se crean los canales generales de enfrentamiento.
+- Se publica el resumen en el hub.
+- Si hay un número impar de equipos, se asigna un bye sin crear canal.
+
+Si no existe una solución completa sin enfrentar equipos de la misma comunidad, la ronda
+no se genera.
+
+Comprobaciones públicas:
+
+    /comunidades_consulta_ronda torneo_id:1 ronda:1
+    /comunidades_estado_canales torneo_id:1 ronda:1
+    /comunidades_consulta_estados torneo_id:1
+
+La ronda pública muestra mesas y canales, pero no revela atacantes ni defensores.
+
+
+10. ACCIONES DE LOS JUGADORES EN CADA ENFRENTAMIENTO
+====================================================
+
+Cada equipo debe entrar en el canal general de su enfrentamiento y, dentro de las primeras
+24 horas, ejecutar:
+
+    /comunidades_seleccion_atacante usuario:@Jugador
+
+Puede ejecutar el comando cualquiera de los dos integrantes. Puede elegirse a sí mismo o
+a su compañero, pero solo puede seleccionar a un miembro de su propio equipo.
+
+El bot responde de forma privada (ephemeral) indicando atacante y defensor. En público solo
+se informa de que el equipo ha elegido; el rival no ve la identidad.
+
+La elección puede cambiarse mientras el rival todavía no haya elegido. Cuando ambos equipos
+han elegido:
+
+- las elecciones quedan bloqueadas;
+- se crean automáticamente los dos partidos;
+- se crean los dos canales individuales;
+- el atacante de A juega contra el defensor de B;
+- el atacante de B juega contra el defensor de A.
+
+Los jugadores acuerdan y disputan sus partidos de Blood Bowl normalmente. Los canales
+permanecen abiertos hasta el cierre de la ronda.
+
+
+11. SEGUIMIENTO DURANTE LA RONDA
+================================
+
+Consultas públicas disponibles:
+
+    /comunidades_consulta_ronda torneo_id:1 ronda:1
+    /comunidades_estado_canales torneo_id:1 ronda:1
+    /comunidades_clasif_equipos torneo_id:1
+    /comunidades_clasif_comunidades torneo_id:1
+    /comunidades_consulta_equipo torneo_id:1 equipo:"Butter Alfa"
+    /comunidades_consulta_estados torneo_id:1
+
+En clasificación, el argumento ronda es opcional. Si se indica una ronda cerrada, se
+consulta su snapshot histórico. Los emojis de un snapshot muestran el estado actual del
+equipo, mientras que sus puntos son históricos.
+
+Consulta secreta para comisarios:
+
+    !comunidades_consulta_elecciones TORNEO_ID RONDA
+
+Ejemplo:
+
+    !comunidades_consulta_elecciones 1 1
+
+Este comando SOLO funciona en el canal administrativo 457740100097540106. Muestra por mesa
+el ID del enfrentamiento, las elecciones, quién las realizó y cuándo. Es también la forma
+más sencilla de obtener el enfrentamiento_id necesario para comandos administrativos.
+
+
+12. IMPORTAR RESULTADOS DESDE LA API
+====================================
+
+Procesar el siguiente partido encontrado:
+
+    !comunidades_actualizar TORNEO_ID
+
+Ejemplo:
+
+    !comunidades_actualizar 1
+
+Procesar todos los partidos encontrados en la pasada:
+
+    !comunidades_actualizar TORNEO_ID todos
+
+También se admite 1 como alias de todos:
+
+    !comunidades_actualizar 1 1
+
+El bot:
+
+- localiza los usuarios por usuarios.id_bloodbowl;
+- asigna el partido API al partido individual pendiente correcto;
+- publica la imagen en el foro;
+- informa en el canal individual;
+- al cerrar el segundo partido, resuelve el enfrentamiento global;
+- aplica puntos, heridas, cazadores, zombies, kills y transiciones;
+- publica el resultado global en el canal general y en el hub;
+- comprueba si la ronda ya puede cerrarse.
+
+El primer partido individual no aplica estados. Los estados se resuelven únicamente cuando
+se cierra el segundo partido del enfrentamiento.
+
+Se recomienda ejecutar !comunidades_actualizar periódicamente mientras la ronda esté
+abierta y una vez más al final para reintentar publicaciones o limpiezas pendientes.
+
+
+13. ADMINISTRAR RESULTADOS MANUALMENTE
+======================================
+
+Solo se administran PARTIDOS INDIVIDUALES. Para resolver un enfrentamiento completo hay que
+administrar sus partidos 1 y 2 por separado.
+
+Sintaxis:
+
+    !comunidades_admin_partido TORNEO_ID RONDA ENFRENTAMIENTO_ID PARTIDO TIPO [TD_LOCAL] [TD_VISITANTE]
+
+PARTIDO debe ser 1 o 2.
+
+Tipos válidos:
+
+13.1. Victoria del participante local
+
+    !comunidades_admin_partido 1 1 25 1 forfeit_local
+
+Guarda marcador administrativo 1-0.
+
+13.2. Victoria del participante visitante
+
+    !comunidades_admin_partido 1 1 25 1 forfeit_visitante
+
+Guarda marcador administrativo 0-1.
+
+13.3. Empate administrativo
+
+    !comunidades_admin_partido 1 1 25 1 empate_admin
+
+Guarda marcador 0-0 con puntos internos de empate.
+
+13.4. Doble forfait
+
+    !comunidades_admin_partido 1 1 25 1 doble_forfait
+
+Guarda 0-0 y puntos internos 0-0. Si los dos partidos del enfrentamiento son doble forfait,
+no se modifican los estados de los equipos.
+
+13.5. Marcador manual
+
+    !comunidades_admin_partido 1 1 25 1 manual 2 1
+
+Los TD solo se admiten con manual y no pueden ser negativos.
+
+LOCAL y VISITANTE se refieren al orden guardado para ESE partido individual, no a equipo A
+y equipo B del enfrentamiento. Revisar el canal individual antes de usar un forfait.
+
+Los resultados administrativos producen normalmente los mismos cambios de estado que un
+resultado importado desde la API.
+
+
+14. FORZAR ELECCIONES Y CREAR PARTIDOS
+======================================
+
+Si un equipo no ha elegido atacante en plazo, el comisario puede imponer ambos atacantes y
+crear los partidos:
+
+    !comunidades_forzar_crear_partidos TORNEO_ID RONDA ENFRENTAMIENTO_ID @ATACANTE_A @ATACANTE_B
+
+Ejemplo:
+
+    !comunidades_forzar_crear_partidos 1 1 25 @Jugador1 @Jugador5
+
+- @ATACANTE_A debe pertenecer al equipo A del enfrentamiento.
+- @ATACANTE_B debe pertenecer al equipo B.
+- El comando registra la actuación administrativa.
+- Después se administran los dos partidos con !comunidades_admin_partido si no se van a
+  disputar normalmente.
+
+Obtener el enfrentamiento_id mediante !comunidades_consulta_elecciones en el canal de
+administración.
+
+
+15. TRANSFERIR CAZADOR O CAZADOR Z
+==================================
+
+Comando slash de usuario:
+
+    /comunidades_transferir_cazador torneo_id:1 equipo_destino:"Nombre exacto"
+
+Puede usarlo cualquiera de los dos integrantes del equipo origen.
+
+Condiciones principales:
+
+- Origen y destino pertenecen a la misma comunidad.
+- Ambos equipos han terminado su enfrentamiento de la ronda actual.
+- El origen obtuvo o recibió cazador/cazador Z en esta ronda.
+- El destino está neutro: no está herido, no es cazador y no es cazador Z.
+- El destino puede ser zombie si está neutro.
+- La transferencia no cambia la ronda actual; prepara el estado para la siguiente.
+
+La transferencia se publica en el hub. Si origen o destino sigue jugando, hay que esperar
+y volver a ejecutar el comando después; el intento no queda pendiente.
+
+
+16. CIERRE DE LA RONDA
+======================
+
+El cierre se intenta automáticamente después de registrar o administrar resultados y al
+ejecutar !comunidades_actualizar.
+
+Cuando todos los enfrentamientos y byes están resueltos:
+
+- la ronda pasa a CERRADA;
+- se guardan snapshots de equipos y comunidades;
+- se publican ambas clasificaciones en el hub;
+- se eliminan los canales generales e individuales de la ronda;
+- el foro y los mensajes del hub se conservan;
+- si era la última ronda, el torneo pasa a FINALIZADO;
+- si quedan rondas, el hub indica que la siguiente debe generarse manualmente.
+
+Si un resultado ya estaba consolidado, repetir !comunidades_actualizar o el comando de
+administración permite reintentar publicaciones pendientes sin duplicar puntos.
+
+
+17. GENERAR LAS SIGUIENTES RONDAS
+=================================
+
+Después de confirmar que la ronda anterior está cerrada:
+
+    !comunidades_generar_ronda TORNEO_ID NUMERO_RONDA
+
+Ejemplo:
+
+    !comunidades_generar_ronda 1 2
+
+Repetir el flujo:
+
+1. Se crean canales generales.
+2. Los equipos eligen atacante.
+3. Se crean dos partidos por enfrentamiento.
+4. Se importan o administran resultados.
+5. Se cierra la ronda.
+6. El comisario genera manualmente la siguiente.
+
+
+18. REGENERAR UNA RONDA ABIERTA
+==============================
+
+    !comunidades_regenerar_ronda TORNEO_ID RONDA
+
+Ejemplo:
+
+    !comunidades_regenerar_ronda 1 1
+
+Solo puede regenerarse una ronda ABIERTA y no consolidada. No puede haber una ronda
+posterior ya creada.
+
+La regeneración:
+
+- elimina canales generales e individuales de la ronda;
+- revierte puntuaciones y estados derivados de esa ronda;
+- elimina elecciones, partidos, fotografías y transiciones de esa ronda;
+- genera emparejamientos y canales nuevos;
+- conserva publicaciones anteriores del foro y del hub.
+
+ADVERTENCIA: las publicaciones conservadas pueden describir los emparejamientos antiguos.
+Usar este comando solo cuando sea realmente necesario y anunciar la regeneración en el hub.
+
+
+19. CLASIFICACIONES Y ESTADOS
+=============================
+
+Clasificación de equipos:
+
+    /comunidades_clasif_equipos torneo_id:1
+    /comunidades_clasif_equipos torneo_id:1 ronda:1
+
+Orden:
+
+1. Puntos de clasificación.
+2. Buchholz Cut.
+3. Enfrentamiento directo.
+4. Diferencia de TD.
+5. ID interno.
+
+Clasificación de comunidades:
+
+    /comunidades_clasif_comunidades torneo_id:1
+    /comunidades_clasif_comunidades torneo_id:1 ronda:1
+
+Orden:
+
+1. Puntos por zombificaciones.
+2. Zombies matados.
+3. Suma de puntos suizos de sus equipos.
+4. Empate compartido.
+
+Leyenda de estados:
+
+    ⚪ Neutro
+    🏹 Cazador
+    🩸 Herido
+    🧟 Zombie
+    🏹🧟 Cazador Z
+
+Zombie es una condición permanente y puede convivir con un estado temporal.
+
+
+20. FLUJO COMPLETO RECOMENDADO PARA LA PRIMERA PRUEBA
+=====================================================
+
+Sustituir IDs, menciones y fecha por valores reales.
+
+A. Preparación técnica:
+
+    1. Importar BD/comunidades_schema.sql.
+    2. Reiniciar el bot.
+    3. Comprobar canal administrativo, foro, hub, rol y categorías.
+
+B. Crear y configurar:
+
+    !comunidades_crear "Prueba Comunidades" 2 2026-07-01 23:59 7 HUB_ID
+    !comunidades_set_competicion 1 ID_COMPETICION_BBOWL
+    !comunidades_set_puntos_equipo 1 3 1 0 1.5
+    !comunidades_set_puntos_individuales 1 3 1 0
+
+C. Editar en BD las dos plantillas del torneo 1.
+
+D. Añadir comunidades:
+
+    !comunidades_add_comunidad 1 Butter
+    !comunidades_add_comunidad 1 Hispana
+    !comunidades_add_comunidad 1 PdM
+
+E. Añadir categorías:
+
+    !comunidades_add_categoria_enfrentamientos 1 CATEGORIA_ENFRENTAMIENTOS_1
+    !comunidades_add_categoria_partidos 1 CATEGORIA_PARTIDOS_1
+
+F. Añadir 6 equipos, 2 por comunidad.
+
+G. Rellenar id_bloodbowl y nombre_bloodbowl de todos los usuarios que lo necesiten.
+
+H. Generar y revisar:
+
+    !comunidades_generar_ronda 1 1
+    /comunidades_consulta_ronda torneo_id:1 ronda:1
+    /comunidades_estado_canales torneo_id:1 ronda:1
+
+I. En cada canal general, un miembro de cada equipo ejecuta:
+
+    /comunidades_seleccion_atacante usuario:@MiembroDelEquipo
+
+J. Verificar que cada enfrentamiento crea exactamente dos canales individuales.
+
+K. Para una prueba sin partidos reales, administrar los dos partidos de cada enfrentamiento:
+
+    !comunidades_consulta_elecciones 1 1
+    !comunidades_admin_partido 1 1 ENFRENTAMIENTO_ID 1 manual 2 1
+    !comunidades_admin_partido 1 1 ENFRENTAMIENTO_ID 2 manual 0 1
+
+Repetir para todas las mesas, variando marcadores para probar victorias y empates.
+
+L. Comprobar cierre y clasificaciones:
+
+    /comunidades_clasif_equipos torneo_id:1 ronda:1
+    /comunidades_clasif_comunidades torneo_id:1 ronda:1
+    /comunidades_consulta_estados torneo_id:1
+
+M. Generar manualmente la ronda 2:
+
+    !comunidades_generar_ronda 1 2
+
+Para probar estados especiales en rondas posteriores, preparar resultados que produzcan
+cazadores y heridos en la ronda 1, y después comprobar en ronda 2 las prioridades de
+emparejamiento, zombificaciones y kills.
+
+
+21. DIAGNÓSTICO RÁPIDO DE PROBLEMAS
+===================================
+
+"El torneo no tiene idCompBbowl"
+    Ejecutar !comunidades_set_competicion.
+
+"Solo se actualizan torneos EN_CURSO"
+    Generar la ronda 1. Un torneo recién creado está en CREADO.
+
+"No hay una ronda ABIERTA"
+    La ronda ya cerró o todavía no se generó. Consultar /comunidades_consulta_ronda y
+    generar manualmente la siguiente si corresponde.
+
+"Hay varias rondas ABIERTAS"
+    No continuar importando. Revisar comunidades_ronda en BD y corregir la incidencia
+    antes de registrar más resultados.
+
+No se crean canales
+    Comprobar permisos del bot, existencia del rol Comisario, categorías configuradas y
+    que alguna categoría tenga menos de 40 canales.
+
+No se encuentra un partido de la API
+    Comprobar id_competicion_bbowl, usuarios.id_bloodbowl, que ambos jugadores coincidan
+    con un partido individual pendiente y que el resultado no se haya importado ya.
+
+No aparece la imagen del resultado
+    Comprobar el foro hardcodeado y permisos. Repetir !comunidades_actualizar para reintentar
+    publicaciones pendientes.
+
+Un equipo no puede elegir atacante
+    Confirmar que ejecuta el slash command dentro del canal general correcto, que pertenece
+    al equipo y que ambas elecciones no estaban ya bloqueadas.
+
+No se puede transferir cazador
+    Confirmar misma comunidad, que ambos enfrentamientos estén cerrados, que el origen haya
+    obtenido el estado en la ronda actual y que el destino esté neutro.
+
+Se necesita un ID de enfrentamiento
+    Ejecutar !comunidades_consulta_elecciones en el canal administrativo.
+
+
+22. RESUMEN DE COMANDOS
+=======================
+
+ADMINISTRACIÓN (!)
+------------------
+
+Crear/configurar:
+
+    !comunidades_crear "NOMBRE" RONDAS FECHA HORA DIAS HUB_ID
+    !comunidades_set_competicion TORNEO_ID ID_COMPETICION
+    !comunidades_set_puntos_equipo TORNEO_ID WIN DRAW LOSS BYE
+    !comunidades_set_puntos_individuales TORNEO_ID WIN DRAW LOSS
+    !comunidades_add_comunidad TORNEO_ID NOMBRE
+    !comunidades_add_categoria_enfrentamientos TORNEO_ID CATEGORIA_ID
+    !comunidades_add_categoria_partidos TORNEO_ID CATEGORIA_ID
+    !comunidades_add_equipo TORNEO_ID "EQUIPO" COMUNIDAD @J1 "RAZA1" @J2 "RAZA2"
+
+Rondas y resultados:
+
+    !comunidades_generar_ronda TORNEO_ID RONDA
+    !comunidades_regenerar_ronda TORNEO_ID RONDA
+    !comunidades_actualizar TORNEO_ID [todos|1]
+    !comunidades_admin_partido TORNEO_ID RONDA ENFRENTAMIENTO PARTIDO TIPO [TD_LOCAL] [TD_VISITANTE]
+    !comunidades_forzar_crear_partidos TORNEO_ID RONDA ENFRENTAMIENTO @ATACANTE_A @ATACANTE_B
+    !comunidades_consulta_elecciones TORNEO_ID RONDA
+
+USUARIOS Y CONSULTAS (/)
+------------------------
+
+    /comunidades_seleccion_atacante usuario:@Jugador
+    /comunidades_transferir_cazador torneo_id:ID equipo_destino:"Nombre"
+    /comunidades_consulta_ronda torneo_id:ID [ronda:N]
+    /comunidades_clasif_equipos torneo_id:ID [ronda:N]
+    /comunidades_clasif_comunidades torneo_id:ID [ronda:N]
+    /comunidades_consulta_equipo torneo_id:ID equipo:"Nombre exacto"
+    /comunidades_consulta_estados torneo_id:ID
+    /comunidades_estado_canales torneo_id:ID [ronda:N]
+
+
+Rondas y resultados:
+
+    !comunidades_generar_ronda TORNEO_ID RONDA
+    !comunidades_regenerar_ronda TORNEO_ID RONDA
+    !comunidades_actualizar TORNEO_ID [todos|1]
+    !comunidades_admin_partido TORNEO_ID RONDA ENFRENTAMIENTO PARTIDO TIPO [TD_LOCAL] [TD_VISITANTE]
+    !comunidades_forzar_crear_partidos TORNEO_ID RONDA ENFRENTAMIENTO @ATACANTE_A @ATACANTE_B
+    !comunidades_consulta_elecciones TORNEO_ID RONDA
+
+USUARIOS Y CONSULTAS (/)
+------------------------
+
+    /comunidades_seleccion_atacante usuario:@Jugador
+    /comunidades_transferir_cazador torneo_id:ID equipo_destino:"Nombre"
+    /comunidades_consulta_ronda torneo_id:ID [ronda:N]
+    /comunidades_clasif_equipos torneo_id:ID [ronda:N]
+    /comunidades_clasif_comunidades torneo_id:ID [ronda:N]
+    /comunidades_consulta_equipo torneo_id:ID equipo:"Nombre exacto"
+    /comunidades_consulta_estados torneo_id:ID
+    /comunidades_estado_canales torneo_id:ID [ronda:N]
+
+
+23. REFERENCIA TÉCNICA
+======================
+
+Para reglas detalladas de emparejamiento, estados, zombificaciones, kills y desempates,
+consultar:
+
+    DOCUMENTACION_TORNEO_SUIZO_COMUNIDADES.md
+
+Para instalar o revisar las tablas:
+
+    BD/comunidades_schema.sql
