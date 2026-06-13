@@ -36,6 +36,7 @@ from ComunidadesConstantes import (
     PLANTILLA_RONDAS_SIGUIENTES_PENDIENTE,
     RAZAS_VALIDAS,
     RONDA_ABIERTA,
+    RONDA_PENDIENTE_TRANSFERENCIAS,
     TORNEO_CREADO,
     TORNEO_EN_CURSO,
     validar_puntuacion,
@@ -1918,7 +1919,9 @@ def transferir_cazador_comunidades(
             session.query(ComunidadesRonda)
             .filter(
                 ComunidadesRonda.torneo_id == torneo_id,
-                ComunidadesRonda.estado == RONDA_ABIERTA,
+                ComunidadesRonda.estado.in_(
+                    (RONDA_ABIERTA, RONDA_PENDIENTE_TRANSFERENCIAS)
+                ),
             )
             .order_by(ComunidadesRonda.numero.desc())
             .with_for_update()
@@ -1927,7 +1930,7 @@ def transferir_cazador_comunidades(
         if ronda is None:
             _error_transferencia(
                 "RONDA_NO_DISPONIBLE",
-                "El torneo no tiene una ronda abierta en la que transferir el estado.",
+                "El torneo no tiene una ventana de transferencias abierta.",
             )
 
         origen = (
@@ -3250,10 +3253,18 @@ def _validar_generacion_ronda_comunidades(
                 "RONDA_ANTERIOR_INEXISTENTE",
                 f"No existe la ronda {ronda_numero - 1}.",
             )
-        if ronda_anterior.estado != "CERRADA":
+        if ronda_anterior.estado not in {
+            RONDA_PENDIENTE_TRANSFERENCIAS,
+            "CERRADA",
+        }:
             _error_generacion(
                 "RONDA_ANTERIOR_NO_CERRADA",
-                f"La ronda {ronda_numero - 1} no está cerrada.",
+                f"La ronda {ronda_numero - 1} no está consolidada.",
+            )
+        if ronda_anterior.estado == RONDA_PENDIENTE_TRANSFERENCIAS:
+            ronda_anterior.estado = "CERRADA"
+            ronda_anterior.cerrada_en = datetime.now(timezone.utc).replace(
+                tzinfo=None
             )
 
     equipos = (
@@ -4205,6 +4216,7 @@ def procesar_cierre_ronda_comunidades_si_corresponde(
     El cierre de base de datos es atómico e idempotente. La publicación y la
     limpieza de canales se realizan después del commit desde ``LombardBot``.
     Según la especificación, una ronda posterior nunca se crea automáticamente.
+    La consolidación deja abierta la ventana de transferencias.
     """
     from GestorSQL import (
         ComunidadesEnfrentamiento,
@@ -4303,19 +4315,21 @@ def procesar_cierre_ronda_comunidades_si_corresponde(
         clasificacion_comunidades=clasificacion_comunidades,
     )
 
-    ya_cerrada = ronda.estado == "CERRADA"
-    if not ya_cerrada:
-        ronda.estado = "CERRADA"
-        ronda.cerrada_en = datetime.now(timezone.utc).replace(tzinfo=None)
+    ya_consolidada = ronda.estado in {
+        RONDA_PENDIENTE_TRANSFERENCIAS,
+        "CERRADA",
+    }
+    if ronda.estado != "CERRADA":
+        ronda.estado = RONDA_PENDIENTE_TRANSFERENCIAS
 
     es_ultima_ronda = int(ronda_numero) >= int(torneo.rondas_totales)
-    if es_ultima_ronda:
-        torneo.estado = "FINALIZADO"
     session.flush()
     return {
         "cerrada": True,
-        "motivo": "YA_CERRADA" if ya_cerrada else "CERRADA",
-        "idempotente": ya_cerrada,
+        "motivo": (
+            "YA_CONSOLIDADA" if ya_consolidada else RONDA_PENDIENTE_TRANSFERENCIAS
+        ),
+        "idempotente": ya_consolidada,
         "ronda_id": int(ronda.id),
         "ronda_numero": int(ronda_numero),
         "es_ultima_ronda": es_ultima_ronda,
@@ -4326,6 +4340,56 @@ def procesar_cierre_ronda_comunidades_si_corresponde(
         "snapshot_comunidades": int(snapshot_comunidades),
         "clasificacion_equipos": clasificacion_equipos,
         "clasificacion_comunidades": clasificacion_comunidades,
+    }
+
+
+def cerrar_ventana_transferencias_comunidades(
+    session: Any, torneo_id: int, ronda_numero: int
+) -> dict[str, Any]:
+    """Cierra definitivamente una ronda ya consolidada.
+
+    Esta operación administrativa bloquea nuevas transferencias. La eliminación
+    de canales se realiza después del commit desde ``LombardBot``.
+    """
+    from GestorSQL import ComunidadesRonda, ComunidadesTorneo
+
+    torneo = (
+        session.query(ComunidadesTorneo)
+        .filter(ComunidadesTorneo.id == torneo_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    ronda = (
+        session.query(ComunidadesRonda)
+        .filter_by(torneo_id=torneo_id, numero=ronda_numero)
+        .with_for_update()
+        .one_or_none()
+    )
+    if torneo is None or ronda is None:
+        _error_generacion(
+            "RONDA_INEXISTENTE", "El torneo o la ronda solicitada no existe."
+        )
+    if ronda.estado == "CERRADA":
+        return {
+            "ronda_id": int(ronda.id),
+            "ronda_numero": int(ronda.numero),
+            "idempotente": True,
+        }
+    if ronda.estado != RONDA_PENDIENTE_TRANSFERENCIAS:
+        _error_generacion(
+            "VENTANA_NO_CERRABLE",
+            "Solo puede cerrarse una ronda consolidada pendiente de transferencias.",
+        )
+
+    ronda.estado = "CERRADA"
+    ronda.cerrada_en = datetime.now(timezone.utc).replace(tzinfo=None)
+    if int(ronda.numero) >= int(torneo.rondas_totales):
+        torneo.estado = "FINALIZADO"
+    session.flush()
+    return {
+        "ronda_id": int(ronda.id),
+        "ronda_numero": int(ronda.numero),
+        "idempotente": False,
     }
 
 

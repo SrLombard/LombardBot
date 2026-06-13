@@ -95,7 +95,12 @@ def test_rechaza_aliases_acentos_mayúsculas_espacios_y_erratas(raza):
 
 def test_valores_canónicos_de_estados_orígenes_y_tipos_administrativos():
     assert ESTADOS_TORNEO == {"CREADO", "EN_CURSO", "FINALIZADO"}
-    assert ESTADOS_RONDA == {"ABIERTA", "BLOQUEADA", "CERRADA"}
+    assert ESTADOS_RONDA == {
+        "ABIERTA",
+        "BLOQUEADA",
+        "PENDIENTE_TRANSFERENCIAS",
+        "CERRADA",
+    }
     assert ESTADOS_ENFRENTAMIENTO == {
         "PENDIENTE_ELECCIONES",
         "ELECCIONES_COMPLETAS",

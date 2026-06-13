@@ -164,7 +164,7 @@ Cada ronda debe almacenar:
 
 - Torneo.
 - Número.
-- Estado.
+- Estado: `ABIERTA`, `BLOQUEADA`, `PENDIENTE_TRANSFERENCIAS` o `CERRADA`.
 - Fecha de inicio y fin.
 - Usuario que la generó.
 - Fecha de cierre.
@@ -664,9 +664,11 @@ Se distribuyen entre las categorías de partidos configuradas, en orden de alta 
 
 ### 9.4. Permanencia y eliminación
 
-- Al terminar un partido individual, su canal permanece hasta el cierre de la ronda.
-- Al terminar el enfrentamiento, el canal general también permanece hasta el cierre de la ronda.
-- Al cerrar la ronda se eliminan todos los canales generales e individuales de esa ronda.
+- Al terminar un partido individual, su canal permanece mientras siga abierta la ventana de transferencias de la ronda.
+- Al terminar el enfrentamiento, el canal general también permanece mientras siga abierta esa ventana.
+- Cuando terminan todos los enfrentamientos, la ronda se consolida y pasa a `PENDIENTE_TRANSFERENCIAS`; este paso no elimina canales.
+- La ventana se cierra definitivamente justo antes de generar la ronda siguiente o mediante `!comunidades_cerrar_transferencias <torneo_id> <ronda_numero>`.
+- Al cerrar definitivamente la ventana se eliminan todos los canales generales e individuales de esa ronda.
 - No se eliminan publicaciones del foro.
 - No se eliminan mensajes del canal hub.
 
@@ -866,7 +868,8 @@ Permite redistribuir dentro de una comunidad un estado de cazador para mejorar l
 
 ### 13.2. Momento permitido
 
-Solo puede transferirse durante una ronda, después de que:
+Solo puede transferirse durante la ventana de una ronda en estado `ABIERTA` o
+`PENDIENTE_TRANSFERENCIAS`, después de que:
 
 - el equipo origen haya cerrado su enfrentamiento;
 - el equipo destino haya cerrado su enfrentamiento;
@@ -879,6 +882,18 @@ No puede transferir el estado con un enfrentamiento en curso
 ```
 
 Un intento fallido no queda pendiente: el usuario debe volver a ejecutar el comando cuando ambos enfrentamientos estén cerrados.
+
+Que todos los enfrentamientos hayan terminado consolida resultados,
+transiciones, fotografías, snapshots y clasificaciones, pero no cierra por sí
+solo la ventana. La ventana termina atómicamente antes de calcular los
+emparejamientos de la ronda siguiente. Un comisario también puede cerrarla sin
+generar otra ronda mediante:
+
+```text
+!comunidades_cerrar_transferencias <torneo_id> <ronda_numero>
+```
+
+Este cierre administrativo es la forma de cerrar la ventana de la última ronda.
 
 ### 13.3. Requisitos
 
@@ -998,21 +1013,36 @@ Se usa el ID hardcodeado existente para:
 
 ---
 
-## 17. Cierre de ronda y torneo
+## 17. Consolidación, cierre de ventana y torneo
 
-Una ronda se cierra cuando todos los enfrentamientos y byes están resueltos.
+Una ronda se consolida cuando todos los enfrentamientos y byes están resueltos.
 
-Al cerrar:
+Al consolidar:
 
 1. se comprueba que no quedan partidos ni enfrentamientos pendientes;
 2. se consolidan puntos, estados y estadísticas;
 3. se guardan snapshots de equipos y comunidades;
 4. se publican los resúmenes en el hub;
-5. se eliminan todos los canales generales e individuales de la ronda;
-6. si quedan rondas, la ronda actual queda cerrada y no se genera ni se habilita automáticamente la siguiente;
-7. si era la última, el torneo pasa a `FINALIZADO` y se publican ambas clasificaciones finales.
+5. la ronda pasa a `PENDIENTE_TRANSFERENCIAS`;
+6. los canales generales e individuales permanecen disponibles;
+7. no se genera ni se habilita automáticamente la siguiente ronda.
 
-Cuando queden rondas, un comisario deberá ejecutar explícitamente `!comunidades_generar_ronda <torneo_id> <ronda>` para crear la siguiente. La generación conserva su regla de todo o nada: si falla, la ronda anterior permanece cerrada, no se guarda parcialmente la nueva ronda y se informa del error en el canal administrativo hardcodeado.
+Cuando queden rondas, un comisario deberá ejecutar explícitamente
+`!comunidades_generar_ronda <torneo_id> <ronda>` para crear la siguiente. Esa
+acción elimina los canales de la ronda anterior y, dentro de la misma
+transacción que calcula y guarda los nuevos emparejamientos, cambia la ronda
+anterior a `CERRADA` antes del cálculo.
+
+También puede ejecutarse
+`!comunidades_cerrar_transferencias <torneo_id> <ronda_numero>` para cerrar la
+ventana sin generar otra ronda. Esta es la acción necesaria para cerrar la
+última ronda: elimina sus canales, cambia la ronda a `CERRADA` y el torneo a
+`FINALIZADO`.
+
+La generación conserva su regla de todo o nada: si falla el cálculo o la
+persistencia, no se guarda parcialmente la nueva ronda ni se cierra en base de
+datos la ventana de transferencias, y se informa del error en el canal
+administrativo hardcodeado.
 
 Los estados temporales vigentes se arrastran a la siguiente ronda cuando esta se genere. Ser zombie permanece siempre.
 
@@ -1111,7 +1141,9 @@ Todas las reglas funcionales de este documento se consideran confirmadas, en par
 - clasificación de equipos y comunidades;
 - categorías ordenadas con límite de 40 canales;
 - conservación del foro y hub;
-- eliminación de canales al cerrar ronda;
+- consolidación de la ronda en `PENDIENTE_TRANSFERENCIAS` al terminar todos los enfrentamientos, manteniendo transferencias y canales;
+- cierre definitivo de la ventana, y eliminación de sus canales, inmediatamente antes de generar la ronda siguiente o mediante `!comunidades_cerrar_transferencias`;
+- cierre atómico de la ventana antes de calcular los nuevos emparejamientos;
 - forzado con ambos atacantes obligatorios, reemplazo de elecciones y creación atómica;
 - configuración de `idCompBbowl` mediante `!comunidades_set_competicion`, solo en estado `CREADO`;
 - cierre sin generación automática de la siguiente ronda;

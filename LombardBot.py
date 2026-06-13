@@ -66,6 +66,7 @@ from ComunidadesCore import (
     configurar_competicion_comunidades,
     configurar_puntos_equipo_comunidades,
     configurar_puntos_individuales_comunidades,
+    cerrar_ventana_transferencias_comunidades,
     crear_torneo_comunidades,
     consultar_elecciones_comunidades,
     consultar_clasificacion_comunidades_comunidades,
@@ -104,6 +105,7 @@ from ComunidadesConstantes import (
     PARTIDO_PENDIENTE,
     RESULTADO_ORIGEN_API,
     RONDA_ABIERTA,
+    RONDA_PENDIENTE_TRANSFERENCIAS,
     TIPO_ADMIN_DOBLE_FORFEIT,
     TIPO_ADMIN_EMPATE,
     TIPO_ADMIN_FORFEIT_LOCAL,
@@ -4905,22 +4907,27 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
             .all()
         )
         if not rondas_abiertas:
-            ronda_cerrada = (
+            ronda_consolidada = (
                 session.query(GestorSQL.ComunidadesRonda)
-                .filter_by(torneo_id=torneo_id, estado="CERRADA")
+                .filter(
+                    GestorSQL.ComunidadesRonda.torneo_id == torneo_id,
+                    GestorSQL.ComunidadesRonda.estado.in_(
+                        (RONDA_PENDIENTE_TRANSFERENCIAS, "CERRADA")
+                    ),
+                )
                 .order_by(GestorSQL.ComunidadesRonda.numero.desc())
                 .first()
             )
-            if ronda_cerrada is None:
+            if ronda_consolidada is None:
                 await ctx.send(f"❌ No hay una ronda ABIERTA para el torneo `{torneo_id}`.")
                 return
             cierre = _consolidar_cierre_ronda_comunidades(
-                session, torneo_id, int(ronda_cerrada.numero)
+                session, torneo_id, int(ronda_consolidada.numero)
             )
             avisos = await _post_cierre_ronda_comunidades(ctx, session, cierre)
             mensaje = (
-                f"ℹ️ No hay ronda ABIERTA; se reintentó el cierre de la ronda "
-                f"{int(ronda_cerrada.numero)} sin generar la siguiente."
+                f"ℹ️ No hay ronda ABIERTA; se reintentó la consolidación de la ronda "
+                f"{int(ronda_consolidada.numero)} sin cerrar su ventana."
             )
             if avisos:
                 mensaje += "\n⚠️ " + "; ".join(avisos) + "."
@@ -5435,7 +5442,8 @@ def _estado_con_emojis_comunidades(estado_temporal: str, es_zombie: bool) -> str
 
 ESTADOS_PUBLICOS_COMUNIDADES = {
     "CREADO": "🆕", "EN_CURSO": "🟢", "FINALIZADO": "🏁",
-    "ABIERTA": "🟢", "BLOQUEADA": "🔒", "CERRADA": "✅",
+    "ABIERTA": "🟢", "BLOQUEADA": "🔒",
+    "PENDIENTE_TRANSFERENCIAS": "🔄", "CERRADA": "✅",
     "PENDIENTE_ELECCIONES": "⏳", "ELECCIONES_COMPLETAS": "🔒",
     "PARTIDOS_CREADOS": "🧩", "PENDIENTE": "⏳", "ADMINISTRADO": "🛠️",
 }
@@ -5979,7 +5987,7 @@ async def _eliminar_canales_ronda_comunidades(ctx, session, ronda_id: int):
 
 
 async def _post_cierre_ronda_comunidades(ctx, session, cierre: dict):
-    """Publica clasificaciones y limpia Discord tras confirmar el cierre BD."""
+    """Publica clasificaciones tras consolidar, conservando los canales."""
     if not cierre.get("cerrada"):
         return []
     torneo_id = int(cierre["torneo_id"])
@@ -6017,11 +6025,12 @@ async def _post_cierre_ronda_comunidades(ctx, session, cierre: dict):
         )
         siguiente = cierre.get("siguiente_ronda_numero")
         pie = (
-            "\n\n🏁 **Torneo finalizado.**"
+            "\n\n🔄 La ronda está consolidada y su ventana de transferencias "
+            "permanece abierta hasta el cierre administrativo definitivo."
             if cierre["es_ultima_ronda"]
             else (
-                f"\n\n➡️ La ronda **{int(siguiente)}** queda pendiente de generación "
-                "manual por un comisario."
+                f"\n\n🔄 La ventana de transferencias permanece abierta. Al generar "
+                f"la ronda **{int(siguiente)}**, un comisario la cerrará definitivamente."
             )
         )
         await _enviar_largo_unico_comunidades(
@@ -6033,9 +6042,6 @@ async def _post_cierre_ronda_comunidades(ctx, session, cierre: dict):
     except Exception as exc:
         avisos.append(f"clasificación de comunidades en hub: {exc}")
 
-    avisos.extend(
-        await _eliminar_canales_ronda_comunidades(ctx, session, ronda_id)
-    )
     return avisos
 
 
@@ -6472,6 +6478,25 @@ async def comunidades_generar_ronda(ctx, torneo_id: int, ronda_numero: int):
         torneo = session.get(GestorSQL.ComunidadesTorneo, torneo_id)
         if torneo is None:
             raise ErrorGeneracionRondaComunidades("TORNEO_INEXISTENTE", "El torneo no existe.")
+        if ronda_numero > 1:
+            ronda_anterior = (
+                session.query(GestorSQL.ComunidadesRonda)
+                .filter_by(torneo_id=torneo_id, numero=ronda_numero - 1)
+                .one_or_none()
+            )
+            if (
+                ronda_anterior is not None
+                and ronda_anterior.estado == RONDA_PENDIENTE_TRANSFERENCIAS
+            ):
+                avisos_limpieza = await _eliminar_canales_ronda_comunidades(
+                    ctx, session, int(ronda_anterior.id)
+                )
+                if avisos_limpieza:
+                    raise ErrorGeneracionRondaComunidades(
+                        "ERROR_CERRANDO_VENTANA",
+                        "No se pudieron eliminar todos los canales de la ronda "
+                        f"{ronda_numero - 1}: {'; '.join(avisos_limpieza)}",
+                    )
         cantidad_mesas = (
             session.query(GestorSQL.ComunidadesEquipo)
             .filter(GestorSQL.ComunidadesEquipo.torneo_id == torneo_id)
@@ -6524,6 +6549,44 @@ async def comunidades_generar_ronda(ctx, torneo_id: int, ronda_numero: int):
         await _publicar_error_administrativo_comunidades(
             ctx, f"Torneo `{torneo_id}`, ronda `{ronda_numero}`: error inesperado ({exc})."
         )
+    finally:
+        session.close()
+
+
+@bot.command(name="comunidades_cerrar_transferencias")
+async def comunidades_cerrar_transferencias(
+    ctx, torneo_id: int, ronda_numero: int
+):
+    """Cierra definitivamente la ventana y elimina los canales de la ronda."""
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+    SessionComunidades = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = SessionComunidades()
+    try:
+        resultado = cerrar_ventana_transferencias_comunidades(
+            session, torneo_id, ronda_numero
+        )
+        session.commit()
+        avisos = await _eliminar_canales_ronda_comunidades(
+            ctx, session, int(resultado["ronda_id"])
+        )
+        if avisos:
+            await ctx.send(
+                "⚠️ La ventana quedó cerrada, pero hay canales pendientes de "
+                "eliminación: " + "; ".join(avisos)
+            )
+        else:
+            await ctx.send(
+                f"✅ Ventana de transferencias de la ronda {ronda_numero} "
+                "cerrada definitivamente y canales eliminados."
+            )
+    except ErrorGeneracionRondaComunidades as exc:
+        session.rollback()
+        await ctx.send(f"❌ [{exc.codigo}] {exc.detalle}")
+    except Exception as exc:
+        session.rollback()
+        await ctx.send(f"❌ No se pudo cerrar la ventana de transferencias: {exc}")
     finally:
         session.close()
 

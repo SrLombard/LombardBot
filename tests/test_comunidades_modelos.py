@@ -228,7 +228,11 @@ def test_un_usuario_no_puede_pertenecer_a_dos_equipos_del_mismo_torneo():
     [
         (ComunidadesTorneo, 'estado', {'CREADO', 'EN_CURSO', 'FINALIZADO'}),
         (ComunidadesEquipo, 'estado_temporal', {'NEUTRO', 'CAZADOR', 'CAZADOR_Z', 'HERIDO'}),
-        (ComunidadesRonda, 'estado', {'ABIERTA', 'BLOQUEADA', 'CERRADA'}),
+        (
+            ComunidadesRonda,
+            'estado',
+            {'ABIERTA', 'BLOQUEADA', 'PENDIENTE_TRANSFERENCIAS', 'CERRADA'},
+        ),
         (ComunidadesEnfrentamiento, 'estado', {'PENDIENTE_ELECCIONES', 'ELECCIONES_COMPLETAS', 'PARTIDOS_CREADOS', 'EN_CURSO', 'CERRADO', 'ADMINISTRADO'}),
         (ComunidadesPartido, 'estado', {'PENDIENTE', 'EN_CURSO', 'FINALIZADO', 'ADMINISTRADO'}),
         (ComunidadesHistorialTransicion, 'motivo', {'VICTORIA', 'DERROTA', 'EMPATE', 'BYE', 'ZOMBIFICACION', 'KILL', 'DOBLE_FORFAIT', 'TRANSFERENCIA'}),

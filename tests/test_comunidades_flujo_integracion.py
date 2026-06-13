@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from ComunidadesCore import (
     administrar_partido_comunidades,
+    cerrar_ventana_transferencias_comunidades,
     generar_ronda_comunidades,
     procesar_cierre_ronda_comunidades_si_corresponde,
     regenerar_ronda_comunidades,
@@ -80,12 +81,21 @@ def test_ciclo_de_dos_rondas_desde_inscripcion_hasta_final_con_snapshots(
     )
     comunidades_session.commit()
     assert cierre_1["cerrada"] is True
+    assert cierre_1["motivo"] == "PENDIENTE_TRANSFERENCIAS"
+    assert (
+        comunidades_session.get(ComunidadesRonda, ronda_1["ronda_id"]).estado
+        == "PENDIENTE_TRANSFERENCIAS"
+    )
     assert cierre_1["es_ultima_ronda"] is False
     assert cierre_1["snapshot_equipos"] == len(equipos)
     assert cierre_1["snapshot_comunidades"] == len(comunidades)
 
     ronda_2 = generar_ronda_comunidades(
         comunidades_session, torneo.id, 2, 999_999, random.Random(202)
+    )
+    assert (
+        comunidades_session.get(ComunidadesRonda, ronda_1["ronda_id"]).estado
+        == "CERRADA"
     )
     assert len(ronda_2["enfrentamiento_ids"]) == 2
     _resolver_ronda_administrativamente(
@@ -98,7 +108,21 @@ def test_ciclo_de_dos_rondas_desde_inscripcion_hasta_final_con_snapshots(
     comunidades_session.commit()
     assert cierre_2["cerrada"] is True
     assert cierre_2["es_ultima_ronda"] is True
+    assert comunidades_session.get(type(torneo), torneo.id).estado == "EN_CURSO"
+    assert (
+        comunidades_session.get(ComunidadesRonda, ronda_2["ronda_id"]).estado
+        == "PENDIENTE_TRANSFERENCIAS"
+    )
+    cierre_definitivo = cerrar_ventana_transferencias_comunidades(
+        comunidades_session, torneo.id, 2
+    )
+    comunidades_session.commit()
+    assert cierre_definitivo["idempotente"] is False
     assert comunidades_session.get(type(torneo), torneo.id).estado == "FINALIZADO"
+    assert (
+        comunidades_session.get(ComunidadesRonda, ronda_2["ronda_id"]).estado
+        == "CERRADA"
+    )
     assert comunidades_session.query(ComunidadesSnapshotClasificacionEquipo).count() == 8
     assert comunidades_session.query(ComunidadesSnapshotClasificacionComunidad).count() == 8
     assert sum(equipo.partidos_jugados for equipo in equipos) == 8
@@ -164,6 +188,11 @@ def test_transferencia_tras_cerrar_ambos_enfrentamientos_es_idempotente(
     _resolver_ronda_administrativamente(
         comunidades_session, torneo, 1, materializar_enfrentamiento
     )
+    cierre = procesar_cierre_ronda_comunidades_si_corresponde(
+        comunidades_session, torneo.id, 1
+    )
+    comunidades_session.commit()
+    assert cierre["motivo"] == "PENDIENTE_TRANSFERENCIAS"
 
     transicion_origen = (
         comunidades_session.query(ComunidadesHistorialTransicion)

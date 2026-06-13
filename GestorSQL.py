@@ -574,7 +574,7 @@ class ComunidadesRonda(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     torneo_id = Column(Integer, ForeignKey('comunidades_torneo.id', ondelete='CASCADE'), nullable=False)
     numero = Column(Integer, nullable=False)
-    estado = Column(_comunidades_enum('ABIERTA', 'BLOQUEADA', 'CERRADA', name='comunidades_ronda_estado'), nullable=False, server_default=text("'ABIERTA'"))
+    estado = Column(_comunidades_enum('ABIERTA', 'BLOQUEADA', 'PENDIENTE_TRANSFERENCIAS', 'CERRADA', name='comunidades_ronda_estado'), nullable=False, server_default=text("'ABIERTA'"))
     fecha_inicio = Column(DateTime, nullable=False)
     fecha_fin = Column(DateTime, nullable=False)
     generada_por_discord_id = Column(BigInteger, nullable=False)
