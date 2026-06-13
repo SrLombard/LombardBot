@@ -302,8 +302,11 @@ def _nombre_canal_partido_comunidades(enfrentamiento: Any, partido: Any) -> str:
 def _mensaje_partido_comunidades(enfrentamiento: Any, partido: Any) -> str:
     atacante_discord_id = int(partido.atacante_usuario.id_discord)
     defensor_discord_id = int(partido.defensor_usuario.id_discord)
+    equipo_local = etiqueta_equipo_comunidades(partido.equipo_local)
+    equipo_visitante = etiqueta_equipo_comunidades(partido.equipo_visitante)
     return (
         f"## Partido {int(partido.indice)} — Mesa {int(enfrentamiento.mesa_numero)}\n"
+        f"**Equipos:** {equipo_local} vs {equipo_visitante}\n"
         f"**Atacante:** <@{atacante_discord_id}>\n"
         f"**Defensor:** <@{defensor_discord_id}>\n\n"
         f"<@{atacante_discord_id}> contra <@{defensor_discord_id}>\n"
@@ -591,6 +594,14 @@ def texto_discord_seguro_comunidades(valor: object) -> str:
     return str(valor or "").replace("@", "@\u200b")
 
 
+def etiqueta_equipo_comunidades(equipo: Any) -> str:
+    """Presenta siempre un equipo junto a la comunidad a la que pertenece."""
+    return (
+        f"{texto_discord_seguro_comunidades(equipo.nombre)} "
+        f"({texto_discord_seguro_comunidades(equipo.comunidad.nombre)})"
+    )
+
+
 def mencion_usuario_comunidades(usuario: Any) -> str:
     """Construye una mención desde un usuario persistido por comunidades."""
     discord_id = getattr(usuario, "id_discord", None)
@@ -604,7 +615,7 @@ def mencion_usuario_comunidades(usuario: Any) -> str:
 def mensaje_eleccion_ephemeral_comunidades(resultado: Any) -> str:
     """Presenta únicamente al equipo que eligió sus identidades privadas."""
     return (
-        f"**Equipo:** {texto_discord_seguro_comunidades(resultado.equipo_nombre)}\n"
+        f"**Equipo:** {etiqueta_equipo_comunidades(resultado.eleccion.equipo)}\n"
         f"**Atacante:** {mencion_usuario_comunidades(resultado.atacante)}\n"
         f"**Defensor:** {mencion_usuario_comunidades(resultado.defensor)}"
     )
@@ -715,7 +726,7 @@ async def ejecutar_seleccion_atacante_comunidades(
         mensaje_privado = mensaje_eleccion_ephemeral_comunidades(resultado)
         mensaje_publico = (
             "El equipo "
-            f"{texto_discord_seguro_comunidades(resultado.equipo_nombre)} "
+            f"{etiqueta_equipo_comunidades(resultado.eleccion.equipo)} "
             "ha elegido atacante"
         )
         requiere_materializacion = bool(resultado.requiere_crear_partidos)

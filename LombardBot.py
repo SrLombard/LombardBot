@@ -118,6 +118,7 @@ from ComunidadesConstantes import (
 from ComunidadesDiscord import (
     ErrorMaterializacionDiscordComunidades,
     ErrorSeleccionCategoriaComunidades,
+    etiqueta_equipo_comunidades,
     ejecutar_seleccion_atacante_comunidades,
     materializar_partidos_comunidades,
     mencion_usuario_comunidades,
@@ -4593,8 +4594,8 @@ def _mensaje_canal_enfrentamiento_comunidades(torneo, ronda, enfrentamiento) -> 
     return (
         f"{plantilla}\n\n"
         f"## Mesa {int(enfrentamiento.mesa_numero)}: "
-        f"{_texto_discord_seguro(enfrentamiento.equipo_a.nombre)} vs "
-        f"{_texto_discord_seguro(enfrentamiento.equipo_b.nombre)}\n"
+        f"{etiqueta_equipo_comunidades(enfrentamiento.equipo_a)} vs "
+        f"{etiqueta_equipo_comunidades(enfrentamiento.equipo_b)}\n"
         f"Jugadores: {menciones}\n\n"
         "### Selección de atacante\n"
         "Cada equipo dispone de **24 horas** para seleccionar atacante con "
@@ -4603,8 +4604,8 @@ def _mensaje_canal_enfrentamiento_comunidades(torneo, ronda, enfrentamiento) -> 
         "Después se crearán dos partidos: el atacante de cada equipo jugará "
         "contra el defensor rival.\n\n"
         f"**Fecha límite de la ronda:** {ronda.fecha_fin.strftime('%Y-%m-%d %H:%M')}\n"
-        f"**Estado inicial de {_texto_discord_seguro(enfrentamiento.equipo_a.nombre)}:** {estado_a}\n"
-        f"**Estado inicial de {_texto_discord_seguro(enfrentamiento.equipo_b.nombre)}:** {estado_b}\n\n"
+        f"**Estado inicial de {etiqueta_equipo_comunidades(enfrentamiento.equipo_a)}:** {estado_a}\n"
+        f"**Estado inicial de {etiqueta_equipo_comunidades(enfrentamiento.equipo_b)}:** {estado_b}\n\n"
         "### Resolución resumida\n"
         "Se suman los puntos internos de los dos partidos. Si hay empate, se "
         "comparan primero los TD anotados por los atacantes y después la "
@@ -4628,12 +4629,12 @@ def _resumen_ronda_comunidades(torneo, ronda, enfrentamientos, bye_equipo) -> st
         )
         lineas.append(
             f"**Mesa {int(enfrentamiento.mesa_numero)}:** "
-            f"{_texto_discord_seguro(enfrentamiento.equipo_a.nombre)} vs "
-            f"{_texto_discord_seguro(enfrentamiento.equipo_b.nombre)} — {canal}"
+            f"{etiqueta_equipo_comunidades(enfrentamiento.equipo_a)} vs "
+            f"{etiqueta_equipo_comunidades(enfrentamiento.equipo_b)} — {canal}"
         )
     if bye_equipo is not None:
         lineas.extend(
-            ["", f"**BYE:** {_texto_discord_seguro(bye_equipo.nombre)} (sin canal)"]
+            ["", f"**BYE:** {etiqueta_equipo_comunidades(bye_equipo)} (sin canal)"]
         )
     return "\n".join(lineas)
 
@@ -4719,7 +4720,7 @@ def _formatear_consulta_elecciones_comunidades(torneo_id, ronda_numero, filas):
             f"enfrentamiento `{int(enfrentamiento.id)}`**"
         )
         for eleccion in fila.elecciones:
-            equipo = str(eleccion.equipo.nombre).replace("@", "@\u200b")
+            equipo = etiqueta_equipo_comunidades(eleccion.equipo)
             if eleccion.pendiente:
                 lineas.append(f"- **{equipo}** — ⏳ PENDIENTE")
                 continue
@@ -5493,13 +5494,13 @@ def _formatear_ronda_publica(resultado: dict) -> str:
         eb = _estado_con_emojis_comunidades(fila["estado_b"]["estado_temporal"], fila["estado_b"]["es_zombie"])
         canal = f"<#{int(fila['canal_general_discord_id'])}>" if fila["canal_general_discord_id"] else "⚠️ sin canal"
         lineas += [f"### Mesa {fila['mesa']} · {_estado_publico_comunidades(fila['estado'])}",
-                   f"{ea} **{_texto_discord_seguro(fila['equipo_a'].nombre)}** vs {eb} **{_texto_discord_seguro(fila['equipo_b'].nombre)}**",
+                   f"{ea} **{etiqueta_equipo_comunidades(fila['equipo_a'])}** vs {eb} **{etiqueta_equipo_comunidades(fila['equipo_b'])}**",
                    f"📺 Canal general: {canal}"]
         if fila["estado"] in (ENFRENTAMIENTO_CERRADO, ENFRENTAMIENTO_ADMINISTRADO):
             lineas.append(f"🏁 Internos **{_decimal_publico_comunidades(fila['puntos_internos_a'])}-{_decimal_publico_comunidades(fila['puntos_internos_b'])}** · Clasificación **{_decimal_publico_comunidades(fila['puntos_clasificacion_a'])}-{_decimal_publico_comunidades(fila['puntos_clasificacion_b'])}**")
         lineas.append("")
     if resultado["bye_equipo"] is not None:
-        lineas.append(f"🛌 **BYE:** {_texto_discord_seguro(resultado['bye_equipo'].nombre)}")
+        lineas.append(f"🛌 **BYE:** {etiqueta_equipo_comunidades(resultado['bye_equipo'])}")
     lineas.append("🔐 Las elecciones de atacante no se muestran en esta consulta pública.")
     return "\n".join(lineas)
 
@@ -5512,7 +5513,7 @@ def _formatear_equipos_publico(resultado: dict) -> str:
     for f in resultado["filas"]:
         estado = _estado_con_emojis_comunidades(f["estado_temporal"], f["es_zombie"])
         h2h = "-" if f["h2h_valor"] is None else _decimal_publico_comunidades(f["h2h_valor"])
-        lineas += [f"**{f['posicion']}.** {estado} **{_texto_discord_seguro(f['nombre'])}** · 🏘️ {_texto_discord_seguro(f['comunidad_nombre'])}",
+        lineas += [f"**{f['posicion']}.** {estado} **{_texto_discord_seguro(f['nombre'])} ({_texto_discord_seguro(f['comunidad_nombre'])})**",
                    f"🏆 PTS **{_decimal_publico_comunidades(f['puntos'])}** · PJ {f['pj']} ({f['pg']}/{f['pe']}/{f['pp']}) · 🛌 {f['cantidad_byes']} · BH {_decimal_publico_comunidades(f['buchholz_cut'])} · H2H {h2h} · TD {f['td_favor']}-{f['td_contra']} ({f['diferencia_td']:+d})"]
     if resultado["fuente"] == "SNAPSHOT":
         lineas.append("\nℹ️ Los puntos son históricos; los emojis muestran el estado actual.")
@@ -5534,7 +5535,7 @@ def _formatear_equipo_publico(resultado: dict) -> str:
     equipo, fila = resultado["equipo"], resultado["clasificacion"]
     estado = _estado_con_emojis_comunidades(equipo.estado_temporal, equipo.es_zombie)
     lineas = _cabecera_publica_comunidades(resultado["torneo"], "Consulta de equipo")
-    lineas += [f"Equipo: {estado} **{_texto_discord_seguro(equipo.nombre)}**", f"🏘️ Comunidad: **{_texto_discord_seguro(equipo.comunidad.nombre)}**", "", "### Integrantes"]
+    lineas += [f"Equipo: {estado} **{etiqueta_equipo_comunidades(equipo)}**", "", "### Integrantes"]
     for m in resultado["miembros"]:
         lineas.append(f"{m.posicion}. {_mencion_publica_comunidades(m.usuario)} · 🧬 **{_texto_discord_seguro(m.raza)}**")
     if fila:
@@ -5549,7 +5550,7 @@ def _formatear_estados_publico(resultado: dict) -> str:
         lineas.append("ℹ️ Todavía no hay equipos inscritos.")
     for dato in resultado["filas"]:
         e, f = dato["equipo"], dato["clasificacion"]
-        lineas.append(f"**{f['posicion']}.** {_estado_con_emojis_comunidades(e.estado_temporal, e.es_zombie)} **{_texto_discord_seguro(e.nombre)}** · 🏘️ {_texto_discord_seguro(e.comunidad.nombre)}")
+        lineas.append(f"**{f['posicion']}.** {_estado_con_emojis_comunidades(e.estado_temporal, e.es_zombie)} **{etiqueta_equipo_comunidades(e)}**")
     lineas.append("\nLeyenda: ⚪ neutro · 🏹 cazador · 🩸 herido · 🧟 zombie · 🏹🧟 cazador Z.")
     return "\n".join(lineas)
 
@@ -5561,7 +5562,12 @@ def _formatear_canales_publico(resultado: dict) -> str:
         lineas.append("ℹ️ No hay enfrentamientos ni canales en esta ronda.")
     for f in resultado["filas"]:
         general = f"<#{int(f['canal_general_discord_id'])}>" if f["canal_general_discord_id"] else "⚠️ sin canal"
-        lineas += [f"### Mesa {f['mesa']} · {_estado_publico_comunidades(f['estado'])}", f"**{_texto_discord_seguro(f['equipo_a'].nombre)}** vs **{_texto_discord_seguro(f['equipo_b'].nombre)}**", f"📺 General: {general}"]
+        lineas += [
+            f"### Mesa {f['mesa']} · {_estado_publico_comunidades(f['estado'])}",
+            f"**{etiqueta_equipo_comunidades(f['equipo_a'])}** vs "
+            f"**{etiqueta_equipo_comunidades(f['equipo_b'])}**",
+            f"📺 General: {general}",
+        ]
         if not f["partidos"]:
             lineas.append("🔐 Individuales: aún no materializados.")
         for p in f["partidos"]:
@@ -5611,6 +5617,8 @@ async def comunidades_estado_canales(interaction: discord.Interaction, torneo_id
 def _texto_partido_comunidades(partido) -> str:
     return (
         f"🏟️ **Resultado individual · Partido {int(partido.indice)}**\n"
+        f"{etiqueta_equipo_comunidades(partido.equipo_local)} vs "
+        f"{etiqueta_equipo_comunidades(partido.equipo_visitante)}\n"
         f"{_texto_discord_seguro(_nombre_usuario_comunidades(partido.usuario_local))} "
         f"**{int(partido.td_local)}-{int(partido.td_visitante)}** "
         f"{_texto_discord_seguro(_nombre_usuario_comunidades(partido.usuario_visitante))}\n"
@@ -5654,7 +5662,7 @@ def _textos_transiciones_comunidades(session, enfrentamiento):
             transicion.estado_temporal_posterior,
             bool(transicion.es_zombie_posterior),
         )
-        nombre = _texto_discord_seguro(equipo.nombre)
+        nombre = etiqueta_equipo_comunidades(equipo)
         lineas.append(
             f"- **{nombre}**: {anterior} → {posterior} (`{transicion.motivo}`)"
         )
@@ -5680,8 +5688,8 @@ def _textos_transiciones_comunidades(session, enfrentamiento):
 
 
 def _texto_global_comunidades(session, enfrentamiento, *, para_hub=False) -> str:
-    equipo_a = _texto_discord_seguro(enfrentamiento.equipo_a.nombre)
-    equipo_b = _texto_discord_seguro(enfrentamiento.equipo_b.nombre)
+    equipo_a = etiqueta_equipo_comunidades(enfrentamiento.equipo_a)
+    equipo_b = etiqueta_equipo_comunidades(enfrentamiento.equipo_b)
     if bool(enfrentamiento.es_doble_forfait):
         desenlace = "doble forfait global"
     elif enfrentamiento.ganador_equipo_id is None:
@@ -5714,8 +5722,8 @@ async def publicar_transferencia_comunidades_en_hub(ctx, transferencia) -> bool:
     contenido = (
         f"{emoji} **Transferencia de estado**\n"
         f"Comunidad: **{_texto_discord_seguro(transferencia.comunidad.nombre)}** · "
-        f"Origen: **{_texto_discord_seguro(transferencia.equipo_origen.nombre)}** · "
-        f"Destino: **{_texto_discord_seguro(transferencia.equipo_destino.nombre)}** · "
+        f"Origen: **{etiqueta_equipo_comunidades(transferencia.equipo_origen)}** · "
+        f"Destino: **{etiqueta_equipo_comunidades(transferencia.equipo_destino)}** · "
         f"Tipo: **{transferencia.tipo}**"
     )
     return await _enviar_unico_comunidades(canal, marca, contenido)
@@ -6094,8 +6102,8 @@ def _datos_resultado_admin_comunidades(tipo, td_local, td_visitante):
 def _mensaje_resultado_admin_comunidades(resultado, tipo):
     partido = resultado.partido
     enfrentamiento = resultado.enfrentamiento
-    local = _texto_discord_seguro(partido.equipo_local.nombre)
-    visitante = _texto_discord_seguro(partido.equipo_visitante.nombre)
+    local = etiqueta_equipo_comunidades(partido.equipo_local)
+    visitante = etiqueta_equipo_comunidades(partido.equipo_visitante)
     mensaje = (
         f"🛠️ **Partido {int(partido.indice)} administrado**\n"
         f"{local} **{int(partido.td_local)}-{int(partido.td_visitante)}** {visitante}\n"
@@ -6107,8 +6115,8 @@ def _mensaje_resultado_admin_comunidades(resultado, tipo):
         return mensaje + "\nEl enfrentamiento continúa pendiente del otro partido."
 
     global_ = resultado.resultado_global
-    equipo_a = _texto_discord_seguro(enfrentamiento.equipo_a.nombre)
-    equipo_b = _texto_discord_seguro(enfrentamiento.equipo_b.nombre)
+    equipo_a = etiqueta_equipo_comunidades(enfrentamiento.equipo_a)
+    equipo_b = etiqueta_equipo_comunidades(enfrentamiento.equipo_b)
     if bool(enfrentamiento.es_doble_forfait):
         desenlace = "doble forfait global"
     elif global_.ganador is None:
@@ -9378,4 +9386,3 @@ async def func_proximos_partidos_suizo_emparejamiento(bot, usuario, torneo_id, c
         
 # Ejecutar el bot con el token correspondiente
 bot.run(discord_bot_token)
-

@@ -647,6 +647,7 @@ En la v1 no habrá comandos para editar estos campos: su alta y modificación se
 
 El mensaje resultante del canal general debe explicar:
 
+- los nombres de ambos equipos seguidos, entre paréntesis, por el nombre de su comunidad;
 - que cada equipo dispone de 24 horas para seleccionar atacante;
 - cómo ejecutar `/comunidades_seleccion_atacante`;
 - que la elección es secreta;
@@ -657,7 +658,7 @@ El mensaje resultante del canal general debe explicar:
 
 ### 9.3. Canales individuales
 
-Cuando ambos equipos hayan elegido, se crean dos canales adicionales con permisos, fechas y publicación de resultados equivalentes al suizo actual, pero con mensajes específicos de este formato que identifiquen atacante y defensor.
+Cuando ambos equipos hayan elegido, se crean dos canales adicionales con permisos, fechas y publicación de resultados equivalentes al suizo actual, pero con mensajes específicos de este formato que identifiquen atacante y defensor. Siempre que el mensaje mencione un equipo, debe añadir su comunidad entre paréntesis.
 
 Se distribuyen entre las categorías de partidos configuradas, en orden de alta y con límite de 40 canales por categoría, contando todos los canales existentes.
 
@@ -687,7 +688,7 @@ Reglas:
 4. Puede elegirse a sí mismo o a su compañero.
 5. No puede elegir para otro equipo ni para otro enfrentamiento.
 6. La respuesta al usuario es ephemeral y muestra atacante y defensor.
-7. En el canal público solo aparece: `El equipo NOMBREEQUIPO ha elegido atacante`.
+7. En el canal público solo aparece: `El equipo NOMBREEQUIPO (COMUNIDAD) ha elegido atacante`.
 8. La identidad elegida permanece secreta para el rival.
 9. Puede cambiarse mientras el rival todavía no haya elegido.
 10. Cuando ambos han elegido, las elecciones quedan bloqueadas.
@@ -950,6 +951,10 @@ Columnas mínimas:
 ---
 
 ## 16. Publicaciones y visibilidad
+
+En todos los mensajes, resúmenes y respuestas de comandos de este formato que
+mencionen equipos, el nombre de cada equipo debe ir seguido por el nombre de su
+comunidad entre paréntesis: `NOMBREEQUIPO (COMUNIDAD)`.
 
 ### 16.1. Foro de resultados
 
