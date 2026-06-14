@@ -5163,23 +5163,6 @@ LOGGER_COMUNIDADES = logging.getLogger("lombardbot.comunidades")
 FORO_RESULTADOS_ID = 1223765590146158653
 
 
-def _marca_publicacion_comunidades(tipo: str, registro_id: int) -> str:
-    return f"||pub:comunidades:{tipo}:{int(registro_id)}||"
-
-
-async def _canal_contiene_marca_comunidades(canal, marca: str) -> bool:
-    historial = getattr(canal, "history", None)
-    if not callable(historial):
-        return False
-    try:
-        async for mensaje in historial(limit=None):
-            if marca in str(getattr(mensaje, "content", "") or ""):
-                return True
-    except Exception:
-        return False
-    return False
-
-
 def _contexto_publicacion_comunidades(session, tipo: str, registro_id: int):
     """Resuelve el contexto de una clave de publicación sin confiar en Discord."""
     if tipo.startswith("partido-"):
@@ -5220,14 +5203,13 @@ def _contexto_publicacion_comunidades(session, tipo: str, registro_id: int):
     raise ValueError(f"tipo de publicación no registrado: {tipo}")
 
 
-def _reservar_publicacion_comunidades(marca: str, *, lease_segundos: int = 300):
-    coincidencia = re.fullmatch(
-        r"\|\|pub:comunidades:(?P<tipo>[^:]+):(?P<id>\d+)\|\|", marca
-    )
-    if coincidencia is None:
-        raise ValueError("marca de publicación de comunidades inválida")
-    tipo = coincidencia.group("tipo")
-    registro_id = int(coincidencia.group("id"))
+def _reservar_publicacion_comunidades(
+    tipo: str, registro_id: int, *, lease_segundos: int = 300
+):
+    tipo = str(tipo).strip()
+    registro_id = int(registro_id)
+    if not tipo or ":" in tipo or registro_id <= 0:
+        raise ValueError("identificador de publicación de comunidades inválido")
     clave = f"publicacion:{tipo}:{registro_id}"
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
@@ -5269,23 +5251,19 @@ def _finalizar_publicacion_comunidades(
         session.close()
 
 
-async def _enviar_unico_comunidades(canal, marca: str, contenido: str, **kwargs) -> bool:
-    """Publica una vez con reserva persistida y marca verificable en Discord."""
+async def _enviar_unico_comunidades(
+    canal, tipo: str, registro_id: int, contenido: str, **kwargs
+) -> bool:
+    """Publica una vez usando exclusivamente la reserva idempotente persistida."""
     if canal is None:
         raise RuntimeError("canal de publicación no disponible")
-    if await _canal_contiene_marca_comunidades(canal, marca):
-        clave, reservada, _ = _reservar_publicacion_comunidades(
-            marca, lease_segundos=0
-        )
-        if reservada:
-            _finalizar_publicacion_comunidades(clave)
-        return False
-    clave, reservada, contexto = _reservar_publicacion_comunidades(marca)
+    clave, reservada, contexto = _reservar_publicacion_comunidades(
+        tipo, registro_id
+    )
     if not reservada:
         return False
-    texto = f"{contenido}\n{marca}" if contenido else marca
     try:
-        mensaje = await canal.send(texto, **kwargs)
+        mensaje = await canal.send(contenido, **kwargs)
         _finalizar_publicacion_comunidades(
             clave, mensaje_id=getattr(mensaje, "id", None)
         )
@@ -5315,9 +5293,8 @@ async def _enviar_largo_unico_comunidades(
         enviado = (
             await _enviar_unico_comunidades(
                 canal,
-                _marca_publicacion_comunidades(
-                    f"{tipo}-parte-{indice}", registro_id
-                ),
+                f"{tipo}-parte-{indice}",
+                registro_id,
                 cabecera + parte,
             )
             or enviado
@@ -5722,11 +5699,10 @@ def _texto_global_comunidades(session, enfrentamiento, *, para_hub=False) -> str
 
 
 async def publicar_transferencia_comunidades_en_hub(ctx, transferencia) -> bool:
-    """Publica una transferencia en el hub con una marca idempotente."""
+    """Publica una transferencia en el hub de forma idempotente."""
     torneo = transferencia.comunidad.torneo
     canal = await _resolver_canal_notificacion_comunidades(ctx, torneo.canal_hub_id)
     emoji = EMOJI_CAZADOR_Z if transferencia.tipo == "CAZADOR_Z" else EMOJI_CAZADOR
-    marca = _marca_publicacion_comunidades("transferencia-hub", transferencia.id)
     contenido = (
         f"{emoji} **Transferencia de estado**\n"
         f"Comunidad: **{_texto_discord_seguro(transferencia.comunidad.nombre)}** · "
@@ -5734,7 +5710,9 @@ async def publicar_transferencia_comunidades_en_hub(ctx, transferencia) -> bool:
         f"Destino: **{etiqueta_equipo_comunidades(transferencia.equipo_destino)}** · "
         f"Tipo: **{transferencia.tipo}**"
     )
-    return await _enviar_unico_comunidades(canal, marca, contenido)
+    return await _enviar_unico_comunidades(
+        canal, "transferencia-hub", transferencia.id, contenido
+    )
 
 
 @bot.tree.command(
@@ -5817,9 +5795,9 @@ async def publicar_resultado_partido_comunidades(
 ):
     """Publica un partido consolidado y, si es el segundo, todos sus efectos.
 
-    La función se llama después del commit. Cada destino se protege con una marca
-    estable en Discord, por lo que un fallo parcial puede reintentarse sin repetir
-    las publicaciones que ya llegaron a enviarse.
+    La función se llama después del commit. Cada destino se protege mediante una
+    reserva idempotente persistida, de modo que los reintentos no repiten las
+    publicaciones que ya llegaron a enviarse.
     """
     partido = session.query(GestorSQL.ComunidadesPartido).get(int(partido_id))
     if partido is None or partido.estado not in {PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO}:
@@ -5831,7 +5809,8 @@ async def publicar_resultado_partido_comunidades(
     try:
         await _enviar_unico_comunidades(
             canal_individual,
-            _marca_publicacion_comunidades("partido-canal", partido.id),
+            "partido-canal",
+            partido.id,
             _texto_partido_comunidades(partido),
         )
     except Exception as exc:
@@ -5846,15 +5825,14 @@ async def publicar_resultado_partido_comunidades(
             raise RuntimeError("foro de resultados no disponible")
         titulo = f"{partido.enfrentamiento.torneo.nombre} J{partido.enfrentamiento.ronda.numero}"
         ronda_id = int(partido.enfrentamiento.ronda_id)
-        marca_hilo = _marca_publicacion_comunidades("hilo-foro", ronda_id)
         clave_hilo, reserva_hilo, _ = _reservar_publicacion_comunidades(
-            marca_hilo
+            "hilo-foro", ronda_id
         )
         hilo = await _buscar_hilo_resultados_comunidades(foro, titulo)
         if hilo is None and reserva_hilo:
             try:
                 creado = await foro.create_thread(
-                    name=titulo, content=f"Resultados de {titulo}\n{marca_hilo}"
+                    name=titulo, content=f"Resultados de {titulo}"
                 )
                 hilo = creado.thread
                 _finalizar_publicacion_comunidades(
@@ -5871,14 +5849,13 @@ async def publicar_resultado_partido_comunidades(
             )
         if getattr(hilo, "archived", False):
             await hilo.edit(archived=False)
-        marca = _marca_publicacion_comunidades("partido-foro", partido.id)
         ruta = _crear_imagen_resultado_comunidades(session, partido, match)
         if not ruta:
             raise RuntimeError("no se pudo generar la imagen")
         try:
             with open(ruta, "rb") as imagen:
                 await _enviar_unico_comunidades(
-                    hilo, marca, "", file=File(imagen)
+                    hilo, "partido-foro", partido.id, "", file=File(imagen)
                 )
         finally:
             Imagenes.eliminar_imagen(ruta)
@@ -5894,7 +5871,8 @@ async def publicar_resultado_partido_comunidades(
     try:
         await _enviar_unico_comunidades(
             canal_general,
-            _marca_publicacion_comunidades("global-general", enfrentamiento.id),
+            "global-general",
+            enfrentamiento.id,
             _texto_global_comunidades(session, enfrentamiento),
         )
     except Exception as exc:
@@ -5905,7 +5883,8 @@ async def publicar_resultado_partido_comunidades(
     try:
         await _enviar_unico_comunidades(
             canal_hub,
-            _marca_publicacion_comunidades("global-hub", enfrentamiento.id),
+            "global-hub",
+            enfrentamiento.id,
             _texto_global_comunidades(session, enfrentamiento, para_hub=True),
         )
     except Exception as exc:
