@@ -597,8 +597,8 @@ def texto_discord_seguro_comunidades(valor: object) -> str:
 def etiqueta_equipo_comunidades(equipo: Any) -> str:
     """Presenta siempre un equipo junto a la comunidad a la que pertenece."""
     return (
-        f"{texto_discord_seguro_comunidades(equipo.nombre)} "
-        f"({texto_discord_seguro_comunidades(equipo.comunidad.nombre)})"
+        f"[{texto_discord_seguro_comunidades(equipo.comunidad.nombre)}] "
+        f"{texto_discord_seguro_comunidades(equipo.nombre)}"
     )
 
 
@@ -610,6 +610,87 @@ def mencion_usuario_comunidades(usuario: Any) -> str:
             getattr(usuario, "nombre_discord", "Jugador")
         )
     return f"<@{int(discord_id)}>"
+
+
+def mensajes_canal_enfrentamiento_comunidades(
+    torneo: Any, ronda: Any, enfrentamiento: Any
+) -> Tuple[str, Optional[str]]:
+    """Construye el mensaje general y, si existe, el aviso configurable posterior."""
+    fotos = {int(foto.equipo_id): foto for foto in enfrentamiento.fotografias_estado}
+
+    def estado_visible(fotografia: Any) -> str:
+        partes = []
+        if bool(fotografia.es_zombie):
+            partes.append("ZOMBIE")
+        estado_temporal = str(fotografia.estado_temporal or "NEUTRO")
+        if estado_temporal != "NEUTRO" or not partes:
+            partes.append(estado_temporal.replace("_", " "))
+        return " + ".join(partes)
+
+    equipos = (enfrentamiento.equipo_a, enfrentamiento.equipo_b)
+    lineas_jugadores = []
+    preferencias = []
+    for equipo in equipos:
+        if lineas_jugadores:
+            lineas_jugadores.append("")
+        lineas_jugadores.append(f"**{etiqueta_equipo_comunidades(equipo)}**")
+        for miembro in sorted(equipo.miembros, key=lambda item: int(item.posicion)):
+            usuario = miembro.usuario
+            nombre_bloodbowl = texto_discord_seguro_comunidades(
+                getattr(usuario, "nombre_bloodbowl", None)
+                or "Nombre de Blood Bowl no indicado"
+            )
+            raza = texto_discord_seguro_comunidades(miembro.raza)
+            lineas_jugadores.append(
+                f"- {mencion_usuario_comunidades(usuario)} — "
+                f"**{nombre_bloodbowl}** — {raza}"
+            )
+            preferencia = getattr(
+                getattr(usuario, "preferencias_fecha", None), "preferencia", ""
+            )
+            if preferencia and str(preferencia).strip():
+                preferencias.append(
+                    f"- {mencion_usuario_comunidades(usuario)} suele poder jugar "
+                    f"{texto_discord_seguro_comunidades(str(preferencia).strip())}"
+                )
+
+    estado_a = estado_visible(fotos[int(enfrentamiento.equipo_a_id)])
+    estado_b = estado_visible(fotos[int(enfrentamiento.equipo_b_id)])
+    seccion_preferencias = ""
+    if preferencias:
+        seccion_preferencias = "\n\n### Preferencias horarias\n" + "\n".join(
+            preferencias
+        )
+
+    jugadores = "\n".join(lineas_jugadores)
+    mensaje_general = (
+        f"## Mesa {int(enfrentamiento.mesa_numero)}: "
+        f"{etiqueta_equipo_comunidades(enfrentamiento.equipo_a)} vs "
+        f"{etiqueta_equipo_comunidades(enfrentamiento.equipo_b)}\n\n"
+        "### Jugadores\n"
+        f"{jugadores}"
+        f"{seccion_preferencias}\n\n"
+        "### Selección de atacante\n"
+        "Cada equipo dispone de **24 horas** para seleccionar atacante con "
+        "`/comunidades_seleccion_atacante`. La elección es secreta hasta que "
+        "ambos equipos hayan elegido.\n"
+        "Después se crearán dos partidos: el atacante de cada equipo jugará "
+        "contra el defensor rival.\n\n"
+        f"**Fecha límite de la ronda:** {ronda.fecha_fin.strftime('%Y-%m-%d %H:%M')}\n"
+        f"**Estado inicial de {etiqueta_equipo_comunidades(enfrentamiento.equipo_a)}:** {estado_a}\n"
+        f"**Estado inicial de {etiqueta_equipo_comunidades(enfrentamiento.equipo_b)}:** {estado_b}\n\n"
+        "### Resolución resumida\n"
+        "Se suman los puntos internos de los dos partidos. Si hay empate, se "
+        "comparan primero los TD anotados por los atacantes y después la "
+        "diferencia global de TD; si persiste, el enfrentamiento termina empatado."
+    )
+    plantilla = (
+        torneo.plantilla_mensaje_ronda1
+        if int(ronda.numero) == 1
+        else torneo.plantilla_mensaje_rondas_siguientes
+    )
+    mensaje_adicional = str(plantilla).strip() if plantilla is not None else ""
+    return mensaje_general, mensaje_adicional or None
 
 
 def mensaje_eleccion_ephemeral_comunidades(resultado: Any) -> str:

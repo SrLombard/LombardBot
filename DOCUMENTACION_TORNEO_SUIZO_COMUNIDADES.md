@@ -338,7 +338,7 @@ Argumentos:
 
 El torneo se crea en estado `CREADO`. La creación no exige informar todavía el ID de competición de Blood Bowl.
 
-Como los dos campos de plantilla son obligatorios, el sistema los inicializa con valores técnicos pendientes de configuración. El mensaje de confirmación recuerda que, antes de generar la ronda 1, deben rellenarse directamente en base de datos `plantilla_mensaje_ronda1` y `plantilla_mensaje_rondas_siguientes`. En la v1 no existe un comando para editar estas plantillas.
+Los dos campos de plantilla son `NOT NULL`, por lo que el sistema los inicializa con valores técnicos pendientes de configuración. Antes de generar la ronda 1 deben revisarse directamente en base de datos `plantilla_mensaje_ronda1` y `plantilla_mensaje_rondas_siguientes`. Una cadena vacía desactiva el mensaje adicional de la ronda correspondiente. En la v1 no existe un comando para editar estas plantillas.
 
 ### 6.2. Configurar competición de Blood Bowl
 
@@ -638,16 +638,20 @@ Si tiene 40 canales, se prueba la siguiente categoría según orden de alta. Si 
 
 ### 9.2. Contenido del canal general
 
-Los mensajes de los canales son configurables por torneo mediante dos campos de texto obligatorios en la tabla del torneo, con los nombres `mensajeInicial` y `mensajesSubsiguientes`:
+Los mensajes adicionales de los canales son configurables por torneo mediante dos campos de texto `NOT NULL` en la tabla del torneo:
 
-- `mensajeInicial` se utiliza en los canales creados para la ronda 1;
-- `mensajesSubsiguientes` se utiliza en los canales creados para las rondas 2 y siguientes.
+- `plantilla_mensaje_ronda1` se utiliza en los canales creados para la ronda 1;
+- `plantilla_mensaje_rondas_siguientes` se utiliza en los canales creados para las rondas 2 y siguientes.
 
-En la v1 no habrá comandos para editar estos campos: su alta y modificación se realizarán directamente en base de datos. El texto exacto no queda hardcodeado en el bot. Si las plantillas contienen marcadores, la implementación solo podrá sustituir los marcadores admitidos expresamente por el contrato técnico correspondiente.
+En la v1 no habrá comandos para editar estos campos: su alta y modificación se realizarán directamente en base de datos. Una cadena vacía indica que no debe publicarse ningún mensaje adicional para esas rondas. El texto exacto no queda hardcodeado en el bot. Si las plantillas contienen marcadores, la implementación solo podrá sustituir los marcadores admitidos expresamente por el contrato técnico correspondiente.
 
-El mensaje resultante del canal general debe explicar:
+Al crear el canal se publica primero un mensaje automático estructurado. Después se publica, como segundo mensaje independiente, la plantilla correspondiente a la ronda, salvo que esté vacía.
 
-- los nombres de ambos equipos seguidos, entre paréntesis, por el nombre de su comunidad;
+El mensaje automático del canal general debe explicar:
+
+- los nombres de ambos equipos precedidos por el nombre de su comunidad con el formato `[Nombre comunidad] Nombre equipo`;
+- los cuatro jugadores agrupados por equipo, indicando para cada uno su mención de Discord, nombre de Blood Bowl y la raza registrada en `comunidades_miembro` para este torneo;
+- después de los jugadores, las preferencias horarias guardadas mediante `/preferenciahorario`, únicamente para quienes hayan informado una;
 - que cada equipo dispone de 24 horas para seleccionar atacante;
 - cómo ejecutar `/comunidades_seleccion_atacante`;
 - que la elección es secreta;
@@ -658,7 +662,7 @@ El mensaje resultante del canal general debe explicar:
 
 ### 9.3. Canales individuales
 
-Cuando ambos equipos hayan elegido, se crean dos canales adicionales con permisos, fechas y publicación de resultados equivalentes al suizo actual, pero con mensajes específicos de este formato que identifiquen atacante y defensor. Siempre que el mensaje mencione un equipo, debe añadir su comunidad entre paréntesis.
+Cuando ambos equipos hayan elegido, se crean dos canales adicionales con permisos, fechas y publicación de resultados equivalentes al suizo actual, pero con mensajes específicos de este formato que identifiquen atacante y defensor. Siempre que el mensaje mencione un equipo, debe anteponer su comunidad con el formato `[Nombre comunidad] Nombre equipo`.
 
 Se distribuyen entre las categorías de partidos configuradas, en orden de alta y con límite de 40 canales por categoría, contando todos los canales existentes.
 
@@ -968,8 +972,8 @@ Columnas mínimas:
 ## 16. Publicaciones y visibilidad
 
 En todos los mensajes, resúmenes y respuestas de comandos de este formato que
-mencionen equipos, el nombre de cada equipo debe ir seguido por el nombre de su
-comunidad entre paréntesis: `NOMBREEQUIPO (COMUNIDAD)`.
+mencionen equipos, el nombre de la comunidad debe aparecer delante del nombre
+del equipo y entre corchetes: `[COMUNIDAD] NOMBREEQUIPO`.
 
 ### 16.1. Foro de resultados
 

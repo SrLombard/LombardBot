@@ -124,6 +124,7 @@ from ComunidadesDiscord import (
     ejecutar_seleccion_atacante_comunidades,
     materializar_partidos_comunidades,
     mencion_usuario_comunidades,
+    mensajes_canal_enfrentamiento_comunidades,
     parsear_decimal,
     parsear_fecha_limite,
     planificar_categorias_comunidades,
@@ -4333,8 +4334,9 @@ async def comunidades_crear(
         f"**{torneo.fecha_fin_ronda1.strftime('%Y-%m-%d %H:%M')}** | "
         f"Días por ronda: **{torneo.dias_por_ronda}**\n"
         f"Canal hub: **{torneo.canal_hub_id}**\n"
-        "⚠️ Antes de generar la ronda 1, rellena directamente en BD "
-        "`plantilla_mensaje_ronda1` y `plantilla_mensaje_rondas_siguientes`. "
+        "⚠️ Antes de generar la ronda 1, revisa directamente en BD "
+        "`plantilla_mensaje_ronda1` y `plantilla_mensaje_rondas_siguientes`; "
+        "déjalas vacías si no quieres publicar el mensaje adicional. "
         "En esta versión no existe un comando para editarlas."
     )
 
@@ -4562,57 +4564,6 @@ def _normalizar_nombre_canal_comunidades(valor: object) -> str:
     texto = unicodedata.normalize("NFKD", str(valor)).encode("ascii", "ignore").decode()
     texto = re.sub(r"[^a-zA-Z0-9]+", "-", texto.lower()).strip("-")
     return texto or "equipo"
-
-
-def _estado_visible_comunidades(fotografia) -> str:
-    partes = []
-    if bool(fotografia.es_zombie):
-        partes.append("ZOMBIE")
-    estado_temporal = str(fotografia.estado_temporal or "NEUTRO")
-    if estado_temporal != "NEUTRO" or not partes:
-        partes.append(estado_temporal.replace("_", " "))
-    return " + ".join(partes)
-
-
-def _mensaje_canal_enfrentamiento_comunidades(torneo, ronda, enfrentamiento) -> str:
-    plantilla = (
-        torneo.plantilla_mensaje_ronda1
-        if int(ronda.numero) == 1
-        else torneo.plantilla_mensaje_rondas_siguientes
-    )
-    fotos = {int(foto.equipo_id): foto for foto in enfrentamiento.fotografias_estado}
-    estado_a = _estado_visible_comunidades(fotos[int(enfrentamiento.equipo_a_id)])
-    estado_b = _estado_visible_comunidades(fotos[int(enfrentamiento.equipo_b_id)])
-    miembros = [
-        miembro
-        for equipo in (enfrentamiento.equipo_a, enfrentamiento.equipo_b)
-        for miembro in sorted(equipo.miembros, key=lambda item: int(item.posicion))
-    ]
-    menciones = " ".join(
-        f"<@{int(miembro.usuario.id_discord)}>"
-        for miembro in miembros
-        if miembro.usuario is not None and miembro.usuario.id_discord is not None
-    )
-    return (
-        f"{plantilla}\n\n"
-        f"## Mesa {int(enfrentamiento.mesa_numero)}: "
-        f"{etiqueta_equipo_comunidades(enfrentamiento.equipo_a)} vs "
-        f"{etiqueta_equipo_comunidades(enfrentamiento.equipo_b)}\n"
-        f"Jugadores: {menciones}\n\n"
-        "### Selección de atacante\n"
-        "Cada equipo dispone de **24 horas** para seleccionar atacante con "
-        "`/comunidades_seleccion_atacante`. La elección es secreta hasta que "
-        "ambos equipos hayan elegido.\n"
-        "Después se crearán dos partidos: el atacante de cada equipo jugará "
-        "contra el defensor rival.\n\n"
-        f"**Fecha límite de la ronda:** {ronda.fecha_fin.strftime('%Y-%m-%d %H:%M')}\n"
-        f"**Estado inicial de {etiqueta_equipo_comunidades(enfrentamiento.equipo_a)}:** {estado_a}\n"
-        f"**Estado inicial de {etiqueta_equipo_comunidades(enfrentamiento.equipo_b)}:** {estado_b}\n\n"
-        "### Resolución resumida\n"
-        "Se suman los puntos internos de los dos partidos. Si hay empate, se "
-        "comparan primero los TD anotados por los atacantes y después la "
-        "diferencia global de TD; si persiste, el enfrentamiento termina empatado."
-    )
 
 
 def _resumen_ronda_comunidades(torneo, ronda, enfrentamientos, bye_equipo) -> str:
@@ -6354,9 +6305,16 @@ async def _crear_canales_ronda_comunidades(ctx, session, resultado, categorias):
             enfrentamiento.canal_general_discord_id = int(canal.id)
             session.commit()
             try:
-                await UtilesDiscord.enviar_mensaje_largo(
-                    canal, _mensaje_canal_enfrentamiento_comunidades(torneo, ronda, enfrentamiento)
+                mensaje_general, mensaje_adicional = (
+                    mensajes_canal_enfrentamiento_comunidades(
+                        torneo, ronda, enfrentamiento
+                    )
                 )
+                await UtilesDiscord.enviar_mensaje_largo(
+                    canal, mensaje_general
+                )
+                if mensaje_adicional:
+                    await UtilesDiscord.enviar_mensaje_largo(canal, mensaje_adicional)
             except Exception as exc:
                 fallos.append(
                     f"Mesa {int(enfrentamiento.mesa_numero)} / enfrentamiento "

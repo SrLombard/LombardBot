@@ -114,11 +114,11 @@ def test_primera_eleccion_responde_privado_publica_sin_identidades_y_no_material
 
     privado, ephemeral = interaccion.response.mensajes[0]
     assert ephemeral is True
-    assert "**Equipo:** Equipo @\u200bA (Comunidad @\u200bUno)" in privado
+    assert "**Equipo:** [Comunidad @\u200bUno] Equipo @\u200bA" in privado
     assert "**Atacante:** <@101>" in privado
     assert "**Defensor:** <@102>" in privado
     assert interaccion.channel.mensajes == [
-        "El equipo Equipo @\u200bA (Comunidad @\u200bUno) ha elegido atacante"
+        "El equipo [Comunidad @\u200bUno] Equipo @\u200bA ha elegido atacante"
     ]
     assert llamadas == [{
         "enfrentamiento_id": 77,
@@ -158,7 +158,7 @@ def test_segunda_eleccion_anuncia_materializa_una_vez_y_confirma_canales():
     )
 
     assert interaccion.channel.mensajes == [
-        "El equipo Equipo @\u200bA (Comunidad @\u200bUno) ha elegido atacante",
+        "El equipo [Comunidad @\u200bUno] Equipo @\u200bA ha elegido atacante",
         "Se van a crear los encuentros",
         "Encuentros creados: <#901> y <#902>",
     ]
@@ -234,7 +234,7 @@ def test_fallo_materializacion_conserva_eleccion_notifica_y_cierra_sesion():
     assert "secreto interno" in avisos[0]
     assert "secreto interno" not in interaccion.followup.mensajes[0][0]
     assert interaccion.channel.mensajes == [
-        "El equipo Equipo @\u200bA (Comunidad @\u200bUno) ha elegido atacante",
+        "El equipo [Comunidad @\u200bUno] Equipo @\u200bA ha elegido atacante",
         "Se van a crear los encuentros",
     ]
 
