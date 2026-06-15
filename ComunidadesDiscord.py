@@ -310,7 +310,9 @@ def _mensaje_partido_comunidades(enfrentamiento: Any, partido: Any) -> str:
         f"**Atacante:** <@{atacante_discord_id}>\n"
         f"**Defensor:** <@{defensor_discord_id}>\n\n"
         f"<@{atacante_discord_id}> contra <@{defensor_discord_id}>\n"
-        f"**Fecha límite:** {enfrentamiento.ronda.fecha_fin.strftime('%Y-%m-%d %H:%M')}"
+        f"**Fecha límite:** {enfrentamiento.ronda.fecha_fin.strftime('%Y-%m-%d %H:%M')}\n"
+        "Cuando acordéis el día y la hora del partido, registrad la quedada "
+        "en este canal con `/fecha`."
     )
 
 

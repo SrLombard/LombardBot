@@ -2099,6 +2099,7 @@ async def fecha(interaction: discord.Interaction, dia: int, mes: int, hora: int,
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     with Session() as session:
         es_suizo = False
+        es_comunidades = False
         registro = session.query(GestorSQL.Calendario).filter(GestorSQL.Calendario.canalAsociado == id_canal).first()
 
         if registro is None:
@@ -2112,9 +2113,13 @@ async def fecha(interaction: discord.Interaction, dia: int, mes: int, hora: int,
                         if registro is None:
                             registro = session.query(GestorSQL.SuizoEmparejamiento).filter(GestorSQL.SuizoEmparejamiento.canal_id == id_canal).first()
                             if registro is None:
-                                await interaction.response.send_message("Este no es un canal de quedadas 😡", ephemeral=True)
-                                return
-                            es_suizo = True
+                                registro = session.query(GestorSQL.ComunidadesPartido).filter(GestorSQL.ComunidadesPartido.canal_discord_id == id_canal).first()
+                                if registro is None:
+                                    await interaction.response.send_message("Este no es un canal de quedadas 😡", ephemeral=True)
+                                    return
+                                es_comunidades = True
+                            else:
+                                es_suizo = True
 
         try:
             punto = ""
@@ -2122,6 +2127,8 @@ async def fecha(interaction: discord.Interaction, dia: int, mes: int, hora: int,
             fecha_nueva = datetime(year=datetime.now().year, month=mes, day=dia, hour=hora, minute=minuto, tzinfo=tz)
             if es_suizo:
                 fecha_final_base = registro.ronda.fecha_fin if registro.ronda else None
+            elif es_comunidades:
+                fecha_final_base = registro.enfrentamiento.ronda.fecha_fin if registro.enfrentamiento and registro.enfrentamiento.ronda else None
             else:
                 fecha_final_base = registro.fechaFinal
 

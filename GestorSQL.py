@@ -728,6 +728,7 @@ class ComunidadesPartido(Base):
     defensor_usuario_id = Column(Integer, ForeignKey('usuarios.idUsuarios', ondelete='RESTRICT'), nullable=False)
     canal_discord_id = Column(BigInteger, nullable=True)
     partido_bloodbowl_id = Column(String(45), nullable=True)
+    fecha = Column(DateTime, nullable=True)
     td_local = Column(Integer, nullable=True)
     td_visitante = Column(Integer, nullable=True)
     puntos_internos_local = Column(Numeric(8, 2), nullable=True)

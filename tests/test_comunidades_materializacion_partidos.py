@@ -240,6 +240,7 @@ def test_materializa_dos_canales_con_permisos_mensajes_y_estado():
         assert "**Defensor:** <@202>" in guild.creaciones[0]["canal"].mensajes[0]
         assert "**Equipos:** [A] Equipo A vs [B] Equipo B" in guild.creaciones[0]["canal"].mensajes[0]
         assert "**Fecha límite:** 2026-07-08 22:00" in guild.creaciones[0]["canal"].mensajes[0]
+        assert "registrad la quedada en este canal con `/fecha`" in guild.creaciones[0]["canal"].mensajes[0]
         enfrentamiento = session.get(ComunidadesEnfrentamiento, enfrentamiento_id)
         assert enfrentamiento.estado == "PARTIDOS_CREADOS"
         assert [partido.canal_discord_id for partido in enfrentamiento.partidos] == [901, 902]

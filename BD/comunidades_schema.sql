@@ -300,6 +300,7 @@ CREATE TABLE IF NOT EXISTS comunidades_partido (
   defensor_usuario_id INT NOT NULL,
   canal_discord_id BIGINT NULL,
   partido_bloodbowl_id VARCHAR(45) NULL,
+  fecha DATETIME NULL,
   td_local INT NULL,
   td_visitante INT NULL,
   puntos_internos_local DECIMAL(8,2) NULL,
