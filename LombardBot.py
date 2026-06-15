@@ -4447,6 +4447,16 @@ def _texto_discord_seguro(valor: object) -> str:
     return discord.utils.escape_mentions(texto)
 
 
+def _etiqueta_equipo_escalar_comunidades(
+    nombre: object, comunidad_nombre: object
+) -> str:
+    """Presenta un equipo desde valores escalares con el formato público común."""
+    return (
+        f"[{_texto_discord_seguro(comunidad_nombre)}] "
+        f"{_texto_discord_seguro(nombre)}"
+    )
+
+
 @bot.command(name="comunidades_add_comunidad")
 async def comunidades_add_comunidad(ctx, torneo_id: int, *, nombre: str):
     if not es_comisario(ctx):
@@ -5449,7 +5459,10 @@ def _formatear_equipos_publico(resultado: dict) -> str:
     for f in resultado["filas"]:
         estado = _estado_con_emojis_comunidades(f["estado_temporal"], f["es_zombie"])
         h2h = "-" if f["h2h_valor"] is None else _decimal_publico_comunidades(f["h2h_valor"])
-        lineas += [f"**{f['posicion']}.** {estado} **{_texto_discord_seguro(f['nombre'])} ({_texto_discord_seguro(f['comunidad_nombre'])})**",
+        etiqueta = _etiqueta_equipo_escalar_comunidades(
+            f["nombre"], f["comunidad_nombre"]
+        )
+        lineas += [f"**{f['posicion']}.** {estado} **{etiqueta}**",
                    f"🏆 PTS **{_decimal_publico_comunidades(f['puntos'])}** · PJ {f['pj']} ({f['pg']}/{f['pe']}/{f['pp']}) · 🛌 {f['cantidad_byes']} · BH {_decimal_publico_comunidades(f['buchholz_cut'])} · H2H {h2h} · TD {f['td_favor']}-{f['td_contra']} ({f['diferencia_td']:+d})"]
     if resultado["fuente"] == "SNAPSHOT":
         lineas.append("\nℹ️ Los puntos son históricos; los emojis muestran el estado actual.")
