@@ -522,3 +522,65 @@ async def test_encontrado_callback_no_hace_excepcion_por_admin_ni_comisario(monk
         assert mensajes == [("Solo uno de los jugadores del partido reservado puede liberar este Spin.", True)]
     finally:
         UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
+
+@pytest.mark.asyncio
+async def test_liberar_spin_no_reactiva_reserva_si_falla_discord(monkeypatch):
+    from types import SimpleNamespace
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+
+    notificaciones = []
+
+    class TimeoutTask:
+        def __init__(self):
+            self.cancelled = False
+
+        def cancel(self):
+            self.cancelled = True
+
+    class CanalPartidoRoto:
+        async def send(self, mensaje):
+            raise RuntimeError("discord caido")
+
+    class MensajeRoto:
+        async def edit(self, **kwargs):
+            raise RuntimeError("mensaje inaccesible")
+
+    class CanalSpinRoto:
+        def history(self, *, oldest_first=False, limit=1):
+            async def iterator():
+                raise RuntimeError("historial inaccesible")
+                yield
+            return iterator()
+
+    async def mensaje_administradores(mensaje):
+        notificaciones.append(mensaje)
+
+    timeout = TimeoutTask()
+    reserva = SimpleNamespace(
+        ambito=AMBITO_SPIN_GENERAL,
+        usuario_spin=SimpleNamespace(id=111),
+        jugador1_discord_id=111,
+        jugador2_discord_id=222,
+        canal_spin=CanalSpinRoto(),
+        canal_partido=CanalPartidoRoto(),
+        timeout_task=timeout,
+    )
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = reserva
+    monkeypatch.setattr(UtilesDiscord, "mensaje_administradores", mensaje_administradores)
+
+    try:
+        resultado = await UtilesDiscord.liberar_spin(
+            AMBITO_SPIN_GENERAL,
+            "prueba discord roto",
+            mensaje_botones=MensajeRoto(),
+            mensaje_canal_partido="liberado",
+        )
+
+        assert resultado is reserva
+        assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is None
+        assert timeout.cancelled is True
+        assert len(notificaciones) == 3
+        assert all("Error liberando Spin General" in mensaje for mensaje in notificaciones)
+    finally:
+        UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None

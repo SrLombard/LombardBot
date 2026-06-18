@@ -101,6 +101,78 @@ def limpiar_reserva_spin(ambito):
     return reserva
 
 
+
+
+def nombre_ambito_spin(ambito):
+    return "Spin Comunidades" if ambito == AMBITO_SPIN_COMUNIDADES else "Spin General"
+
+
+async def _notificar_error_liberacion_spin(ambito, motivo, error):
+    mensaje = f"Error liberando {nombre_ambito_spin(ambito)} ({motivo}): {error}"
+    print(mensaje)
+    try:
+        await mensaje_administradores(mensaje)
+    except Exception as error_notificacion:
+        print(f"No se pudo notificar a administradores el error de liberación de Spin: {error_notificacion}")
+
+
+async def _intentar_operacion_discord_liberacion(ambito, motivo, descripcion, operacion):
+    try:
+        await operacion()
+    except Exception as error:
+        await _notificar_error_liberacion_spin(ambito, f"{motivo} / {descripcion}", error)
+
+
+async def liberar_spin(ambito, motivo, usuario=None, *, mensaje_botones=None, canal_spin=None, canal_partido=None, mensaje_canal_partido=None, mensaje_usuario=None, contenido_primer_mensaje=None):
+    """Libera una reserva de Spin sin que errores de Discord la reactiven.
+
+    Orden deliberado según ``logicaSpin.md``: primero se limpia la reserva
+    interna, después se cancela el timeout y solo entonces se intenta tocar
+    Discord. Cualquier fallo posterior se registra/notifica, pero la cola queda
+    libre.
+    """
+
+    reserva = limpiar_reserva_spin(ambito)
+    if not reserva:
+        return None
+
+    timeout_task = getattr(reserva, "timeout_task", None)
+    if timeout_task and timeout_task is not asyncio.current_task():
+        timeout_task.cancel()
+
+    canal_spin = canal_spin if canal_spin is not None else getattr(reserva, "canal_spin", None)
+    canal_partido = canal_partido if canal_partido is not None else getattr(reserva, "canal_partido", None)
+    vista = SpinButtonsView(ambito)
+    vista.actualizar_botones(spin_habilitado=True)
+    contenido_primer_mensaje = contenido_primer_mensaje or f'El {nombre_ambito_spin(ambito)} está **LIBRE**'
+
+    if canal_partido and mensaje_canal_partido:
+        await _intentar_operacion_discord_liberacion(
+            ambito, motivo, "avisar canal del partido", lambda: canal_partido.send(mensaje_canal_partido)
+        )
+
+    if usuario and mensaje_usuario:
+        await _intentar_operacion_discord_liberacion(
+            ambito, motivo, "avisar usuario", lambda: usuario.send(mensaje_usuario)
+        )
+
+    if mensaje_botones:
+        await _intentar_operacion_discord_liberacion(
+            ambito, motivo, "editar botones", lambda: mensaje_botones.edit(view=vista)
+        )
+
+    if canal_spin:
+        async def editar_primer_mensaje():
+            primer_mensaje = await vista.obtener_primer_mensaje(canal_spin)
+            if primer_mensaje:
+                await primer_mensaje.edit(content=contenido_primer_mensaje)
+
+        await _intentar_operacion_discord_liberacion(
+            ambito, motivo, "editar primer mensaje del canal de Spin", editar_primer_mensaje
+        )
+
+    return reserva
+
 def discord_ids_jugadores_reserva(reserva):
     """Devuelve los Discord IDs autorizados a liberar una reserva de Spin.
 
@@ -621,7 +693,7 @@ class SpinButtonsView(discord.ui.View):
         self._aplicar_ambito_a_botones()
 
     def nombre_ambito(self):
-        return "Spin Comunidades" if self.ambito == AMBITO_SPIN_COMUNIDADES else "Spin General"
+        return nombre_ambito_spin(self.ambito)
 
     def sufijo_custom_id(self):
         return self.ambito.casefold()
@@ -643,26 +715,24 @@ class SpinButtonsView(discord.ui.View):
 
     async def auto_release_spin(self, ambito, user, mensaje_botones=None):
         await asyncio.sleep(300)  # Espera 5 minutos
-        reserva = obtener_reserva_spin(ambito)
-        if not reserva or reserva.usuario_spin != user:
-            return
+        async with obtener_bloqueo_reserva_spin(ambito):
+            reserva = obtener_reserva_spin(ambito)
+            if not reserva or reserva.usuario_spin != user:
+                return
 
-        limpiar_reserva_spin(ambito)
-        if reserva.canal_partido:
             if ambito == AMBITO_SPIN_COMUNIDADES:
-                await reserva.canal_partido.send("El Spin Comunidades ha sido liberado automáticamente. 😡 La comunidad ha sobrevivido a otro intento fallido de coordinación humana.")
+                mensaje_canal = "El Spin Comunidades ha sido liberado automáticamente. 😡 La comunidad ha sobrevivido a otro intento fallido de coordinación humana."
             else:
-                await reserva.canal_partido.send("El Spin General ha sido liberado automáticamente. 😡 Afortunadamente las máquinas somos superiores y cuidamos de los esmirriados humanos.")
+                mensaje_canal = "El Spin General ha sido liberado automáticamente. 😡 Afortunadamente las máquinas somos superiores y cuidamos de los esmirriados humanos."
 
-        await user.send('Tu spin ha sido liberado automáticamente debido a la inactividad.')
-
-        if mensaje_botones:
-            self.actualizar_botones(spin_habilitado=True)
-            await mensaje_botones.edit(view=self)
-
-        primer_mensaje = await self.obtener_primer_mensaje(reserva.canal_spin) if reserva.canal_spin else None
-        if primer_mensaje:
-            await primer_mensaje.edit(content=f'El {self.nombre_ambito()} está **LIBRE**')
+            await liberar_spin(
+                ambito,
+                "timeout automático",
+                user,
+                mensaje_botones=mensaje_botones,
+                mensaje_canal_partido=mensaje_canal,
+                mensaje_usuario='Tu spin ha sido liberado automáticamente debido a la inactividad.',
+            )
 
         thread = Thread(target=GestorSQL.insertar_spin, args=('LOMBARDBOT', datetime.utcnow(), 'Encontrado', ambito))
         thread.start()
@@ -719,18 +789,31 @@ class SpinButtonsView(discord.ui.View):
                 reserva = SpinReservation(ambito, user, coach1_id_discord, coach2_id_discord, interaction.channel, canal_partido, descripcion_partido, timeout_task, partido_spin)
                 guardar_reserva_spin(reserva)
 
-                if canal_partido:
-                    if ambito == AMBITO_SPIN_COMUNIDADES:
-                        await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear vuestro partido de comunidades.')
-                    else:
-                        await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
+                try:
+                    if canal_partido:
+                        if ambito == AMBITO_SPIN_COMUNIDADES:
+                            await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear vuestro partido de comunidades.')
+                        else:
+                            await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
 
-                self.actualizar_botones(spin_habilitado=False)
-                await interaction.message.edit(view=self)
+                    self.actualizar_botones(spin_habilitado=False)
+                    await interaction.message.edit(view=self)
 
-                primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
-                if primer_mensaje:
-                    await primer_mensaje.edit(content=descripcion_partido)
+                    primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
+                    if primer_mensaje:
+                        await primer_mensaje.edit(content=descripcion_partido)
+                except Exception as error:
+                    await liberar_spin(
+                        ambito,
+                        "fallo de Discord al reservar",
+                        user,
+                        mensaje_botones=interaction.message,
+                        canal_spin=interaction.channel,
+                        mensaje_canal_partido=f"El {self.nombre_ambito()} ha sido liberado porque Discord falló al actualizar el Spin.",
+                    )
+                    await _notificar_error_liberacion_spin(ambito, "fallo de Discord al reservar", error)
+                    await interaction.followup.send("Discord falló al preparar el Spin; la cola ha quedado liberada. Avise a un administrador si persiste.", ephemeral=True)
+                    return
 
                 await interaction.followup.send(f"Ahora puedes buscar partido en {self.nombre_ambito()}.", ephemeral=True)
                 thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Spin', ambito))
@@ -757,19 +840,14 @@ class SpinButtonsView(discord.ui.View):
                 await interaction.followup.send("Solo uno de los jugadores del partido reservado puede liberar este Spin.", ephemeral=True)
                 return
 
-            limpiar_reserva_spin(ambito)
-            if reserva.timeout_task:
-                reserva.timeout_task.cancel()
-
-        if reserva.canal_partido:
-            await reserva.canal_partido.send(f"El {self.nombre_ambito()} ha sido liberado.")
-
-        self.actualizar_botones(spin_habilitado=True)
-        await interaction.message.edit(view=self)
-
-        primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
-        if primer_mensaje:
-            await primer_mensaje.edit(content=f'El {self.nombre_ambito()} está **LIBRE**')
+            await liberar_spin(
+                ambito,
+                "Encontrado",
+                user,
+                mensaje_botones=interaction.message,
+                canal_spin=interaction.channel,
+                mensaje_canal_partido=f"El {self.nombre_ambito()} ha sido liberado.",
+            )
 
         await interaction.followup.send(f"Has liberado el {self.nombre_ambito()}.", ephemeral=True)
         thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado', ambito))
