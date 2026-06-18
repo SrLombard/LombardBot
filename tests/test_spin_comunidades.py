@@ -522,3 +522,114 @@ async def test_encontrado_callback_no_hace_excepcion_por_admin_ni_comisario(monk
         assert mensajes == [("Solo uno de los jugadores del partido reservado puede liberar este Spin.", True)]
     finally:
         UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
+
+@pytest.mark.asyncio
+async def test_timeout_libera_solo_la_reserva_exacta_de_su_ambito(monkeypatch):
+    from types import SimpleNamespace
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL, AMBITO_SPIN_COMUNIDADES
+
+    mensajes_canal = []
+    dms = []
+    edits = []
+
+    async def sleep_inmediato(segundos):
+        assert segundos == 300
+
+    class CanalPartido:
+        async def send(self, mensaje):
+            mensajes_canal.append(mensaje)
+
+    class User:
+        def __init__(self, id):
+            self.id = id
+
+        async def send(self, mensaje):
+            dms.append((self.id, mensaje))
+
+    class Message:
+        async def edit(self, **kwargs):
+            edits.append(kwargs)
+
+    class Channel:
+        def history(self, *, oldest_first=False, limit=1):
+            async def iterator():
+                yield Message()
+            return iterator()
+
+    monkeypatch.setattr(UtilesDiscord.asyncio, "sleep", sleep_inmediato)
+    monkeypatch.setattr(UtilesDiscord.Thread, "start", lambda self: None)
+
+    reserva_general = SimpleNamespace(
+        ambito=AMBITO_SPIN_GENERAL,
+        usuario_spin=User(10),
+        jugador1_discord_id=111,
+        jugador2_discord_id=222,
+        canal_spin=Channel(),
+        canal_partido=CanalPartido(),
+        timeout_task=None,
+    )
+    reserva_comunidades = SimpleNamespace(
+        ambito=AMBITO_SPIN_COMUNIDADES,
+        usuario_spin=User(20),
+        jugador1_discord_id=333,
+        jugador2_discord_id=444,
+        canal_spin=Channel(),
+        canal_partido=CanalPartido(),
+        timeout_task=None,
+    )
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = reserva_general
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_COMUNIDADES] = reserva_comunidades
+
+    try:
+        await UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL).auto_release_spin(reserva_general, Message())
+
+        assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is None
+        assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_COMUNIDADES) is reserva_comunidades
+        assert mensajes_canal == ["El Spin General ha sido liberado automáticamente. 😡 Afortunadamente las máquinas somos superiores y cuidamos de los esmirriados humanos."]
+        assert dms == [(10, 'Tu spin ha sido liberado automáticamente debido a la inactividad.')]
+        assert any(edit.get("content") == "El Spin General está **LIBRE**" for edit in edits)
+    finally:
+        UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
+        UtilesDiscord.reservas_spin[AMBITO_SPIN_COMUNIDADES] = None
+
+
+@pytest.mark.asyncio
+async def test_timeout_antiguo_no_libera_reserva_nueva_del_mismo_ambito(monkeypatch):
+    from types import SimpleNamespace
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+
+    mensajes_canal = []
+
+    async def sleep_inmediato(segundos):
+        assert segundos == 300
+
+    class CanalPartido:
+        async def send(self, mensaje):
+            mensajes_canal.append(mensaje)
+
+    monkeypatch.setattr(UtilesDiscord.asyncio, "sleep", sleep_inmediato)
+    monkeypatch.setattr(UtilesDiscord.Thread, "start", lambda self: None)
+
+    reserva_antigua = SimpleNamespace(
+        ambito=AMBITO_SPIN_GENERAL,
+        usuario_spin=SimpleNamespace(id=10),
+        canal_spin=None,
+        canal_partido=CanalPartido(),
+    )
+    reserva_nueva = SimpleNamespace(
+        ambito=AMBITO_SPIN_GENERAL,
+        usuario_spin=SimpleNamespace(id=10),
+        canal_spin=None,
+        canal_partido=CanalPartido(),
+    )
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = reserva_nueva
+
+    try:
+        await UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL).auto_release_spin(reserva_antigua)
+
+        assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is reserva_nueva
+        assert mensajes_canal == []
+    finally:
+        UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
