@@ -21,6 +21,7 @@ from SpinConstantes import (
     AMBITO_SPIN_GENERAL,
     CANAL_SPIN_COMUNIDADES_ID,
     CANAL_SPIN_GENERAL_ID,
+    mensaje_spin_libre,
     normalizar_ambito_spin,
 )
 
@@ -685,7 +686,7 @@ class SpinButtonsView(discord.ui.View):
         try:
             primer_mensaje = await self.obtener_primer_mensaje(reserva.canal_spin) if reserva.canal_spin else None
             if primer_mensaje:
-                await primer_mensaje.edit(content=f'El {nombre_ambito} está **LIBRE**')
+                await primer_mensaje.edit(content=mensaje_spin_libre(ambito))
         except Exception as exc:
             print(f"No se pudo editar el primer mensaje de {nombre_ambito} tras timeout: {exc}")
 
@@ -795,7 +796,7 @@ class SpinButtonsView(discord.ui.View):
 
         primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
         if primer_mensaje:
-            await primer_mensaje.edit(content=f'El {self.nombre_ambito()} está **LIBRE**')
+            await primer_mensaje.edit(content=mensaje_spin_libre(ambito))
 
         await interaction.followup.send(f"Has liberado el {self.nombre_ambito()}.", ephemeral=True)
         thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado', ambito))

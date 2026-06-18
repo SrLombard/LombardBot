@@ -193,6 +193,22 @@ def test_resolver_partido_spin_rechaza_ambito_no_valido(monkeypatch):
         UtilesDiscord.resolver_partido_spin(object(), object(), "Ticket")
 
 
+def test_mensaje_spin_libre_centraliza_textos_por_ambito():
+    from SpinConstantes import (
+        AMBITO_SPIN_COMUNIDADES,
+        AMBITO_SPIN_GENERAL,
+        MENSAJES_SPIN_LIBRE,
+        mensaje_spin_libre,
+    )
+
+    assert MENSAJES_SPIN_LIBRE == {
+        AMBITO_SPIN_GENERAL: "El Spin General está **LIBRE**",
+        AMBITO_SPIN_COMUNIDADES: "El Spin Comunidades está **LIBRE**",
+    }
+    assert mensaje_spin_libre("General") == MENSAJES_SPIN_LIBRE[AMBITO_SPIN_GENERAL]
+    assert mensaje_spin_libre("COMUNIDADES") == MENSAJES_SPIN_LIBRE[AMBITO_SPIN_COMUNIDADES]
+
+
 def test_spin_buttons_view_parametriza_custom_ids_por_ambito():
     import UtilesDiscord
     from SpinConstantes import AMBITO_SPIN_GENERAL, AMBITO_SPIN_COMUNIDADES

@@ -21,6 +21,25 @@ AMBITO_SPIN_COMUNIDADES = AmbitoSpin.COMUNIDADES.value
 AMBITOS_SPIN = frozenset(ambito.value for ambito in AmbitoSpin)
 AMBITO_SPIN_TODOS = "TODOS"
 
+MENSAJES_SPIN_LIBRE = {
+    AMBITO_SPIN_GENERAL: "El Spin General está **LIBRE**",
+    AMBITO_SPIN_COMUNIDADES: "El Spin Comunidades está **LIBRE**",
+}
+
+
+def mensaje_spin_libre(ambito):
+    """Devuelve el texto canónico de cola libre para el ámbito indicado.
+
+    ``logicaSpin.md`` define estos textos como fuente de verdad para crear
+    mensajes de Spin y para actualizar el mensaje principal al liberar
+    reservas.
+    """
+
+    ambito_normalizado = normalizar_ambito_spin(ambito)
+    if not ambito_normalizado:
+        raise ValueError(f"Ámbito de Spin no válido: {ambito!r}")
+    return MENSAJES_SPIN_LIBRE[ambito_normalizado]
+
 # Canal actual de Spin General; se conserva para compatibilidad operativa.
 CANAL_SPIN_GENERAL_ID = 1224128423929315468
 # Canal independiente para Spin Comunidades. Configurar el ID real al activarlo.

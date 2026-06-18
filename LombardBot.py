@@ -35,6 +35,7 @@ from SpinConstantes import (
     AMBITO_SPIN_COMUNIDADES,
     AMBITO_SPIN_GENERAL,
     AMBITO_SPIN_TODOS,
+    mensaje_spin_libre,
     normalizar_ambito_spin,
 )
 import GestionExcel
@@ -1859,8 +1860,7 @@ async def AgregaMensajeSpin(ctx, ambito: str = "General"):
         await ctx.send("Ámbito de Spin no válido. Usa General o Comunidades.", delete_after=20)
         return
 
-    nombre_ambito = "Spin Comunidades" if ambito_normalizado == AMBITO_SPIN_COMUNIDADES else "Spin General"
-    await ctx.send(f"El {nombre_ambito} está **LIBRE**")
+    await ctx.send(mensaje_spin_libre(ambito_normalizado))
     await ctx.send("¡Úsame para Spinear!", view=UtilesDiscord.SpinButtonsView(ambito_normalizado))
     UtilesDiscord.limpiar_reserva_spin(ambito_normalizado)
     await ctx.message.delete()
