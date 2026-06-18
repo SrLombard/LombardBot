@@ -417,3 +417,108 @@ async def test_encontrado_callback_rechaza_usuario_ajeno_sin_liberar_ningun_ambi
     finally:
         UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
         UtilesDiscord.reservas_spin[AMBITO_SPIN_COMUNIDADES] = None
+
+@pytest.mark.asyncio
+async def test_encontrado_callback_permita_liberar_al_rival_que_no_inicio_el_spin(monkeypatch):
+    from types import SimpleNamespace
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+
+    mensajes = []
+    canales = []
+
+    class Response:
+        async def defer(self):
+            pass
+
+    class Followup:
+        async def send(self, mensaje, *, ephemeral=False):
+            mensajes.append((mensaje, ephemeral))
+
+    class Message:
+        async def edit(self, **kwargs):
+            pass
+
+    class Channel:
+        def history(self, *, oldest_first=False, limit=1):
+            async def iterator():
+                yield Message()
+            return iterator()
+
+    class CanalPartido:
+        async def send(self, mensaje):
+            canales.append(mensaje)
+
+    class TimeoutTask:
+        def __init__(self):
+            self.cancelled = False
+
+        def cancel(self):
+            self.cancelled = True
+
+    monkeypatch.setattr(UtilesDiscord.Thread, "start", lambda self: None)
+    timeout = TimeoutTask()
+    reserva = SimpleNamespace(
+        ambito=AMBITO_SPIN_GENERAL,
+        usuario_spin=SimpleNamespace(id=111),
+        jugador1_discord_id=111,
+        jugador2_discord_id=222,
+        canal_spin=Channel(),
+        canal_partido=CanalPartido(),
+        descripcion_partido="General",
+        timeout_task=timeout,
+        partido=None,
+    )
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = reserva
+
+    interaction = SimpleNamespace(
+        response=Response(),
+        followup=Followup(),
+        user=SimpleNamespace(id=222, name="Rival"),
+        message=Message(),
+        channel=Channel(),
+    )
+
+    try:
+        await UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL).encontrado_callback.callback(interaction)
+        assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is None
+        assert timeout.cancelled is True
+        assert canales == ["El Spin General ha sido liberado."]
+        assert mensajes == [("Has liberado el Spin General.", True)]
+    finally:
+        UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
+
+
+@pytest.mark.asyncio
+async def test_encontrado_callback_no_hace_excepcion_por_admin_ni_comisario(monkeypatch):
+    from types import SimpleNamespace
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+
+    mensajes = []
+
+    class Response:
+        async def defer(self):
+            pass
+
+    class Followup:
+        async def send(self, mensaje, *, ephemeral=False):
+            mensajes.append((mensaje, ephemeral))
+
+    admin_permissions = SimpleNamespace(administrator=True)
+    rol_comisario = SimpleNamespace(name="Comisario")
+    reserva = SimpleNamespace(jugador1_discord_id=111, jugador2_discord_id=222, timeout_task=None, canal_partido=None)
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = reserva
+
+    interaction = SimpleNamespace(
+        response=Response(),
+        followup=Followup(),
+        user=SimpleNamespace(id=999, name="Admin", guild_permissions=admin_permissions, roles=[rol_comisario]),
+    )
+
+    try:
+        await UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL).encontrado_callback.callback(interaction)
+        assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is reserva
+        assert mensajes == [("Solo uno de los jugadores del partido reservado puede liberar este Spin.", True)]
+    finally:
+        UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None

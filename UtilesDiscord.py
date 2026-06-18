@@ -101,6 +101,24 @@ def limpiar_reserva_spin(ambito):
     return reserva
 
 
+def discord_ids_jugadores_reserva(reserva):
+    """Devuelve los Discord IDs autorizados a liberar una reserva de Spin.
+
+    La fuente de verdad de ``logicaSpin.md`` permite pulsar `Encontrado` a
+    cualquiera de los dos jugadores del partido reservado, y no contempla
+    excepciones por roles administrativos desde el botón.
+    """
+
+    return {
+        jugador_id
+        for jugador_id in (
+            getattr(reserva, "jugador1_discord_id", None),
+            getattr(reserva, "jugador2_discord_id", None),
+        )
+        if jugador_id is not None
+    }
+
+
 def get_int_value(dictionary, key):
     value = dictionary.get(key)
     return 0 if value is None else value
@@ -735,7 +753,7 @@ class SpinButtonsView(discord.ui.View):
                 await interaction.followup.send("No hay ningún Spin reservado en esta cola.", ephemeral=True)
                 return
 
-            if user.id not in (reserva.jugador1_discord_id, reserva.jugador2_discord_id):
+            if user.id not in discord_ids_jugadores_reserva(reserva):
                 await interaction.followup.send("Solo uno de los jugadores del partido reservado puede liberar este Spin.", ephemeral=True)
                 return
 
