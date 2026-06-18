@@ -724,22 +724,27 @@ class SpinButtonsView(discord.ui.View):
     async def encontrado_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         user = interaction.user
+        # El ámbito de la vista identifica de forma inequívoca la cola a liberar.
+        # No se consulta ni se modifica ninguna reserva fuera de esta clave.
         ambito = self.ambito
-        reserva = obtener_reserva_spin(ambito)
 
-        if not reserva:
-            await interaction.followup.send("No hay ningún Spin reservado en esta cola.", ephemeral=True)
-            return
+        async with obtener_bloqueo_reserva_spin(ambito):
+            reserva = obtener_reserva_spin(ambito)
 
-        if user.id not in (reserva.jugador1_discord_id, reserva.jugador2_discord_id):
-            await interaction.followup.send("Solo uno de los jugadores del partido reservado puede liberar este Spin.", ephemeral=True)
-            return
+            if not reserva:
+                await interaction.followup.send("No hay ningún Spin reservado en esta cola.", ephemeral=True)
+                return
 
-        limpiar_reserva_spin(ambito)
+            if user.id not in (reserva.jugador1_discord_id, reserva.jugador2_discord_id):
+                await interaction.followup.send("Solo uno de los jugadores del partido reservado puede liberar este Spin.", ephemeral=True)
+                return
+
+            limpiar_reserva_spin(ambito)
+            if reserva.timeout_task:
+                reserva.timeout_task.cancel()
+
         if reserva.canal_partido:
             await reserva.canal_partido.send(f"El {self.nombre_ambito()} ha sido liberado.")
-        if reserva.timeout_task:
-            reserva.timeout_task.cancel()
 
         self.actualizar_botones(spin_habilitado=True)
         await interaction.message.edit(view=self)
@@ -747,6 +752,8 @@ class SpinButtonsView(discord.ui.View):
         primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
         if primer_mensaje:
             await primer_mensaje.edit(content=f'El {self.nombre_ambito()} está **LIBRE**')
+
+        await interaction.followup.send(f"Has liberado el {self.nombre_ambito()}.", ephemeral=True)
         thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado', ambito))
         thread.start()
 
