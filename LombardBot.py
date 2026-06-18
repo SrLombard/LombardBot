@@ -1,4 +1,4 @@
-﻿import os
+import os
 import asyncio
 from pickle import LONG
 from re import A
@@ -31,6 +31,10 @@ import UtilesDiscord
 import GestorSQL
 import Encuesta
 from UtilesDiscord import DiscordClientSingleton
+from SpinConstantes import (
+    AMBITO_SPIN_TODOS,
+    normalizar_ambito_spin,
+)
 import GestionExcel
 import aiohttp
 import Imagenes
@@ -2272,8 +2276,14 @@ async def PruebaBD(ctx):
     session.close()
     
 @bot.tree.command(name="ultimosspins")
+@app_commands.describe(ambito="Ámbito de Spin: General, Comunidades o Todos")
+@app_commands.choices(ambito=[
+    app_commands.Choice(name="General", value="General"),
+    app_commands.Choice(name="Comunidades", value="Comunidades"),
+    app_commands.Choice(name="Todos", value="Todos"),
+])
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
-async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int):
+async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int, ambito: str = "Todos"):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
     
@@ -2281,16 +2291,23 @@ async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int
     tiempo_desde = datetime.utcnow() - timedelta(minutes=minutos)
     
     try:
-        # Realizar la consulta filtrando por fecha
-        resultados = session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo).\
-            filter(GestorSQL.Spin.fecha >= tiempo_desde).\
-            all()
+        ambito_normalizado = normalizar_ambito_spin(ambito, permitir_todos=True)
+        if ambito_normalizado is None:
+            await interaction.response.send_message("```Ámbito no válido. Usa General, Comunidades o Todos.```", ephemeral=True)
+            return
+
+        # Realizar la consulta filtrando por fecha y, si procede, por ámbito
+        consulta = session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo, GestorSQL.Spin.ambito).\
+            filter(GestorSQL.Spin.fecha >= tiempo_desde)
+        if ambito_normalizado != AMBITO_SPIN_TODOS:
+            consulta = consulta.filter(GestorSQL.Spin.ambito == ambito_normalizado)
+        resultados = consulta.all()
         
         # Formatear los resultados en Markdown
-        tabla_markdown = "```| Fecha (Europe/Madrid) | Usuario | Acción |\n|----------------------|---------|--------|"
-        for fecha, usuario, tipo in resultados:
+        tabla_markdown = "```| Fecha (Europe/Madrid) | Usuario | Acción | Ámbito |\n|----------------------|---------|--------|--------|"
+        for fecha, usuario, tipo, ambito_registro in resultados:
             fecha_madrid = fecha.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('Europe/Madrid')) if fecha.tzinfo is None else fecha.astimezone(ZoneInfo('Europe/Madrid'))
-            tabla_markdown += f"\n| {fecha_madrid.strftime('%Y-%m-%d %H:%M:%S')} | {usuario} | {tipo} |"
+            tabla_markdown += f"\n| {fecha_madrid.strftime('%Y-%m-%d %H:%M:%S')} | {usuario} | {tipo} | {ambito_registro or ''} |"
         
         tabla_markdown += "```"
         

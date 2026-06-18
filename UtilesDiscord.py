@@ -14,6 +14,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql import case,func
 
 import GestorSQL
+from SpinConstantes import AMBITO_SPIN_GENERAL
 
 import asyncio
 from datetime import datetime
@@ -357,7 +358,7 @@ class SpinButtonsView(discord.ui.View):
             primer_mensaje = await self.obtener_primer_mensaje(mensaje_spin.channel)
             await primer_mensaje.edit(content='El spin está **LIBRE**')
             
-            thread = Thread(target=GestorSQL.insertar_spin, args=('LOMBARDBOT', datetime.utcnow(), 'Encontrado'))
+            thread = Thread(target=GestorSQL.insertar_spin, args=('LOMBARDBOT', datetime.utcnow(), 'Encontrado', AMBITO_SPIN_GENERAL))
             thread.start()
 
 
@@ -512,7 +513,7 @@ class SpinButtonsView(discord.ui.View):
 
         await interaction.followup.send("Ahora puedes buscar partido.", ephemeral=True)
 
-        thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Spin'))
+        thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Spin', AMBITO_SPIN_GENERAL))
         thread.start()
             
     @discord.ui.button(label="Encontrado", style=discord.ButtonStyle.blurple, custom_id='your_bot:encontrado')
@@ -543,7 +544,7 @@ class SpinButtonsView(discord.ui.View):
 
             primer_mensaje = await self.obtener_primer_mensaje(channel)
             await primer_mensaje.edit(content='El spin está **LIBRE**')
-            thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado'))
+            thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado', AMBITO_SPIN_GENERAL))
             thread.start()
 
             

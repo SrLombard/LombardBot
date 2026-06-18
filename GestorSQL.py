@@ -10,6 +10,8 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 
+from SpinConstantes import AMBITO_SPIN_GENERAL, normalizar_ambito_spin
+
 
 Base = declarative_base()
 
@@ -134,11 +136,13 @@ class Spin(Base):
     user = Column('user', String)
     fecha = Column('fecha', DateTime)
     tipo = Column('tipo', String)
+    ambito = Column('ambito', String, default=AMBITO_SPIN_GENERAL)
 
 
-def insertar_spin( usuario, fecha, tipo):
+def insertar_spin(usuario, fecha, tipo, ambito=AMBITO_SPIN_GENERAL):
     # Esta es la función que inserta un nuevo Spin en la base de datos
-    new_spin = Spin(user=usuario, fecha=fecha, tipo=tipo)
+    ambito_normalizado = normalizar_ambito_spin(ambito) or AMBITO_SPIN_GENERAL
+    new_spin = Spin(user=usuario, fecha=fecha, tipo=tipo, ambito=ambito_normalizado)
     Session = sessionmaker(bind=conexionEngine())
     session = Session()
     try:
