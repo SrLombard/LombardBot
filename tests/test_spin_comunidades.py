@@ -854,6 +854,44 @@ async def test_liberacion_administrativa_inserta_historial_con_ambito_y_admin(mo
     assert ambito == AMBITO_SPIN_GENERAL
     assert usuario_discord_id == 987654321
 
+
+def test_mensaje_canal_partido_spin_general_es_exactamente_el_definido():
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+    from UtilesDiscord import SpinMatchResult, mensaje_canal_partido_spin_reservado
+
+    resultado = SpinMatchResult(
+        ambito=AMBITO_SPIN_GENERAL,
+        canal_partido_id=900,
+        jugador1_discord_id=101,
+        jugador2_discord_id=201,
+        fecha=None,
+    )
+
+    mensaje = mensaje_canal_partido_spin_reservado(resultado)
+
+    assert mensaje == "<@101> y <@201>, podéis spinear."
+    assert "comunidad" not in mensaje.casefold()
+    assert "comunidades" not in mensaje.casefold()
+
+
+def test_mensaje_canal_partido_spin_comunidades_mantiene_texto_especifico():
+    from SpinConstantes import AMBITO_SPIN_COMUNIDADES
+    from UtilesDiscord import SpinMatchResult, mensaje_canal_partido_spin_reservado
+
+    resultado = SpinMatchResult(
+        ambito=AMBITO_SPIN_COMUNIDADES,
+        canal_partido_id=902,
+        jugador1_discord_id=102,
+        jugador2_discord_id=101,
+        fecha=None,
+    )
+
+    assert (
+        mensaje_canal_partido_spin_reservado(resultado)
+        == "<@102> y <@101> podéis spinear vuestro partido de comunidades."
+    )
+
+
 def test_mensaje_spin_reservado_se_construye_desde_spin_match_result():
     from SpinConstantes import AMBITO_SPIN_GENERAL
     from UtilesDiscord import SpinMatchResult, mensaje_spin_reservado

@@ -468,6 +468,10 @@ def _clave_orden_spin(partido: SpinMatchResult):
     )
 
 
+def _menciones_jugadores_spin(partido: SpinMatchResult):
+    return f"<@{partido.jugador1_discord_id}> y <@{partido.jugador2_discord_id}>"
+
+
 def mensaje_spin_reservado(partido: SpinMatchResult):
     """Construye el mensaje principal reservado desde ``SpinMatchResult``.
 
@@ -477,7 +481,7 @@ def mensaje_spin_reservado(partido: SpinMatchResult):
     un mensaje seguro sin mostrar ``None``.
     """
 
-    menciones = f"<@{partido.jugador1_discord_id}> y <@{partido.jugador2_discord_id}>"
+    menciones = _menciones_jugadores_spin(partido)
     if partido.ambito == AMBITO_SPIN_COMUNIDADES:
         if partido.indice_partido and partido.equipo_a_nombre and partido.equipo_b_nombre:
             return (
@@ -487,6 +491,19 @@ def mensaje_spin_reservado(partido: SpinMatchResult):
             )
         return f"Spin de comunidades reservado: {menciones} pueden buscar partido."
     return f"Spin General reservado: {menciones} pueden buscar partido."
+
+
+def mensaje_canal_partido_spin_reservado(partido: SpinMatchResult):
+    """Construye el aviso de reserva para el canal del partido.
+
+    En Spin General el aviso debe limitarse a los jugadores y al permiso para
+    spinear, sin mencionar comunidades ni contexto de otros ámbitos.
+    """
+
+    menciones = _menciones_jugadores_spin(partido)
+    if partido.ambito == AMBITO_SPIN_COMUNIDADES:
+        return f"{menciones} podéis spinear vuestro partido de comunidades."
+    return f"{menciones}, podéis spinear."
 
 
 def _spin_match_desde_partido_general(partido):
@@ -904,10 +921,7 @@ class SpinButtonsView(discord.ui.View):
                 return
 
             if canal_partido:
-                if ambito == AMBITO_SPIN_COMUNIDADES:
-                    await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear vuestro partido de comunidades.')
-                else:
-                    await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
+                await canal_partido.send(mensaje_canal_partido_spin_reservado(partido_spin))
 
             await interaction.followup.send(f"Ahora puedes buscar partido en {self.nombre_ambito()}.", ephemeral=True)
             thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), TIPO_SPIN, ambito, user.id))
