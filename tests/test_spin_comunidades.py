@@ -771,6 +771,85 @@ def test_insertar_spin_mantiene_compatibilidad_timeout_heredado_encontrado(monke
     assert fila == ("LOMBARDBOT", "Encontrado", AMBITO_SPIN_GENERAL, None)
 
 
+@pytest.mark.asyncio
+async def test_liberacion_administrativa_inserta_historial_con_ambito_y_admin(monkeypatch):
+    from types import SimpleNamespace
+    import UtilesDiscord
+    from SpinConstantes import (
+        AMBITO_SPIN_GENERAL,
+        TIPO_SPIN_ADMIN_RELEASE,
+    )
+
+    class MensajePrincipal:
+        def __init__(self):
+            self.ediciones = []
+
+        async def edit(self, **kwargs):
+            self.ediciones.append(kwargs)
+
+    class CanalSpin:
+        def __init__(self):
+            self.mensaje = MensajePrincipal()
+
+        def history(self, oldest_first=True, limit=1):
+            mensaje = self.mensaje
+
+            class Historial:
+                async def __aiter__(self):
+                    yield mensaje
+
+            return Historial()
+
+    class CanalPartido:
+        def __init__(self):
+            self.mensajes = []
+
+        async def send(self, mensaje):
+            self.mensajes.append(mensaje)
+
+    hilos = []
+
+    class ThreadFake:
+        def __init__(self, target, args):
+            self.target = target
+            self.args = args
+            hilos.append(self)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(UtilesDiscord, "Thread", ThreadFake)
+
+    canal_spin = CanalSpin()
+    canal_partido = CanalPartido()
+    reserva = SimpleNamespace(
+        ambito=AMBITO_SPIN_GENERAL,
+        canal_spin=canal_spin,
+        canal_partido=canal_partido,
+        timeout_task=SimpleNamespace(cancel=lambda: None),
+    )
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = reserva
+
+    try:
+        liberado = await UtilesDiscord.liberar_reserva_spin_administrativa(
+            AMBITO_SPIN_GENERAL,
+            SimpleNamespace(name="AdminCoach", id=987654321),
+        )
+    finally:
+        UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
+
+    assert liberado is True
+    assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is None
+    assert canal_partido.mensajes == ["El Spin General ha sido liberado por administración."]
+    assert canal_spin.mensaje.ediciones[0]["content"] == "El Spin General está **LIBRE**"
+    assert len(hilos) == 1
+    assert hilos[0].target is UtilesDiscord.GestorSQL.insertar_spin
+    usuario, _fecha, tipo, ambito, usuario_discord_id = hilos[0].args
+    assert usuario == "AdminCoach"
+    assert tipo == TIPO_SPIN_ADMIN_RELEASE == "LiberacionAdmin"
+    assert ambito == AMBITO_SPIN_GENERAL
+    assert usuario_discord_id == 987654321
+
 def test_mensaje_spin_reservado_se_construye_desde_spin_match_result():
     from SpinConstantes import AMBITO_SPIN_GENERAL
     from UtilesDiscord import SpinMatchResult, mensaje_spin_reservado
