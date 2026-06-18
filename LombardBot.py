@@ -2365,34 +2365,38 @@ async def PruebaBD(ctx):
 async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int, ambito: str = "Todos"):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
-    
+
     # Calcular el momento de tiempo desde el cual queremos obtener los registros
     tiempo_desde = datetime.utcnow() - timedelta(minutes=minutos)
-    
+    respuesta = None
+    ephemeral = False
+
     try:
         filtro_ambito = normalizar_filtro_historial_spin(ambito)
         if filtro_ambito is None and normalizar_ambito_spin(ambito, permitir_todos=True) != AMBITO_SPIN_TODOS:
-            await interaction.response.send_message("```Ámbito no válido. Usa General, Comunidades o Todos.```", ephemeral=True)
-            return
+            respuesta = "```Ámbito no válido. Usa General, Comunidades o Todos.```"
+            ephemeral = True
+        else:
+            # Realizar la consulta filtrando por fecha y, si procede, por ámbito.
+            # La rutina idempotente añade `Spin.ambito` si falta y marca como GENERAL
+            # los registros heredados antes de consultar el historial.
+            GestorSQL.asegurar_columnas_historial_spin(GestorSQL.conexionEngine())
+            consulta = session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo, GestorSQL.Spin.ambito).\
+                filter(GestorSQL.Spin.fecha >= tiempo_desde)
+            if filtro_ambito:
+                consulta = consulta.filter(GestorSQL.Spin.ambito == filtro_ambito)
+            resultados = consulta.order_by(GestorSQL.Spin.fecha.asc(), GestorSQL.Spin.idSpin.asc()).all()
 
-        # Realizar la consulta filtrando por fecha y, si procede, por ámbito.
-        # La rutina idempotente añade `Spin.ambito` si falta y marca como GENERAL
-        # los registros heredados antes de consultar el historial.
-        GestorSQL.asegurar_columnas_historial_spin(GestorSQL.conexionEngine())
-        consulta = session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo, GestorSQL.Spin.ambito).\
-            filter(GestorSQL.Spin.fecha >= tiempo_desde)
-        if filtro_ambito:
-            consulta = consulta.filter(GestorSQL.Spin.ambito == filtro_ambito)
-        resultados = consulta.order_by(GestorSQL.Spin.fecha.asc(), GestorSQL.Spin.idSpin.asc()).all()
-        
-        # Formatear los resultados como líneas compactas con ámbito explícito en
-        # cada registro, incluso cuando `/ultimosspins` se filtra por ámbito.
-        await interaction.response.send_message(formatear_historial_spins(resultados))
+            # Formatear los resultados dentro del scope SQL y responder después
+            # de cerrar la sesión para no retener conexiones durante Discord I/O.
+            respuesta = formatear_historial_spins(resultados)
     except Exception as e:
         print(f"Error al consultar la tabla Spin: {e}")
-        await interaction.response.send_message("```Error al realizar la consulta.```")
+        respuesta = "```Error al realizar la consulta.```"
     finally:
         session.close()
+
+    await interaction.response.send_message(respuesta, ephemeral=ephemeral)
         
 
 @bot.command(name="crearGrupos")
