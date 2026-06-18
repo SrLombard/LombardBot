@@ -137,7 +137,34 @@ class Spin(Base):
     user = Column('user', String)
     fecha = Column('fecha', DateTime)
     tipo = Column('tipo', String)
-    ambito = Column('ambito', String, default=AMBITO_SPIN_GENERAL)
+    ambito = Column('ambito', String(32), nullable=False, default=AMBITO_SPIN_GENERAL, server_default=AMBITO_SPIN_GENERAL)
+
+
+def asegurar_columna_ambito_spin(engine=None):
+    """Garantiza la columna de ámbito en el historial de Spin.
+
+    Según ``logicaSpin.md``, el historial debe distinguir el ámbito con los
+    valores internos ``GENERAL`` y ``COMUNIDADES``. Los registros previos a esta
+    columna pertenecen al Spin General, por lo que se rellenan como ``GENERAL``.
+    """
+    engine = engine or conexionEngine()
+    inspector = inspect(engine)
+    columnas_spin = {columna["name"] for columna in inspector.get_columns(Spin.__tablename__)}
+
+    with engine.begin() as conexion:
+        if "ambito" not in columnas_spin:
+            conexion.execute(
+                text(
+                    "ALTER TABLE Spin ADD COLUMN ambito VARCHAR(32) NOT NULL DEFAULT 'GENERAL'"
+                )
+            )
+        conexion.execute(
+            text(
+                "UPDATE Spin SET ambito = :ambito_general "
+                "WHERE ambito IS NULL OR ambito = ''"
+            ),
+            {"ambito_general": AMBITO_SPIN_GENERAL},
+        )
 
 
 def insertar_spin(usuario, fecha, tipo, ambito=AMBITO_SPIN_GENERAL):
@@ -149,19 +176,12 @@ def insertar_spin(usuario, fecha, tipo, ambito=AMBITO_SPIN_GENERAL):
     Session = sessionmaker(bind=engine)
     session = Session()
     try:
-        columnas_spin = {columna["name"] for columna in inspect(engine).get_columns(Spin.__tablename__)}
-        valores = {"usuario": usuario, "fecha": fecha, "tipo": tipo}
-        if "ambito" in columnas_spin:
-            valores["ambito"] = ambito_normalizado
-            session.execute(
-                text("INSERT INTO Spin (`user`, fecha, tipo, ambito) VALUES (:usuario, :fecha, :tipo, :ambito)"),
-                valores,
-            )
-        else:
-            session.execute(
-                text("INSERT INTO Spin (`user`, fecha, tipo) VALUES (:usuario, :fecha, :tipo)"),
-                valores,
-            )
+        asegurar_columna_ambito_spin(engine)
+        valores = {"usuario": usuario, "fecha": fecha, "tipo": tipo, "ambito": ambito_normalizado}
+        session.execute(
+            text("INSERT INTO Spin (`user`, fecha, tipo, ambito) VALUES (:usuario, :fecha, :tipo, :ambito)"),
+            valores,
+        )
         session.commit()
     except Exception as e:
         session.rollback()

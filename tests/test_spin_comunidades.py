@@ -767,3 +767,33 @@ def test_mensaje_spin_reservado_comunidades_usa_contexto_o_fallback():
     )
     assert mensaje_spin_reservado(incompleto) == "Spin de comunidades reservado: <@102> y <@101> pueden buscar partido."
     assert "None" not in mensaje_spin_reservado(incompleto)
+
+
+def test_asegurar_columna_ambito_spin_migra_registros_heredados():
+    from sqlalchemy import create_engine, inspect, text
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+    from GestorSQL import asegurar_columna_ambito_spin
+
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conexion:
+        conexion.execute(
+            text(
+                "CREATE TABLE Spin ("
+                "idCalendario INTEGER PRIMARY KEY, "
+                "`user` VARCHAR, "
+                "fecha DATETIME, "
+                "tipo VARCHAR"
+                ")"
+            )
+        )
+        conexion.execute(
+            text("INSERT INTO Spin (idCalendario, `user`, fecha, tipo) VALUES (1, 'Coach', '2026-06-18 10:00:00', 'Spin')")
+        )
+
+    asegurar_columna_ambito_spin(engine)
+
+    columnas = {columna["name"] for columna in inspect(engine).get_columns("Spin")}
+    assert "ambito" in columnas
+    with engine.connect() as conexion:
+        ambitos = conexion.execute(text("SELECT ambito FROM Spin")).scalars().all()
+    assert ambitos == [AMBITO_SPIN_GENERAL]

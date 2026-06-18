@@ -2342,23 +2342,14 @@ async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int
             return
 
         # Realizar la consulta filtrando por fecha y, si procede, por ámbito.
-        # Si la base de datos aún no tiene `Spin.ambito`, los registros heredados
-        # se muestran como GENERAL para mantener la compatibilidad del Spin actual.
-        columnas_spin = {columna["name"] for columna in GestorSQL.inspect(GestorSQL.conexionEngine()).get_columns(GestorSQL.Spin.__tablename__)}
-        if "ambito" in columnas_spin:
-            consulta = session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo, GestorSQL.Spin.ambito).\
-                filter(GestorSQL.Spin.fecha >= tiempo_desde)
-            if ambito_normalizado != AMBITO_SPIN_TODOS:
-                consulta = consulta.filter(GestorSQL.Spin.ambito == ambito_normalizado)
-            resultados = consulta.all()
-        else:
-            if ambito_normalizado == AMBITO_SPIN_COMUNIDADES:
-                resultados = []
-            else:
-                resultados = [
-                    (fecha, usuario, tipo, AMBITO_SPIN_GENERAL)
-                    for fecha, usuario, tipo in session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo).filter(GestorSQL.Spin.fecha >= tiempo_desde).all()
-                ]
+        # La rutina idempotente añade `Spin.ambito` si falta y marca como GENERAL
+        # los registros heredados antes de consultar el historial.
+        GestorSQL.asegurar_columna_ambito_spin(GestorSQL.conexionEngine())
+        consulta = session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo, GestorSQL.Spin.ambito).\
+            filter(GestorSQL.Spin.fecha >= tiempo_desde)
+        if ambito_normalizado != AMBITO_SPIN_TODOS:
+            consulta = consulta.filter(GestorSQL.Spin.ambito == ambito_normalizado)
+        resultados = consulta.all()
         
         # Formatear los resultados en Markdown
         tabla_markdown = "```| Fecha (Europe/Madrid) | Usuario | Acción | Ámbito |\n|----------------------|---------|--------|--------|"
