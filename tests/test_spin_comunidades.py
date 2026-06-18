@@ -235,3 +235,17 @@ def test_spin_buttons_view_no_usa_custom_ids_heredados():
         "lombardbot:spin:comunidades",
         "lombardbot:encontrado:comunidades",
     }
+
+
+def test_reservas_spin_arrancan_liberadas_tras_cargar_modulo():
+    import importlib
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL, AMBITO_SPIN_COMUNIDADES
+
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = object()
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_COMUNIDADES] = object()
+
+    UtilesDiscord = importlib.reload(UtilesDiscord)
+
+    assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is None
+    assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_COMUNIDADES) is None

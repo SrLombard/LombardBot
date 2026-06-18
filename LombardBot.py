@@ -156,6 +156,21 @@ intents.reactions = True
 # Crear e inicializar el bot
 bot = DiscordClientSingleton.initialize(discord_bot_token, intents)
 
+
+def registrar_vistas_persistentes_spin(bot_discord):
+    """Registra una vista persistente de Spin por cada ámbito soportado.
+
+    Las reservas activas no se restauran aquí deliberadamente: viven solo en
+    memoria, así que tras reiniciar el proceso ambas colas vuelven a estar
+    libres.
+    """
+
+    # Cada vista se instancia con su ámbito para que Discord pueda enrutar las
+    # interacciones persistentes usando custom_id distintos por mensaje.
+    bot_discord.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL))
+    bot_discord.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_COMUNIDADES))
+
+
 #Lista de usuarios con permisos
 maestros = ["208239645014753280","681577610010296372","1297346191130103859"]
 
@@ -221,10 +236,7 @@ async def reloj_de_cuco():
 
 @bot.event
 async def on_ready():
-    # Registramos vistas persistentes separadas por ámbito. Cada una usa custom_id
-    # propio para evitar conflictos entre Spin General y Spin Comunidades.
-    bot.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL))
-    bot.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_COMUNIDADES))
+    registrar_vistas_persistentes_spin(bot)
     await bot.tree.sync()
     #await GestionExcel.ActualizarExcels()
     if not programador_tareas.is_running():
