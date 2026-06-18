@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from dataclasses import dataclass
+from typing import Optional
 from threading import Thread
 import threading
 import Imagenes
@@ -29,6 +30,31 @@ from datetime import datetime
 
 
 
+@dataclass(frozen=True)
+class SpinMatchResult:
+    """Partido elegible para Spin con estructura común para todos los ámbitos.
+
+    ``logicaSpin.md`` define que General y Comunidades deben resolver sus
+    partidos hacia una misma frontera de datos. Los campos que no apliquen a un
+    ámbito concreto permanecen en ``None`` para que la UI de Spin consuma una
+    estructura estable sin conocer la tabla de origen.
+    """
+
+    ambito: str
+    canal_partido_id: Optional[int]
+    jugador1_discord_id: Optional[int]
+    jugador2_discord_id: Optional[int]
+    fecha: Optional[datetime]
+    descripcion_corta: Optional[str]
+    descripcion_larga: Optional[str]
+    torneo_id: Optional[int] = None
+    partido_id: Optional[int] = None
+    enfrentamiento_id: Optional[int] = None
+    indice_partido: Optional[int] = None
+    equipo_a_nombre: Optional[str] = None
+    equipo_b_nombre: Optional[str] = None
+
+
 @dataclass
 class SpinReservation:
     """Reserva temporal independiente de una cola de Spin."""
@@ -41,6 +67,7 @@ class SpinReservation:
     canal_partido: object
     descripcion_partido: str
     timeout_task: asyncio.Task
+    partido: SpinMatchResult
 
 
 # Almacén en memoria de reservas activas. Cada ámbito de Spin tiene una cola
@@ -364,6 +391,157 @@ Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
             await mensaje_administradores(f"[WARNING] Canal no encontrado. ID: {canal_id}. Puede haber sido eliminado previamente.")
                 
 
+
+def _clave_orden_spin(partido: SpinMatchResult):
+    """Ordena partidos por fecha cercana y después por identificadores estables."""
+
+    ahora = datetime.utcnow()
+    distancia_fecha = (
+        abs((partido.fecha - ahora).total_seconds())
+        if partido.fecha is not None
+        else float("inf")
+    )
+    return (
+        distancia_fecha,
+        partido.torneo_id or 0,
+        partido.enfrentamiento_id or 0,
+        partido.indice_partido or 0,
+        partido.partido_id or 0,
+    )
+
+
+def _spin_match_desde_partido_general(partido):
+    canal_partido_id = getattr(partido, "canalAsociado", None) or getattr(partido, "canal_id", None)
+    fecha = getattr(partido, "fecha", None)
+    partido_id = getattr(partido, "idCalendario", None) or getattr(partido, "idTicket", None) or getattr(partido, "id", None)
+
+    if hasattr(partido, "usuario_coach1"):
+        jugador1_discord_id = getattr(partido.usuario_coach1, "id_discord", None)
+        jugador2_discord_id = getattr(partido.usuario_coach2, "id_discord", None)
+    else:
+        jugador1_discord_id = getattr(partido.coach1_usuario, "id_discord", None)
+        jugador2_discord_id = getattr(partido.coach2_usuario, "id_discord", None) if partido.coach2_usuario else jugador1_discord_id
+
+    descripcion = f"Spin General reservado: <@{jugador1_discord_id}> y <@{jugador2_discord_id}> pueden buscar partido."
+    return SpinMatchResult(
+        ambito=AMBITO_SPIN_GENERAL,
+        canal_partido_id=canal_partido_id,
+        jugador1_discord_id=jugador1_discord_id,
+        jugador2_discord_id=jugador2_discord_id,
+        fecha=fecha,
+        descripcion_corta=descripcion,
+        descripcion_larga=descripcion,
+        torneo_id=getattr(partido, "torneo_id", None),
+        partido_id=partido_id,
+        enfrentamiento_id=getattr(partido, "ronda_id", None),
+        indice_partido=getattr(partido, "mesa_numero", None),
+    )
+
+
+def buscar_partido_spin_general(session, usuario_db):
+    """Devuelve el partido de Spin General normalizado o ``None``."""
+
+    partidos_calendario = session.query(GestorSQL.Calendario).filter(
+        or_(GestorSQL.Calendario.coach1 == usuario_db.idUsuarios, GestorSQL.Calendario.coach2 == usuario_db.idUsuarios),
+        GestorSQL.Calendario.canalAsociado != None,
+        GestorSQL.Calendario.partidos_idPartidos == None
+    ).all()
+    partidos_playoffs_oro = session.query(GestorSQL.PlayOffsOro).filter(
+        or_(GestorSQL.PlayOffsOro.coach1 == usuario_db.idUsuarios, GestorSQL.PlayOffsOro.coach2 == usuario_db.idUsuarios),
+        GestorSQL.PlayOffsOro.canalAsociado != None,
+        GestorSQL.PlayOffsOro.partidos_idPartidos == None
+    ).all()
+    partidos_playoffs_plata = session.query(GestorSQL.PlayOffsPlata).filter(
+        or_(GestorSQL.PlayOffsPlata.coach1 == usuario_db.idUsuarios, GestorSQL.PlayOffsPlata.coach2 == usuario_db.idUsuarios),
+        GestorSQL.PlayOffsPlata.canalAsociado != None,
+        GestorSQL.PlayOffsPlata.partidos_idPartidos == None
+    ).all()
+    partidos_playoffs_bronce = session.query(GestorSQL.PlayOffsBronce).filter(
+        or_(GestorSQL.PlayOffsBronce.coach1 == usuario_db.idUsuarios, GestorSQL.PlayOffsBronce.coach2 == usuario_db.idUsuarios),
+        GestorSQL.PlayOffsBronce.canalAsociado != None,
+        GestorSQL.PlayOffsBronce.partidos_idPartidos == None
+    ).all()
+    partidos_ticket = session.query(GestorSQL.Ticket).filter(
+        or_(GestorSQL.Ticket.coach1 == usuario_db.idUsuarios, GestorSQL.Ticket.coach2 == usuario_db.idUsuarios),
+        GestorSQL.Ticket.canalAsociado != None,
+        GestorSQL.Ticket.partidos_idPartidos == None
+    ).all()
+    participantes_suizo = session.query(GestorSQL.SuizoParticipante).filter(
+        GestorSQL.SuizoParticipante.usuario_id == usuario_db.idUsuarios,
+        GestorSQL.SuizoParticipante.estado == "ACTIVO"
+    ).all()
+    torneos_suizo_ids = [p.torneo_id for p in participantes_suizo]
+    partidos_suizo = []
+    if torneos_suizo_ids:
+        partidos_suizo = session.query(GestorSQL.SuizoEmparejamiento).filter(
+            GestorSQL.SuizoEmparejamiento.torneo_id.in_(torneos_suizo_ids),
+            or_(GestorSQL.SuizoEmparejamiento.coach1_usuario_id == usuario_db.idUsuarios, GestorSQL.SuizoEmparejamiento.coach2_usuario_id == usuario_db.idUsuarios),
+            GestorSQL.SuizoEmparejamiento.canal_id != None,
+            GestorSQL.SuizoEmparejamiento.estado == "PENDIENTE"
+        ).all()
+
+    resultados = [
+        _spin_match_desde_partido_general(partido)
+        for partido in partidos_calendario + partidos_playoffs_oro + partidos_playoffs_plata + partidos_playoffs_bronce + partidos_ticket + partidos_suizo
+    ]
+    return min(resultados, key=_clave_orden_spin) if resultados else None
+
+
+def buscar_partido_spin_comunidades(session, usuario_db):
+    """Devuelve el partido de Spin Comunidades normalizado o ``None``."""
+
+    partidos = session.query(GestorSQL.ComunidadesPartido).join(
+        GestorSQL.ComunidadesEnfrentamiento,
+        and_(
+            GestorSQL.ComunidadesPartido.enfrentamiento_id == GestorSQL.ComunidadesEnfrentamiento.id,
+            GestorSQL.ComunidadesPartido.torneo_id == GestorSQL.ComunidadesEnfrentamiento.torneo_id,
+        )
+    ).filter(
+        or_(
+            GestorSQL.ComunidadesPartido.usuario_local_id == usuario_db.idUsuarios,
+            GestorSQL.ComunidadesPartido.usuario_visitante_id == usuario_db.idUsuarios,
+        ),
+        GestorSQL.ComunidadesPartido.canal_discord_id != None,
+        GestorSQL.ComunidadesPartido.estado.in_(("PENDIENTE", "EN_CURSO")),
+        GestorSQL.ComunidadesPartido.partido_bloodbowl_id == None,
+    ).all()
+
+    resultados = []
+    for partido in partidos:
+        enfrentamiento = partido.enfrentamiento
+        equipo_a_nombre = getattr(getattr(enfrentamiento, "equipo_a", None), "nombre", None)
+        equipo_b_nombre = getattr(getattr(enfrentamiento, "equipo_b", None), "nombre", None)
+        jugador1_discord_id = getattr(partido.usuario_local, "id_discord", None)
+        jugador2_discord_id = getattr(partido.usuario_visitante, "id_discord", None)
+        descripcion_corta = (
+            f"Spin de comunidades reservado para el partido individual {partido.indice} "
+            f"del enfrentamiento {equipo_a_nombre} vs {equipo_b_nombre}: "
+            f"<@{jugador1_discord_id}> y <@{jugador2_discord_id}> pueden buscar partido."
+        )
+        resultados.append(SpinMatchResult(
+            ambito=AMBITO_SPIN_COMUNIDADES,
+            canal_partido_id=partido.canal_discord_id,
+            jugador1_discord_id=jugador1_discord_id,
+            jugador2_discord_id=jugador2_discord_id,
+            fecha=partido.fecha,
+            descripcion_corta=descripcion_corta,
+            descripcion_larga=descripcion_corta,
+            torneo_id=partido.torneo_id,
+            partido_id=partido.id,
+            enfrentamiento_id=partido.enfrentamiento_id,
+            indice_partido=partido.indice,
+            equipo_a_nombre=equipo_a_nombre,
+            equipo_b_nombre=equipo_b_nombre,
+        ))
+    return min(resultados, key=_clave_orden_spin) if resultados else None
+
+
+def buscar_partido_spin(session, usuario_db, ambito):
+    if ambito == AMBITO_SPIN_COMUNIDADES:
+        return buscar_partido_spin_comunidades(session, usuario_db)
+    return buscar_partido_spin_general(session, usuario_db)
+
+
 class SpinButtonsView(discord.ui.View):
     def __init__(self, ambito=AMBITO_SPIN_GENERAL):
         super().__init__(timeout=None)
@@ -430,72 +608,26 @@ class SpinButtonsView(discord.ui.View):
                 await interaction.followup.send("No se encontró tu usuario en la base de datos.", ephemeral=True)
                 return
 
-            if ambito == AMBITO_SPIN_COMUNIDADES:
+            partido_spin = buscar_partido_spin(session, usuario_db, ambito)
+            if not partido_spin:
                 await interaction.followup.send("No tienes ningún partido pendiente en esta cola de Spin.", ephemeral=True)
                 return
 
-            partidos_calendario = session.query(GestorSQL.Calendario).filter(
-                or_(GestorSQL.Calendario.coach1 == usuario_db.idUsuarios, GestorSQL.Calendario.coach2 == usuario_db.idUsuarios),
-                GestorSQL.Calendario.canalAsociado != None,
-                GestorSQL.Calendario.partidos_idPartidos == None
-            ).all()
-            partidos_playoffs_oro = session.query(GestorSQL.PlayOffsOro).filter(
-                or_(GestorSQL.PlayOffsOro.coach1 == usuario_db.idUsuarios, GestorSQL.PlayOffsOro.coach2 == usuario_db.idUsuarios),
-                GestorSQL.PlayOffsOro.canalAsociado != None,
-                GestorSQL.PlayOffsOro.partidos_idPartidos == None
-            ).all()
-            partidos_playoffs_plata = session.query(GestorSQL.PlayOffsPlata).filter(
-                or_(GestorSQL.PlayOffsPlata.coach1 == usuario_db.idUsuarios, GestorSQL.PlayOffsPlata.coach2 == usuario_db.idUsuarios),
-                GestorSQL.PlayOffsPlata.canalAsociado != None,
-                GestorSQL.PlayOffsPlata.partidos_idPartidos == None
-            ).all()
-            partidos_playoffs_bronce = session.query(GestorSQL.PlayOffsBronce).filter(
-                or_(GestorSQL.PlayOffsBronce.coach1 == usuario_db.idUsuarios, GestorSQL.PlayOffsBronce.coach2 == usuario_db.idUsuarios),
-                GestorSQL.PlayOffsBronce.canalAsociado != None,
-                GestorSQL.PlayOffsBronce.partidos_idPartidos == None
-            ).all()
-            partidos_ticket = session.query(GestorSQL.Ticket).filter(
-                or_(GestorSQL.Ticket.coach1 == usuario_db.idUsuarios, GestorSQL.Ticket.coach2 == usuario_db.idUsuarios),
-                GestorSQL.Ticket.canalAsociado != None,
-                GestorSQL.Ticket.partidos_idPartidos == None
-            ).all()
-            participantes_suizo = session.query(GestorSQL.SuizoParticipante).filter(
-                GestorSQL.SuizoParticipante.usuario_id == usuario_db.idUsuarios,
-                GestorSQL.SuizoParticipante.estado == "ACTIVO"
-            ).all()
-            torneos_suizo_ids = [p.torneo_id for p in participantes_suizo]
-            partidos_suizo = []
-            if torneos_suizo_ids:
-                partidos_suizo = session.query(GestorSQL.SuizoEmparejamiento).filter(
-                    GestorSQL.SuizoEmparejamiento.torneo_id.in_(torneos_suizo_ids),
-                    or_(GestorSQL.SuizoEmparejamiento.coach1_usuario_id == usuario_db.idUsuarios, GestorSQL.SuizoEmparejamiento.coach2_usuario_id == usuario_db.idUsuarios),
-                    GestorSQL.SuizoEmparejamiento.canal_id != None,
-                    GestorSQL.SuizoEmparejamiento.estado == "PENDIENTE"
-                ).all()
-
-            partidos = partidos_calendario + partidos_playoffs_oro + partidos_playoffs_plata + partidos_playoffs_bronce + partidos_ticket + partidos_suizo
-            if not partidos:
-                await interaction.followup.send("No tienes ningún partido pendiente en esta cola de Spin.", ephemeral=True)
-                return
-
-            now_time = datetime.utcnow()
-            partido = min(partidos, key=lambda p: abs((p.fecha - now_time).total_seconds()) if getattr(p, 'fecha', None) else float('inf'))
-            canal_partido_id = getattr(partido, "canalAsociado", None) or getattr(partido, "canal_id", None)
-            if hasattr(partido, "usuario_coach1"):
-                coach1_id_discord = partido.usuario_coach1.id_discord
-                coach2_id_discord = partido.usuario_coach2.id_discord
-            else:
-                coach1_id_discord = partido.coach1_usuario.id_discord
-                coach2_id_discord = partido.coach2_usuario.id_discord if partido.coach2_usuario else partido.coach1_usuario.id_discord
+            canal_partido_id = partido_spin.canal_partido_id
+            coach1_id_discord = partido_spin.jugador1_discord_id
+            coach2_id_discord = partido_spin.jugador2_discord_id
 
             canal_partido = interaction.guild.get_channel(canal_partido_id) if canal_partido_id else None
-            descripcion_partido = f'{self.nombre_ambito()} reservado: <@{coach1_id_discord}> y <@{coach2_id_discord}> pueden buscar partido.'
+            descripcion_partido = partido_spin.descripcion_corta
             timeout_task = asyncio.create_task(self.auto_release_spin(ambito, user, interaction.message))
-            reserva = SpinReservation(ambito, user, coach1_id_discord, coach2_id_discord, interaction.channel, canal_partido, descripcion_partido, timeout_task)
+            reserva = SpinReservation(ambito, user, coach1_id_discord, coach2_id_discord, interaction.channel, canal_partido, descripcion_partido, timeout_task, partido_spin)
             guardar_reserva_spin(reserva)
 
             if canal_partido:
-                await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
+                if ambito == AMBITO_SPIN_COMUNIDADES:
+                    await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear vuestro partido de comunidades.')
+                else:
+                    await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
 
             self.actualizar_botones(spin_habilitado=False)
             await interaction.message.edit(view=self)
