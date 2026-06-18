@@ -37,6 +37,7 @@ from SpinConstantes import (
     AMBITO_SPIN_TODOS,
     ayuda_agregar_mensaje_spin,
     mensaje_spin_libre,
+    normalizar_filtro_historial_spin,
     normalizar_ambito_spin,
 )
 import GestionExcel
@@ -2336,8 +2337,8 @@ async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int
     tiempo_desde = datetime.utcnow() - timedelta(minutes=minutos)
     
     try:
-        ambito_normalizado = normalizar_ambito_spin(ambito, permitir_todos=True)
-        if ambito_normalizado is None:
+        filtro_ambito = normalizar_filtro_historial_spin(ambito)
+        if filtro_ambito is None and normalizar_ambito_spin(ambito, permitir_todos=True) != AMBITO_SPIN_TODOS:
             await interaction.response.send_message("```Ámbito no válido. Usa General, Comunidades o Todos.```", ephemeral=True)
             return
 
@@ -2347,8 +2348,8 @@ async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int
         GestorSQL.asegurar_columnas_historial_spin(GestorSQL.conexionEngine())
         consulta = session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo, GestorSQL.Spin.ambito).\
             filter(GestorSQL.Spin.fecha >= tiempo_desde)
-        if ambito_normalizado != AMBITO_SPIN_TODOS:
-            consulta = consulta.filter(GestorSQL.Spin.ambito == ambito_normalizado)
+        if filtro_ambito:
+            consulta = consulta.filter(GestorSQL.Spin.ambito == filtro_ambito)
         resultados = consulta.order_by(GestorSQL.Spin.fecha.asc(), GestorSQL.Spin.idSpin.asc()).all()
         
         # Formatear los resultados en Markdown

@@ -96,3 +96,17 @@ def normalizar_ambito_spin(texto, *, permitir_todos=False):
 
     opciones = _TEXTOS_AMBITO_SPIN_TODOS if permitir_todos else _TEXTOS_AMBITO_SPIN
     return opciones.get(_normalizar_texto_ambito(texto))
+
+
+def normalizar_filtro_historial_spin(texto):
+    """Normaliza el filtro de ámbito de ``/ultimosspins``.
+
+    ``logicaSpin.md`` define que el valor de usuario ``Todos`` no debe aplicar
+    filtro de ámbito, mientras que ``General`` y ``Comunidades`` deben
+    convertirse a los valores canónicos persistidos en el historial.
+    """
+
+    ambito = normalizar_ambito_spin(texto, permitir_todos=True)
+    if ambito == AMBITO_SPIN_TODOS:
+        return None
+    return ambito
