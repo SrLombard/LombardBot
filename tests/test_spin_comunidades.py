@@ -515,6 +515,66 @@ async def test_encontrado_callback_permita_liberar_al_rival_que_no_inicio_el_spi
     finally:
         UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
 
+@pytest.mark.asyncio
+async def test_encontrado_callback_libera_estado_aunque_no_exista_mensaje_principal(monkeypatch):
+    from types import SimpleNamespace
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+
+    mensajes = []
+
+    class Response:
+        async def defer(self):
+            pass
+
+    class Followup:
+        async def send(self, mensaje, *, ephemeral=False):
+            mensajes.append((mensaje, ephemeral))
+
+    class ChannelSinMensajes:
+        def history(self, *, oldest_first=False, limit=1):
+            async def iterator():
+                if False:
+                    yield None
+            return iterator()
+
+    class TimeoutTask:
+        def __init__(self):
+            self.cancelled = False
+
+        def cancel(self):
+            self.cancelled = True
+
+    monkeypatch.setattr(UtilesDiscord.Thread, "start", lambda self: None)
+    timeout = TimeoutTask()
+    reserva = SimpleNamespace(
+        ambito=AMBITO_SPIN_GENERAL,
+        usuario_spin=SimpleNamespace(id=111),
+        jugador1_discord_id=111,
+        jugador2_discord_id=222,
+        canal_spin=ChannelSinMensajes(),
+        canal_partido=None,
+        descripcion_partido="General",
+        timeout_task=timeout,
+        partido=None,
+    )
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = reserva
+
+    interaction = SimpleNamespace(
+        response=Response(),
+        followup=Followup(),
+        user=SimpleNamespace(id=111, name="Jugador"),
+        channel=ChannelSinMensajes(),
+    )
+
+    try:
+        await UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL).encontrado_callback.callback(interaction)
+        assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is None
+        assert timeout.cancelled is True
+        assert mensajes == [("Has liberado el Spin General.", True)]
+    finally:
+        UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
+
 
 @pytest.mark.asyncio
 async def test_encontrado_callback_no_hace_excepcion_por_admin_ni_comisario(monkeypatch):

@@ -630,6 +630,44 @@ def buscar_partido_spin(session, usuario_db, ambito):
     return resolver_partido_spin(session, usuario_db, ambito)
 
 
+async def obtener_primer_mensaje_canal(channel):
+    """Devuelve el primer mensaje del canal de Spin, o ``None`` si no existe.
+
+    La decisión operativa de ``logicaSpin.md`` es no persistir ni usar como
+    fuente de verdad el ID del mensaje de Spin: el mensaje editable es siempre
+    el primer mensaje visible del canal.
+    """
+
+    if channel is None:
+        return None
+
+    async for mensaje in channel.history(oldest_first=True, limit=1):
+        return mensaje
+    return None
+
+
+async def editar_primer_mensaje_spin(channel, *, content=None, view=None):
+    """Edita el primer mensaje del canal de Spin sin depender de IDs guardados.
+
+    Lanza ``LookupError`` si no hay mensaje principal para que el flujo que
+    reserva/libera pueda decidir cómo degradar sin dejar estado interno
+    atascado.
+    """
+
+    primer_mensaje = await obtener_primer_mensaje_canal(channel)
+    if primer_mensaje is None:
+        raise LookupError("No se encontró el primer mensaje del canal de Spin")
+
+    kwargs = {}
+    if content is not None:
+        kwargs["content"] = content
+    if view is not None:
+        kwargs["view"] = view
+    if kwargs:
+        await primer_mensaje.edit(**kwargs)
+    return primer_mensaje
+
+
 class SpinButtonsView(discord.ui.View):
     def __init__(self, ambito=AMBITO_SPIN_GENERAL):
         super().__init__(timeout=None)
@@ -691,17 +729,13 @@ class SpinButtonsView(discord.ui.View):
         except Exception as exc:
             print(f"No se pudo enviar DM de timeout de {nombre_ambito}: {exc}")
 
-        if mensaje_botones:
-            try:
-                self.actualizar_botones(spin_habilitado=True)
-                await mensaje_botones.edit(view=self)
-            except Exception as exc:
-                print(f"No se pudo editar la vista de botones de {nombre_ambito} tras timeout: {exc}")
-
         try:
-            primer_mensaje = await self.obtener_primer_mensaje(reserva.canal_spin) if reserva.canal_spin else None
-            if primer_mensaje:
-                await primer_mensaje.edit(content=mensaje_spin_libre(ambito))
+            self.actualizar_botones(spin_habilitado=True)
+            await editar_primer_mensaje_spin(
+                reserva.canal_spin,
+                content=mensaje_spin_libre(ambito),
+                view=self,
+            )
         except Exception as exc:
             print(f"No se pudo editar el primer mensaje de {nombre_ambito} tras timeout: {exc}")
 
@@ -717,9 +751,7 @@ class SpinButtonsView(discord.ui.View):
                     child.disabled = spin_habilitado
 
     async def obtener_primer_mensaje(self, channel):
-        async for mensaje in channel.history(oldest_first=True, limit=1):
-            return mensaje  #primer mensaje encontrado
-        return None  #None si no hay mensajes
+        return await obtener_primer_mensaje_canal(channel)
 
     @discord.ui.button(label="Spin", style=discord.ButtonStyle.green, custom_id='lombardbot:spin:general')
     async def spin_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -757,22 +789,36 @@ class SpinButtonsView(discord.ui.View):
                 canal_partido = interaction.guild.get_channel(canal_partido_id) if canal_partido_id else None
                 descripcion_partido = partido_spin.descripcion_corta
                 reserva = SpinReservation(ambito, user, coach1_id_discord, coach2_id_discord, interaction.channel, canal_partido, descripcion_partido, None, partido_spin)
-                timeout_task = asyncio.create_task(self.auto_release_spin(reserva, interaction.message))
+                timeout_task = asyncio.create_task(self.auto_release_spin(reserva))
                 reserva.timeout_task = timeout_task
                 guardar_reserva_spin(reserva)
+
+                self.actualizar_botones(spin_habilitado=False)
+                try:
+                    await editar_primer_mensaje_spin(
+                        interaction.channel,
+                        content=descripcion_partido,
+                        view=self,
+                    )
+                except Exception as exc:
+                    limpiar_reserva_spin(ambito)
+                    if timeout_task:
+                        timeout_task.cancel()
+                    self.actualizar_botones(spin_habilitado=True)
+                    await interaction.followup.send(
+                        "No se pudo localizar o editar el mensaje principal de Spin. "
+                        "La reserva interna ha quedado liberada; recrea el mensaje con "
+                        f"`!AgregarMensajeSpin {ambito.title()}` si es necesario.",
+                        ephemeral=True,
+                    )
+                    print(f"No se pudo reservar {self.nombre_ambito()} al editar el primer mensaje: {exc}")
+                    return
 
                 if canal_partido:
                     if ambito == AMBITO_SPIN_COMUNIDADES:
                         await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear vuestro partido de comunidades.')
                     else:
                         await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
-
-                self.actualizar_botones(spin_habilitado=False)
-                await interaction.message.edit(view=self)
-
-                primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
-                if primer_mensaje:
-                    await primer_mensaje.edit(content=descripcion_partido)
 
                 await interaction.followup.send(f"Ahora puedes buscar partido en {self.nombre_ambito()}.", ephemeral=True)
                 thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Spin', ambito))
@@ -807,11 +853,14 @@ class SpinButtonsView(discord.ui.View):
             await reserva.canal_partido.send(f"El {self.nombre_ambito()} ha sido liberado.")
 
         self.actualizar_botones(spin_habilitado=True)
-        await interaction.message.edit(view=self)
-
-        primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
-        if primer_mensaje:
-            await primer_mensaje.edit(content=mensaje_spin_libre(ambito))
+        try:
+            await editar_primer_mensaje_spin(
+                interaction.channel,
+                content=mensaje_spin_libre(ambito),
+                view=self,
+            )
+        except Exception as exc:
+            print(f"No se pudo editar el primer mensaje de {self.nombre_ambito()} al liberar: {exc}")
 
         await interaction.followup.send(f"Has liberado el {self.nombre_ambito()}.", ephemeral=True)
         thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado', ambito))
