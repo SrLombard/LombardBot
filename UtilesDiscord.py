@@ -105,7 +105,15 @@ def obtener_bloqueo_reserva_spin(ambito):
 
 
 def reserva_spin_activa(reserva):
-    return isinstance(reserva, SpinReservation)
+    if isinstance(reserva, SpinReservation):
+        return True
+    if reserva is None or isinstance(reserva, SpinEstadoTransitorio):
+        return False
+    return (
+        bool(discord_ids_jugadores_reserva(reserva))
+        or hasattr(reserva, "canal_spin")
+        or hasattr(reserva, "canal_partido")
+    )
 
 
 def guardar_reserva_spin(reserva):
@@ -533,6 +541,26 @@ def mensaje_spin_reservado(partido: SpinMatchResult):
     return f"Spin General reservado: {menciones} pueden buscar partido."
 
 
+def mensaje_canal_partido_spin_reservado(partido: SpinMatchResult):
+    """Construye el aviso en el canal del partido al reservar Spin.
+
+    ``logicaSpin.md`` fija textos distintos para General y Comunidades. Para
+    Comunidades se añade el contexto de partido individual y enfrentamiento
+    solo cuando están disponibles todos los datos necesarios.
+    """
+
+    menciones = f"<@{partido.jugador1_discord_id}> y <@{partido.jugador2_discord_id}>"
+    if partido.ambito == AMBITO_SPIN_COMUNIDADES:
+        mensaje = f"{menciones}, podéis spinear vuestro partido de comunidades"
+        if partido.indice_partido and partido.equipo_a_nombre and partido.equipo_b_nombre:
+            mensaje += (
+                f": partido individual {partido.indice_partido} "
+                f"del enfrentamiento {partido.equipo_a_nombre} vs {partido.equipo_b_nombre}"
+            )
+        return f"{mensaje}."
+    return f"{menciones}, podéis spinear."
+
+
 def _spin_match_desde_partido_general(partido):
     canal_partido_id = getattr(partido, "canalAsociado", None) or getattr(partido, "canal_id", None)
     fecha = getattr(partido, "fecha", None)
@@ -764,7 +792,7 @@ async def liberar_reserva_spin_administrativa(ambito, usuario_admin):
 
     if reserva.canal_partido:
         try:
-            await reserva.canal_partido.send(f"El {nombre_ambito} ha sido liberado por administración.")
+            await reserva.canal_partido.send(f"El {nombre_ambito} ha sido liberado.")
         except Exception as exc:
             print(f"No se pudo enviar el mensaje de liberación administrativa de {nombre_ambito}: {exc}")
 
@@ -960,10 +988,7 @@ class SpinButtonsView(discord.ui.View):
             return
 
         if canal_partido:
-            if ambito == AMBITO_SPIN_COMUNIDADES:
-                await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear vuestro partido de comunidades.')
-            else:
-                await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
+            await canal_partido.send(mensaje_canal_partido_spin_reservado(partido_spin))
 
         await interaction.followup.send(f"Ahora puedes buscar partido en {self.nombre_ambito()}.", ephemeral=True)
         thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), TIPO_SPIN, ambito, user.id))

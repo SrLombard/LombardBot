@@ -872,7 +872,7 @@ async def test_liberacion_administrativa_inserta_historial_con_ambito_y_admin(mo
 
     assert liberado is True
     assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is None
-    assert canal_partido.mensajes == ["El Spin General ha sido liberado por administración."]
+    assert canal_partido.mensajes == ["El Spin General ha sido liberado."]
     assert canal_spin.mensaje.ediciones[0]["content"] == "El Spin General está **LIBRE**"
     assert len(hilos) == 1
     assert hilos[0].target is UtilesDiscord.GestorSQL.insertar_spin
@@ -881,6 +881,46 @@ async def test_liberacion_administrativa_inserta_historial_con_ambito_y_admin(mo
     assert tipo == TIPO_SPIN_ADMIN_RELEASE == "LiberacionAdmin"
     assert ambito == AMBITO_SPIN_GENERAL
     assert usuario_discord_id == 987654321
+
+def test_mensaje_canal_partido_spin_reservado_comunidades_usa_texto_de_logica_spin():
+    from SpinConstantes import AMBITO_SPIN_COMUNIDADES, AMBITO_SPIN_GENERAL
+    from UtilesDiscord import SpinMatchResult, mensaje_canal_partido_spin_reservado
+
+    completo = SpinMatchResult(
+        ambito=AMBITO_SPIN_COMUNIDADES,
+        canal_partido_id=902,
+        jugador1_discord_id=102,
+        jugador2_discord_id=101,
+        fecha=None,
+        indice_partido=2,
+        equipo_a_nombre="Equipo A",
+        equipo_b_nombre="Equipo B",
+    )
+    incompleto = SpinMatchResult(
+        ambito=AMBITO_SPIN_COMUNIDADES,
+        canal_partido_id=902,
+        jugador1_discord_id=102,
+        jugador2_discord_id=101,
+        fecha=None,
+        indice_partido=2,
+        equipo_a_nombre="Equipo A",
+    )
+    general = SpinMatchResult(
+        ambito=AMBITO_SPIN_GENERAL,
+        canal_partido_id=900,
+        jugador1_discord_id=101,
+        jugador2_discord_id=201,
+        fecha=None,
+    )
+
+    assert mensaje_canal_partido_spin_reservado(incompleto) == "<@102> y <@101>, podéis spinear vuestro partido de comunidades."
+    assert mensaje_canal_partido_spin_reservado(completo) == (
+        "<@102> y <@101>, podéis spinear vuestro partido de comunidades: "
+        "partido individual 2 del enfrentamiento Equipo A vs Equipo B."
+    )
+    assert mensaje_canal_partido_spin_reservado(general) == "<@101> y <@201>, podéis spinear."
+    assert "None" not in mensaje_canal_partido_spin_reservado(incompleto)
+
 
 def test_mensaje_spin_reservado_se_construye_desde_spin_match_result():
     from SpinConstantes import AMBITO_SPIN_GENERAL
