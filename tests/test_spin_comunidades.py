@@ -1080,3 +1080,81 @@ def test_mensajes_liberacion_canal_partido_respetan_ambito_general():
         "las máquinas somos superiores y cuidamos de los esmirriados humanos."
     )
     assert "comunidad" not in automatico.casefold()
+
+
+def test_clave_orden_spin_prioriza_fecha_sobre_partidos_sin_fecha(monkeypatch):
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+
+    class FechaFija(datetime):
+        @classmethod
+        def utcnow(cls):
+            return datetime(2026, 7, 1, 20, 0)
+
+    monkeypatch.setattr(UtilesDiscord, "datetime", FechaFija)
+
+    con_fecha = SpinMatchResult(
+        ambito=AMBITO_SPIN_GENERAL,
+        canal_partido_id=1,
+        jugador1_discord_id=101,
+        jugador2_discord_id=201,
+        fecha=datetime(2026, 7, 20, 20, 0),
+        torneo_id=99,
+        ronda_id=99,
+        enfrentamiento_id=99,
+        indice_partido=99,
+        partido_id=99,
+    )
+    sin_fecha = SpinMatchResult(
+        ambito=AMBITO_SPIN_GENERAL,
+        canal_partido_id=2,
+        jugador1_discord_id=101,
+        jugador2_discord_id=202,
+        fecha=None,
+        torneo_id=1,
+        ronda_id=1,
+        enfrentamiento_id=1,
+        indice_partido=1,
+        partido_id=1,
+    )
+
+    assert min([sin_fecha, con_fecha], key=UtilesDiscord._clave_orden_spin) is con_fecha
+
+
+def test_clave_orden_spin_desempata_sin_fechas_por_ids_deterministas(monkeypatch):
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+
+    base = dict(
+        ambito=AMBITO_SPIN_GENERAL,
+        canal_partido_id=1,
+        jugador1_discord_id=101,
+        jugador2_discord_id=201,
+        fecha=None,
+        torneo_id=1,
+        ronda_id=1,
+        enfrentamiento_id=1,
+        indice_partido=1,
+    )
+    mayor_id = SpinMatchResult(**base, partido_id=20)
+    menor_id = SpinMatchResult(**base, partido_id=10)
+
+    assert min([mayor_id, menor_id], key=UtilesDiscord._clave_orden_spin) is menor_id
+
+
+def test_resolver_partido_spin_comunidades_deja_sin_fecha_detras_de_fechados():
+    session, engine = _session()
+    try:
+        usuarios, torneo, enfrentamiento, equipo_a, equipo_b, ahora = _crear_contexto(session)
+        sin_fecha = _partido(torneo, enfrentamiento, equipo_a, equipo_b, usuarios[0], usuarios[2], indice=1, canal=901, fecha=None)
+        con_fecha = _partido(torneo, enfrentamiento, equipo_a, equipo_b, usuarios[1], usuarios[0], indice=2, canal=902, fecha=ahora + timedelta(days=10))
+        session.add_all([sin_fecha, con_fecha])
+        session.commit()
+
+        resultado = resolver_partido_spin_comunidades(session, usuarios[0])
+
+        assert resultado.partido_id == con_fecha.id
+        assert resultado.ronda_id == enfrentamiento.ronda_id
+    finally:
+        session.close()
+        engine.dispose()

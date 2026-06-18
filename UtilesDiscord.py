@@ -64,6 +64,7 @@ class SpinMatchResult:
     descripcion_larga: Optional[str] = None
     torneo_id: Optional[int] = None
     partido_id: Optional[int] = None
+    ronda_id: Optional[int] = None
     enfrentamiento_id: Optional[int] = None
     indice_partido: Optional[int] = None
     equipo_a_nombre: Optional[str] = None
@@ -512,21 +513,32 @@ Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
                 
 
 
+def _valor_orden_determinista_spin(valor):
+    """Normaliza identificadores opcionales para desempatar de forma estable."""
+
+    return valor if valor is not None else 0
+
+
 def _clave_orden_spin(partido: SpinMatchResult):
-    """Ordena partidos por fecha cercana y después por identificadores estables."""
+    """Ordena partidos según el criterio común de ``logicaSpin.md``.
+
+    Primero van los partidos con fecha, ordenados por cercanía al momento
+    actual. Los partidos sin fecha quedan detrás y todos los empates se
+    resuelven por identificadores estables: torneo, ronda, enfrentamiento,
+    índice de partido e ID interno.
+    """
 
     ahora = datetime.utcnow()
-    distancia_fecha = (
-        abs((partido.fecha - ahora).total_seconds())
-        if partido.fecha is not None
-        else float("inf")
-    )
+    tiene_fecha = partido.fecha is not None
+    distancia_fecha = abs((partido.fecha - ahora).total_seconds()) if tiene_fecha else float("inf")
     return (
+        0 if tiene_fecha else 1,
         distancia_fecha,
-        partido.torneo_id or 0,
-        partido.enfrentamiento_id or 0,
-        partido.indice_partido or 0,
-        partido.partido_id or 0,
+        _valor_orden_determinista_spin(partido.torneo_id),
+        _valor_orden_determinista_spin(partido.ronda_id),
+        _valor_orden_determinista_spin(partido.enfrentamiento_id),
+        _valor_orden_determinista_spin(partido.indice_partido),
+        _valor_orden_determinista_spin(partido.partido_id),
     )
 
 
@@ -608,7 +620,8 @@ def _spin_match_desde_partido_general(partido):
         fecha=fecha,
         torneo_id=getattr(partido, "torneo_id", None),
         partido_id=partido_id,
-        enfrentamiento_id=getattr(partido, "ronda_id", None),
+        ronda_id=getattr(partido, "ronda_id", None) or getattr(partido, "jornada", None),
+        enfrentamiento_id=getattr(partido, "id", None),
         indice_partido=getattr(partido, "mesa_numero", None),
     )
     descripcion = mensaje_spin_reservado(resultado)
@@ -725,6 +738,7 @@ def resolver_partido_spin_comunidades(session, usuario_db):
             fecha=partido.fecha,
             torneo_id=partido.torneo_id,
             partido_id=partido.id,
+            ronda_id=getattr(enfrentamiento, "ronda_id", None),
             enfrentamiento_id=partido.enfrentamiento_id,
             indice_partido=partido.indice,
             equipo_a_nombre=equipo_a_nombre,
