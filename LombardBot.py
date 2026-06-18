@@ -221,8 +221,9 @@ async def reloj_de_cuco():
 
 @bot.event
 async def on_ready():
+    # Los botones persistentes existentes (`your_bot:spin` / `your_bot:encontrado`)
+    # pertenecen al Spin heredado, que debe seguir operando como GENERAL.
     bot.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL))
-    bot.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_COMUNIDADES))
     await bot.tree.sync()
     #await GestionExcel.ActualizarExcels()
     if not programador_tareas.is_running():
@@ -2305,18 +2306,30 @@ async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int
             await interaction.response.send_message("```Ámbito no válido. Usa General, Comunidades o Todos.```", ephemeral=True)
             return
 
-        # Realizar la consulta filtrando por fecha y, si procede, por ámbito
-        consulta = session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo, GestorSQL.Spin.ambito).\
-            filter(GestorSQL.Spin.fecha >= tiempo_desde)
-        if ambito_normalizado != AMBITO_SPIN_TODOS:
-            consulta = consulta.filter(GestorSQL.Spin.ambito == ambito_normalizado)
-        resultados = consulta.all()
+        # Realizar la consulta filtrando por fecha y, si procede, por ámbito.
+        # Si la base de datos aún no tiene `Spin.ambito`, los registros heredados
+        # se muestran como GENERAL para mantener la compatibilidad del Spin actual.
+        columnas_spin = {columna["name"] for columna in GestorSQL.inspect(GestorSQL.conexionEngine()).get_columns(GestorSQL.Spin.__tablename__)}
+        if "ambito" in columnas_spin:
+            consulta = session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo, GestorSQL.Spin.ambito).\
+                filter(GestorSQL.Spin.fecha >= tiempo_desde)
+            if ambito_normalizado != AMBITO_SPIN_TODOS:
+                consulta = consulta.filter(GestorSQL.Spin.ambito == ambito_normalizado)
+            resultados = consulta.all()
+        else:
+            if ambito_normalizado == AMBITO_SPIN_COMUNIDADES:
+                resultados = []
+            else:
+                resultados = [
+                    (fecha, usuario, tipo, AMBITO_SPIN_GENERAL)
+                    for fecha, usuario, tipo in session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo).filter(GestorSQL.Spin.fecha >= tiempo_desde).all()
+                ]
         
         # Formatear los resultados en Markdown
         tabla_markdown = "```| Fecha (Europe/Madrid) | Usuario | Acción | Ámbito |\n|----------------------|---------|--------|--------|"
         for fecha, usuario, tipo, ambito_registro in resultados:
             fecha_madrid = fecha.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('Europe/Madrid')) if fecha.tzinfo is None else fecha.astimezone(ZoneInfo('Europe/Madrid'))
-            tabla_markdown += f"\n| {fecha_madrid.strftime('%Y-%m-%d %H:%M:%S')} | {usuario} | {tipo} | {ambito_registro or ''} |"
+            tabla_markdown += f"\n| {fecha_madrid.strftime('%Y-%m-%d %H:%M:%S')} | {usuario} | {tipo} | {ambito_registro or AMBITO_SPIN_GENERAL} |"
         
         tabla_markdown += "```"
         

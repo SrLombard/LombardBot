@@ -6,6 +6,7 @@ from sqlalchemy import (
     Text, Numeric, Boolean, Enum, JSON, SmallInteger, ForeignKeyConstraint, UniqueConstraint,
     CheckConstraint, Index, text, func,
 )
+from sqlalchemy import inspect
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -140,15 +141,30 @@ class Spin(Base):
 
 
 def insertar_spin(usuario, fecha, tipo, ambito=AMBITO_SPIN_GENERAL):
-    # Esta es la función que inserta un nuevo Spin en la base de datos
+    # Esta es la función que inserta un nuevo Spin en la base de datos.
+    # Los Spins heredados son Spin General, pero el despliegue puede convivir
+    # temporalmente con bases de datos donde aún no exista la columna `ambito`.
     ambito_normalizado = normalizar_ambito_spin(ambito) or AMBITO_SPIN_GENERAL
-    new_spin = Spin(user=usuario, fecha=fecha, tipo=tipo, ambito=ambito_normalizado)
-    Session = sessionmaker(bind=conexionEngine())
+    engine = conexionEngine()
+    Session = sessionmaker(bind=engine)
     session = Session()
     try:
-        session.add(new_spin)
+        columnas_spin = {columna["name"] for columna in inspect(engine).get_columns(Spin.__tablename__)}
+        valores = {"usuario": usuario, "fecha": fecha, "tipo": tipo}
+        if "ambito" in columnas_spin:
+            valores["ambito"] = ambito_normalizado
+            session.execute(
+                text("INSERT INTO Spin (`user`, fecha, tipo, ambito) VALUES (:usuario, :fecha, :tipo, :ambito)"),
+                valores,
+            )
+        else:
+            session.execute(
+                text("INSERT INTO Spin (`user`, fecha, tipo) VALUES (:usuario, :fecha, :tipo)"),
+                valores,
+            )
         session.commit()
     except Exception as e:
+        session.rollback()
         print(f"Error al insertar en la tabla Spin: {e}")
     finally:
         session.close()
