@@ -12,7 +12,7 @@ from sqlalchemy import BIGINT, create_engine, Column, Integer, String, ForeignKe
 from sqlalchemy import and_, or_ ,null
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, joinedload
 from sqlalchemy.sql import case,func
 
 import GestorSQL
@@ -499,10 +499,20 @@ def buscar_partido_spin_general(session, usuario_db):
     return resolver_partido_spin_general(session, usuario_db)
 
 
-def buscar_partido_spin_comunidades(session, usuario_db):
-    """Devuelve el partido de Spin Comunidades normalizado o ``None``."""
+def resolver_partido_spin_comunidades(session, usuario_db):
+    """Resuelve el partido elegible de Spin Comunidades o ``None``.
 
-    partidos = session.query(GestorSQL.ComunidadesPartido).join(
+    ``logicaSpin.md`` establece que Spin Comunidades debe buscar únicamente en
+    ``ComunidadesPartido`` y devolver un ``SpinMatchResult`` con los datos
+    necesarios del canal, jugadores, partido individual y enfrentamiento.
+    """
+
+    partidos = session.query(GestorSQL.ComunidadesPartido).options(
+        joinedload(GestorSQL.ComunidadesPartido.usuario_local),
+        joinedload(GestorSQL.ComunidadesPartido.usuario_visitante),
+        joinedload(GestorSQL.ComunidadesPartido.enfrentamiento).joinedload(GestorSQL.ComunidadesEnfrentamiento.equipo_a),
+        joinedload(GestorSQL.ComunidadesPartido.enfrentamiento).joinedload(GestorSQL.ComunidadesEnfrentamiento.equipo_b),
+    ).join(
         GestorSQL.ComunidadesEnfrentamiento,
         and_(
             GestorSQL.ComunidadesPartido.enfrentamiento_id == GestorSQL.ComunidadesEnfrentamiento.id,
@@ -515,6 +525,7 @@ def buscar_partido_spin_comunidades(session, usuario_db):
         ),
         GestorSQL.ComunidadesPartido.canal_discord_id != None,
         GestorSQL.ComunidadesPartido.estado.in_(("PENDIENTE", "EN_CURSO")),
+        ~GestorSQL.ComunidadesPartido.estado.in_(("FINALIZADO", "ADMINISTRADO")),
         GestorSQL.ComunidadesPartido.partido_bloodbowl_id == None,
     ).all()
 
@@ -548,9 +559,15 @@ def buscar_partido_spin_comunidades(session, usuario_db):
     return min(resultados, key=_clave_orden_spin) if resultados else None
 
 
+def buscar_partido_spin_comunidades(session, usuario_db):
+    """Alias heredado para resolver el partido de Spin Comunidades."""
+
+    return resolver_partido_spin_comunidades(session, usuario_db)
+
+
 def buscar_partido_spin(session, usuario_db, ambito):
     if ambito == AMBITO_SPIN_COMUNIDADES:
-        return buscar_partido_spin_comunidades(session, usuario_db)
+        return resolver_partido_spin_comunidades(session, usuario_db)
     return resolver_partido_spin_general(session, usuario_db)
 
 
