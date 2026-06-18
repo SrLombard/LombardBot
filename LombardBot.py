@@ -35,6 +35,7 @@ from SpinConstantes import (
     AMBITO_SPIN_COMUNIDADES,
     AMBITO_SPIN_GENERAL,
     AMBITO_SPIN_TODOS,
+    ayuda_agregar_mensaje_spin,
     mensaje_spin_libre,
     normalizar_ambito_spin,
 )
@@ -1854,10 +1855,17 @@ async def agregar_vista(ctx, message_id: int, ambito: str = "General"):
 
 @bot.command(name="AgregaMensajeSpin", aliases=["AgregarMensajeSpin"])
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
-async def AgregaMensajeSpin(ctx, ambito: str):
+async def AgregaMensajeSpin(ctx, ambito: str = None):
+    if ambito is None:
+        await ctx.send(ayuda_agregar_mensaje_spin(), delete_after=20)
+        return
+
     ambito_normalizado = normalizar_ambito_spin(ambito)
     if not ambito_normalizado:
-        await ctx.send("Ámbito de Spin no válido. Usa General o Comunidades.", delete_after=20)
+        await ctx.send(
+            f"Ámbito de Spin no válido: `{ambito}`.\n{ayuda_agregar_mensaje_spin()}",
+            delete_after=20,
+        )
         return
 
     await ctx.send(
@@ -1871,7 +1879,7 @@ async def AgregaMensajeSpin(ctx, ambito: str):
 @AgregaMensajeSpin.error
 async def AgregaMensajeSpin_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument) and error.param.name == "ambito":
-        await ctx.send("Debes indicar el ámbito del Spin: General o Comunidades.", delete_after=20)
+        await ctx.send(ayuda_agregar_mensaje_spin(), delete_after=20)
         return
     raise error
    

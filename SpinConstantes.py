@@ -27,6 +27,26 @@ MENSAJES_SPIN_LIBRE = {
 }
 
 
+AYUDA_AGREGAR_MENSAJE_SPIN = (
+    "Uso: `!AgregarMensajeSpin <ámbito>`\n"
+    "Ámbitos válidos: `General` y `Comunidades`.\n"
+    "Ejemplos:\n"
+    "`!AgregarMensajeSpin General`\n"
+    "`!AgregarMensajeSpin Comunidades`"
+)
+
+
+def ayuda_agregar_mensaje_spin():
+    """Devuelve la ayuda de uso del comando de creación de mensajes Spin.
+
+    ``logicaSpin.md`` exige que el comando reciba explícitamente el ámbito y
+    valide los valores ``General`` y ``Comunidades`` para evitar mensajes
+    ambiguos. Omitir el ámbito no asume ningún valor por defecto.
+    """
+
+    return AYUDA_AGREGAR_MENSAJE_SPIN
+
+
 def mensaje_spin_libre(ambito):
     """Devuelve el texto canónico de cola libre para el ámbito indicado.
 

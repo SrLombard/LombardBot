@@ -193,6 +193,17 @@ def test_resolver_partido_spin_rechaza_ambito_no_valido(monkeypatch):
         UtilesDiscord.resolver_partido_spin(object(), object(), "Ticket")
 
 
+def test_ayuda_agregar_mensaje_spin_exige_ambito_explicito():
+    from SpinConstantes import ayuda_agregar_mensaje_spin
+
+    ayuda = ayuda_agregar_mensaje_spin()
+
+    assert "Uso: `!AgregarMensajeSpin <ámbito>`" in ayuda
+    assert "`!AgregarMensajeSpin General`" in ayuda
+    assert "`!AgregarMensajeSpin Comunidades`" in ayuda
+    assert "equivale a `General`" not in ayuda
+
+
 def test_mensaje_spin_libre_centraliza_textos_por_ambito():
     from SpinConstantes import (
         AMBITO_SPIN_COMUNIDADES,
