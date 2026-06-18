@@ -2344,12 +2344,12 @@ async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int
         # Realizar la consulta filtrando por fecha y, si procede, por ámbito.
         # La rutina idempotente añade `Spin.ambito` si falta y marca como GENERAL
         # los registros heredados antes de consultar el historial.
-        GestorSQL.asegurar_columna_ambito_spin(GestorSQL.conexionEngine())
+        GestorSQL.asegurar_columnas_historial_spin(GestorSQL.conexionEngine())
         consulta = session.query(GestorSQL.Spin.fecha, GestorSQL.Spin.user, GestorSQL.Spin.tipo, GestorSQL.Spin.ambito).\
             filter(GestorSQL.Spin.fecha >= tiempo_desde)
         if ambito_normalizado != AMBITO_SPIN_TODOS:
             consulta = consulta.filter(GestorSQL.Spin.ambito == ambito_normalizado)
-        resultados = consulta.all()
+        resultados = consulta.order_by(GestorSQL.Spin.fecha.asc(), GestorSQL.Spin.idSpin.asc()).all()
         
         # Formatear los resultados en Markdown
         tabla_markdown = "```| Fecha (Europe/Madrid) | Usuario | Acción | Ámbito |\n|----------------------|---------|--------|--------|"

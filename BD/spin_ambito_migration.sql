@@ -23,3 +23,21 @@ DEALLOCATE PREPARE spin_ambito_stmt;
 UPDATE Spin
 SET ambito = 'GENERAL'
 WHERE ambito IS NULL OR ambito = '';
+
+SET @spin_usuario_discord_columna := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'Spin'
+    AND COLUMN_NAME = 'usuario_discord_id'
+);
+
+SET @spin_usuario_discord_sql := IF(
+  @spin_usuario_discord_columna = 0,
+  'ALTER TABLE Spin ADD COLUMN usuario_discord_id BIGINT NULL',
+  'SELECT 1'
+);
+
+PREPARE spin_usuario_discord_stmt FROM @spin_usuario_discord_sql;
+EXECUTE spin_usuario_discord_stmt;
+DEALLOCATE PREPARE spin_usuario_discord_stmt;

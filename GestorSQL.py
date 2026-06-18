@@ -138,14 +138,17 @@ class Spin(Base):
     fecha = Column('fecha', DateTime)
     tipo = Column('tipo', String)
     ambito = Column('ambito', String(32), nullable=False, default=AMBITO_SPIN_GENERAL, server_default=AMBITO_SPIN_GENERAL)
+    usuario_discord_id = Column('usuario_discord_id', BigInteger, nullable=True)
 
 
-def asegurar_columna_ambito_spin(engine=None):
-    """Garantiza la columna de ámbito en el historial de Spin.
+def asegurar_columnas_historial_spin(engine=None):
+    """Garantiza las columnas de auditoría en el historial de Spin.
 
     Según ``logicaSpin.md``, el historial debe distinguir el ámbito con los
-    valores internos ``GENERAL`` y ``COMUNIDADES``. Los registros previos a esta
-    columna pertenecen al Spin General, por lo que se rellenan como ``GENERAL``.
+    valores internos ``GENERAL`` y ``COMUNIDADES``. Además, para las liberaciones
+    manuales debe quedar registrado el usuario de Discord que pulsó
+    ``Encontrado``. Los registros previos a ``ambito`` pertenecen al Spin
+    General, por lo que se rellenan como ``GENERAL``.
     """
     engine = engine or conexionEngine()
     inspector = inspect(engine)
@@ -158,6 +161,12 @@ def asegurar_columna_ambito_spin(engine=None):
                     "ALTER TABLE Spin ADD COLUMN ambito VARCHAR(32) NOT NULL DEFAULT 'GENERAL'"
                 )
             )
+        if "usuario_discord_id" not in columnas_spin:
+            conexion.execute(
+                text(
+                    "ALTER TABLE Spin ADD COLUMN usuario_discord_id BIGINT NULL"
+                )
+            )
         conexion.execute(
             text(
                 "UPDATE Spin SET ambito = :ambito_general "
@@ -167,7 +176,12 @@ def asegurar_columna_ambito_spin(engine=None):
         )
 
 
-def insertar_spin(usuario, fecha, tipo, ambito=AMBITO_SPIN_GENERAL):
+def asegurar_columna_ambito_spin(engine=None):
+    """Compatibilidad: delega en la rutina completa de historial Spin."""
+    asegurar_columnas_historial_spin(engine)
+
+
+def insertar_spin(usuario, fecha, tipo, ambito=AMBITO_SPIN_GENERAL, usuario_discord_id=None):
     # Esta es la función que inserta un nuevo Spin en la base de datos.
     # Los Spins heredados son Spin General, pero el despliegue puede convivir
     # temporalmente con bases de datos donde aún no exista la columna `ambito`.
@@ -176,10 +190,19 @@ def insertar_spin(usuario, fecha, tipo, ambito=AMBITO_SPIN_GENERAL):
     Session = sessionmaker(bind=engine)
     session = Session()
     try:
-        asegurar_columna_ambito_spin(engine)
-        valores = {"usuario": usuario, "fecha": fecha, "tipo": tipo, "ambito": ambito_normalizado}
+        asegurar_columnas_historial_spin(engine)
+        valores = {
+            "usuario": usuario,
+            "fecha": fecha,
+            "tipo": tipo,
+            "ambito": ambito_normalizado,
+            "usuario_discord_id": usuario_discord_id,
+        }
         session.execute(
-            text("INSERT INTO Spin (`user`, fecha, tipo, ambito) VALUES (:usuario, :fecha, :tipo, :ambito)"),
+            text(
+                "INSERT INTO Spin (`user`, fecha, tipo, ambito, usuario_discord_id) "
+                "VALUES (:usuario, :fecha, :tipo, :ambito, :usuario_discord_id)"
+            ),
             valores,
         )
         session.commit()

@@ -821,7 +821,7 @@ class SpinButtonsView(discord.ui.View):
                         await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
 
                 await interaction.followup.send(f"Ahora puedes buscar partido en {self.nombre_ambito()}.", ephemeral=True)
-                thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Spin', ambito))
+                thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Spin', ambito, user.id))
                 thread.start()
             finally:
                 session.close()
@@ -863,7 +863,7 @@ class SpinButtonsView(discord.ui.View):
             print(f"No se pudo editar el primer mensaje de {self.nombre_ambito()} al liberar: {exc}")
 
         await interaction.followup.send(f"Has liberado el {self.nombre_ambito()}.", ephemeral=True)
-        thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado', ambito))
+        thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado', ambito, user.id))
         thread.start()
 
             
