@@ -25,6 +25,8 @@ from SpinConstantes import (
     TIPO_SPIN_ENCONTRADO,
     CANAL_SPIN_COMUNIDADES_ID,
     CANAL_SPIN_GENERAL_ID,
+    mensaje_canal_partido_liberacion_automatica,
+    mensaje_canal_partido_liberacion_manual,
     mensaje_spin_libre,
     normalizar_ambito_spin,
 )
@@ -792,7 +794,7 @@ async def liberar_reserva_spin_administrativa(ambito, usuario_admin):
 
     if reserva.canal_partido:
         try:
-            await reserva.canal_partido.send(f"El {nombre_ambito} ha sido liberado.")
+            await reserva.canal_partido.send(mensaje_canal_partido_liberacion_manual(ambito_normalizado))
         except Exception as exc:
             print(f"No se pudo enviar el mensaje de liberación administrativa de {nombre_ambito}: {exc}")
 
@@ -865,10 +867,7 @@ class SpinButtonsView(discord.ui.View):
         nombre_ambito = self.nombre_ambito()
         if reserva.canal_partido:
             try:
-                if ambito == AMBITO_SPIN_COMUNIDADES:
-                    await reserva.canal_partido.send("El Spin Comunidades ha sido liberado automáticamente. 😡 La comunidad ha sobrevivido a otro intento fallido de coordinación humana.")
-                else:
-                    await reserva.canal_partido.send("El Spin General ha sido liberado automáticamente. 😡 Afortunadamente las máquinas somos superiores y cuidamos de los esmirriados humanos.")
+                await reserva.canal_partido.send(mensaje_canal_partido_liberacion_automatica(ambito))
             except Exception as exc:
                 print(f"No se pudo enviar el mensaje de timeout de {nombre_ambito} al canal del partido: {exc}")
 
@@ -1016,7 +1015,7 @@ class SpinButtonsView(discord.ui.View):
 
         if reserva.canal_partido:
             try:
-                await reserva.canal_partido.send(f"El {self.nombre_ambito()} ha sido liberado.")
+                await reserva.canal_partido.send(mensaje_canal_partido_liberacion_manual(ambito))
             except Exception as exc:
                 print(f"No se pudo enviar el mensaje de liberación de {self.nombre_ambito()}: {exc}")
 

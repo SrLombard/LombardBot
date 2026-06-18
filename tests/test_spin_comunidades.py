@@ -1022,3 +1022,19 @@ def test_formatear_historial_spins_asume_general_para_registros_heredados():
     )
 
     assert "[GENERAL] UsuarioX - Spin - 2026-06-18 20:15:00" in salida
+
+
+def test_mensajes_liberacion_canal_partido_respetan_ambito_general():
+    from SpinConstantes import (
+        AMBITO_SPIN_GENERAL,
+        mensaje_canal_partido_liberacion_automatica,
+        mensaje_canal_partido_liberacion_manual,
+    )
+
+    assert mensaje_canal_partido_liberacion_manual(AMBITO_SPIN_GENERAL) == "El Spin General ha sido liberado."
+    automatico = mensaje_canal_partido_liberacion_automatica(AMBITO_SPIN_GENERAL)
+    assert automatico == (
+        "El Spin General ha sido liberado automáticamente. 😡 Afortunadamente "
+        "las máquinas somos superiores y cuidamos de los esmirriados humanos."
+    )
+    assert "comunidad" not in automatico.casefold()

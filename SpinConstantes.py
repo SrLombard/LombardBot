@@ -32,6 +32,22 @@ MENSAJES_SPIN_LIBRE = {
     AMBITO_SPIN_COMUNIDADES: "El Spin Comunidades está **LIBRE**",
 }
 
+MENSAJES_CANAL_PARTIDO_LIBERACION_MANUAL = {
+    AMBITO_SPIN_GENERAL: "El Spin General ha sido liberado.",
+    AMBITO_SPIN_COMUNIDADES: "El Spin Comunidades ha sido liberado.",
+}
+
+MENSAJES_CANAL_PARTIDO_LIBERACION_AUTOMATICA = {
+    AMBITO_SPIN_GENERAL: (
+        "El Spin General ha sido liberado automáticamente. 😡 Afortunadamente "
+        "las máquinas somos superiores y cuidamos de los esmirriados humanos."
+    ),
+    AMBITO_SPIN_COMUNIDADES: (
+        "El Spin Comunidades ha sido liberado automáticamente. 😡 La comunidad "
+        "ha sobrevivido a otro intento fallido de coordinación humana."
+    ),
+}
+
 
 AYUDA_AGREGAR_MENSAJE_SPIN = (
     "Uso: `!AgregarMensajeSpin <ámbito>`\n"
@@ -65,6 +81,29 @@ def mensaje_spin_libre(ambito):
     if not ambito_normalizado:
         raise ValueError(f"Ámbito de Spin no válido: {ambito!r}")
     return MENSAJES_SPIN_LIBRE[ambito_normalizado]
+
+
+def mensaje_canal_partido_liberacion_manual(ambito):
+    """Devuelve el texto canónico al liberar manualmente una reserva.
+
+    En Spin General este texto no menciona comunidades porque ``logicaSpin.md``
+    separa los ámbitos y define un mensaje claro para el canal del partido
+    general.
+    """
+
+    ambito_normalizado = normalizar_ambito_spin(ambito)
+    if not ambito_normalizado:
+        raise ValueError(f"Ámbito de Spin no válido: {ambito!r}")
+    return MENSAJES_CANAL_PARTIDO_LIBERACION_MANUAL[ambito_normalizado]
+
+
+def mensaje_canal_partido_liberacion_automatica(ambito):
+    """Devuelve el texto humorístico canónico al liberar por timeout."""
+
+    ambito_normalizado = normalizar_ambito_spin(ambito)
+    if not ambito_normalizado:
+        raise ValueError(f"Ámbito de Spin no válido: {ambito!r}")
+    return MENSAJES_CANAL_PARTIDO_LIBERACION_AUTOMATICA[ambito_normalizado]
 
 # Canal actual de Spin General; se conserva para compatibilidad operativa.
 CANAL_SPIN_GENERAL_ID = 1224128423929315468
