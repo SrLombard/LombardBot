@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 from threading import Thread
 import threading
@@ -46,8 +46,8 @@ class SpinMatchResult:
     jugador1_discord_id: Optional[int]
     jugador2_discord_id: Optional[int]
     fecha: Optional[datetime]
-    descripcion_corta: Optional[str]
-    descripcion_larga: Optional[str]
+    descripcion_corta: Optional[str] = None
+    descripcion_larga: Optional[str] = None
     torneo_id: Optional[int] = None
     partido_id: Optional[int] = None
     enfrentamiento_id: Optional[int] = None
@@ -437,6 +437,27 @@ def _clave_orden_spin(partido: SpinMatchResult):
     )
 
 
+def mensaje_spin_reservado(partido: SpinMatchResult):
+    """Construye el mensaje principal reservado desde ``SpinMatchResult``.
+
+    ``logicaSpin.md`` define el texto público de reserva por ámbito. Para
+    Comunidades se usa el texto completo solo si el resultado trae partido
+    individual y ambos equipos; si falta algún dato descriptivo, se degrada a
+    un mensaje seguro sin mostrar ``None``.
+    """
+
+    menciones = f"<@{partido.jugador1_discord_id}> y <@{partido.jugador2_discord_id}>"
+    if partido.ambito == AMBITO_SPIN_COMUNIDADES:
+        if partido.indice_partido and partido.equipo_a_nombre and partido.equipo_b_nombre:
+            return (
+                f"Spin de comunidades reservado para el partido individual {partido.indice_partido} "
+                f"del enfrentamiento {partido.equipo_a_nombre} vs {partido.equipo_b_nombre}: "
+                f"{menciones} pueden buscar partido."
+            )
+        return f"Spin de comunidades reservado: {menciones} pueden buscar partido."
+    return f"Spin General reservado: {menciones} pueden buscar partido."
+
+
 def _spin_match_desde_partido_general(partido):
     canal_partido_id = getattr(partido, "canalAsociado", None) or getattr(partido, "canal_id", None)
     fecha = getattr(partido, "fecha", None)
@@ -449,20 +470,19 @@ def _spin_match_desde_partido_general(partido):
         jugador1_discord_id = getattr(partido.coach1_usuario, "id_discord", None)
         jugador2_discord_id = getattr(partido.coach2_usuario, "id_discord", None) if partido.coach2_usuario else jugador1_discord_id
 
-    descripcion = f"Spin General reservado: <@{jugador1_discord_id}> y <@{jugador2_discord_id}> pueden buscar partido."
-    return SpinMatchResult(
+    resultado = SpinMatchResult(
         ambito=AMBITO_SPIN_GENERAL,
         canal_partido_id=canal_partido_id,
         jugador1_discord_id=jugador1_discord_id,
         jugador2_discord_id=jugador2_discord_id,
         fecha=fecha,
-        descripcion_corta=descripcion,
-        descripcion_larga=descripcion,
         torneo_id=getattr(partido, "torneo_id", None),
         partido_id=partido_id,
         enfrentamiento_id=getattr(partido, "ronda_id", None),
         indice_partido=getattr(partido, "mesa_numero", None),
     )
+    descripcion = mensaje_spin_reservado(resultado)
+    return replace(resultado, descripcion_corta=descripcion, descripcion_larga=descripcion)
 
 
 def resolver_partido_spin_general(session, usuario_db):
@@ -563,26 +583,21 @@ def resolver_partido_spin_comunidades(session, usuario_db):
         equipo_b_nombre = getattr(getattr(enfrentamiento, "equipo_b", None), "nombre", None)
         jugador1_discord_id = getattr(partido.usuario_local, "id_discord", None)
         jugador2_discord_id = getattr(partido.usuario_visitante, "id_discord", None)
-        descripcion_corta = (
-            f"Spin de comunidades reservado para el partido individual {partido.indice} "
-            f"del enfrentamiento {equipo_a_nombre} vs {equipo_b_nombre}: "
-            f"<@{jugador1_discord_id}> y <@{jugador2_discord_id}> pueden buscar partido."
-        )
-        resultados.append(SpinMatchResult(
+        resultado = SpinMatchResult(
             ambito=AMBITO_SPIN_COMUNIDADES,
             canal_partido_id=partido.canal_discord_id,
             jugador1_discord_id=jugador1_discord_id,
             jugador2_discord_id=jugador2_discord_id,
             fecha=partido.fecha,
-            descripcion_corta=descripcion_corta,
-            descripcion_larga=descripcion_corta,
             torneo_id=partido.torneo_id,
             partido_id=partido.id,
             enfrentamiento_id=partido.enfrentamiento_id,
             indice_partido=partido.indice,
             equipo_a_nombre=equipo_a_nombre,
             equipo_b_nombre=equipo_b_nombre,
-        ))
+        )
+        descripcion = mensaje_spin_reservado(resultado)
+        resultados.append(replace(resultado, descripcion_corta=descripcion, descripcion_larga=descripcion))
     return min(resultados, key=_clave_orden_spin) if resultados else None
 
 

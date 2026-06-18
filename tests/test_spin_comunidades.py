@@ -660,3 +660,50 @@ async def test_timeout_antiguo_no_libera_reserva_nueva_del_mismo_ambito(monkeypa
         assert mensajes_canal == []
     finally:
         UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
+
+
+def test_mensaje_spin_reservado_se_construye_desde_spin_match_result():
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+    from UtilesDiscord import SpinMatchResult, mensaje_spin_reservado
+
+    resultado = SpinMatchResult(
+        ambito=AMBITO_SPIN_GENERAL,
+        canal_partido_id=900,
+        jugador1_discord_id=101,
+        jugador2_discord_id=201,
+        fecha=None,
+    )
+
+    assert mensaje_spin_reservado(resultado) == "Spin General reservado: <@101> y <@201> pueden buscar partido."
+
+
+def test_mensaje_spin_reservado_comunidades_usa_contexto_o_fallback():
+    from SpinConstantes import AMBITO_SPIN_COMUNIDADES
+    from UtilesDiscord import SpinMatchResult, mensaje_spin_reservado
+
+    completo = SpinMatchResult(
+        ambito=AMBITO_SPIN_COMUNIDADES,
+        canal_partido_id=902,
+        jugador1_discord_id=102,
+        jugador2_discord_id=101,
+        fecha=None,
+        indice_partido=2,
+        equipo_a_nombre="Equipo A",
+        equipo_b_nombre="Equipo B",
+    )
+    incompleto = SpinMatchResult(
+        ambito=AMBITO_SPIN_COMUNIDADES,
+        canal_partido_id=902,
+        jugador1_discord_id=102,
+        jugador2_discord_id=101,
+        fecha=None,
+        indice_partido=2,
+        equipo_a_nombre="Equipo A",
+    )
+
+    assert mensaje_spin_reservado(completo) == (
+        "Spin de comunidades reservado para el partido individual 2 "
+        "del enfrentamiento Equipo A vs Equipo B: <@102> y <@101> pueden buscar partido."
+    )
+    assert mensaje_spin_reservado(incompleto) == "Spin de comunidades reservado: <@102> y <@101> pueden buscar partido."
+    assert "None" not in mensaje_spin_reservado(incompleto)
