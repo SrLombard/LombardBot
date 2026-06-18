@@ -190,3 +190,25 @@ def test_resolver_partido_spin_rechaza_ambito_no_valido(monkeypatch):
 
     with pytest.raises(ValueError, match="Ámbito de Spin no válido"):
         UtilesDiscord.resolver_partido_spin(object(), object(), "Ticket")
+
+
+def test_spin_buttons_view_parametriza_custom_ids_por_ambito():
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL, AMBITO_SPIN_COMUNIDADES
+
+    vista_general = UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL)
+    vista_comunidades = UtilesDiscord.SpinButtonsView(AMBITO_SPIN_COMUNIDADES)
+
+    ids_general = {boton.label: boton.custom_id for boton in vista_general.children}
+    ids_comunidades = {boton.label: boton.custom_id for boton in vista_comunidades.children}
+
+    assert vista_general.ambito == AMBITO_SPIN_GENERAL
+    assert vista_comunidades.ambito == AMBITO_SPIN_COMUNIDADES
+    assert ids_general == {
+        "Spin": "your_bot:spin",
+        "Encontrado": "your_bot:encontrado",
+    }
+    assert ids_comunidades == {
+        "Spin": "lombardbot:spin:comunidades",
+        "Encontrado": "lombardbot:encontrado:comunidades",
+    }

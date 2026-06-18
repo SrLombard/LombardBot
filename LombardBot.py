@@ -221,9 +221,10 @@ async def reloj_de_cuco():
 
 @bot.event
 async def on_ready():
-    # Los botones persistentes existentes (`your_bot:spin` / `your_bot:encontrado`)
-    # pertenecen al Spin heredado, que debe seguir operando como GENERAL.
+    # Registramos una misma vista parametrizada por ámbito. Los custom_id heredados
+    # siguen apuntando a GENERAL y Comunidades usa identificadores propios.
     bot.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL))
+    bot.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_COMUNIDADES))
     await bot.tree.sync()
     #await GestionExcel.ActualizarExcels()
     if not programador_tareas.is_running():
