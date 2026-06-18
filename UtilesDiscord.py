@@ -604,7 +604,7 @@ def resolver_partido_spin_comunidades(session, usuario_db):
         GestorSQL.ComunidadesPartido.canal_discord_id != None,
         GestorSQL.ComunidadesPartido.estado.in_(("PENDIENTE", "EN_CURSO")),
         ~GestorSQL.ComunidadesPartido.estado.in_(("FINALIZADO", "ADMINISTRADO")),
-        GestorSQL.ComunidadesPartido.partido_bloodbowl_id == None,
+        GestorSQL.ComunidadesPartido.partido_bloodbowl_id.is_(None),
     ).all()
 
     resultados = []

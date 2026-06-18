@@ -138,6 +138,34 @@ def test_resolver_partido_spin_comunidades_filtra_no_elegibles():
         engine.dispose()
 
 
+@pytest.mark.parametrize("estado", ["PENDIENTE", "EN_CURSO"])
+def test_resolver_partido_spin_comunidades_excluye_partidos_con_bloodbowl_id(estado):
+    session, engine = _session()
+    try:
+        usuarios, torneo, enfrentamiento, equipo_a, equipo_b, ahora = _crear_contexto(session)
+        session.add(
+            _partido(
+                torneo,
+                enfrentamiento,
+                equipo_a,
+                equipo_b,
+                usuarios[0],
+                usuarios[2],
+                indice=1,
+                canal=901,
+                fecha=ahora,
+                estado=estado,
+                partido_bloodbowl_id=f"bb-{estado.lower()}",
+            )
+        )
+        session.commit()
+
+        assert resolver_partido_spin_comunidades(session, usuarios[0]) is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_resolver_partido_spin_delega_solo_en_general(monkeypatch):
     import UtilesDiscord
     from SpinConstantes import AMBITO_SPIN_GENERAL
