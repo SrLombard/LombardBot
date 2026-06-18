@@ -565,10 +565,27 @@ def buscar_partido_spin_comunidades(session, usuario_db):
     return resolver_partido_spin_comunidades(session, usuario_db)
 
 
-def buscar_partido_spin(session, usuario_db, ambito):
-    if ambito == AMBITO_SPIN_COMUNIDADES:
+def resolver_partido_spin(session, usuario_db, ambito):
+    """Resuelve el partido de Spin delegando exclusivamente por ámbito.
+
+    ``logicaSpin.md`` exige que cada cola busque solo en su proveedor: General
+    en competiciones generales y Comunidades en ``ComunidadesPartido``. Un
+    ámbito no reconocido se considera error controlado para evitar caer por
+    defecto en General y mezclar fuentes.
+    """
+
+    ambito_normalizado = normalizar_ambito_spin(ambito)
+    if ambito_normalizado == AMBITO_SPIN_GENERAL:
+        return resolver_partido_spin_general(session, usuario_db)
+    if ambito_normalizado == AMBITO_SPIN_COMUNIDADES:
         return resolver_partido_spin_comunidades(session, usuario_db)
-    return resolver_partido_spin_general(session, usuario_db)
+    raise ValueError(f"Ámbito de Spin no válido: {ambito!r}")
+
+
+def buscar_partido_spin(session, usuario_db, ambito):
+    """Alias heredado para resolver el partido de Spin por ámbito."""
+
+    return resolver_partido_spin(session, usuario_db, ambito)
 
 
 class SpinButtonsView(discord.ui.View):
@@ -637,7 +654,11 @@ class SpinButtonsView(discord.ui.View):
                 await interaction.followup.send("No se encontró tu usuario en la base de datos.", ephemeral=True)
                 return
 
-            partido_spin = buscar_partido_spin(session, usuario_db, ambito)
+            try:
+                partido_spin = buscar_partido_spin(session, usuario_db, ambito)
+            except ValueError:
+                await interaction.followup.send("El ámbito de Spin no es válido. Avise a un administrador.", ephemeral=True)
+                return
             if not partido_spin:
                 await interaction.followup.send("No tienes ningún partido pendiente en esta cola de Spin.", ephemeral=True)
                 return

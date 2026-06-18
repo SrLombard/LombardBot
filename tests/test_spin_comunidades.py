@@ -135,3 +135,58 @@ def test_resolver_partido_spin_comunidades_filtra_no_elegibles():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_resolver_partido_spin_delega_solo_en_general(monkeypatch):
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+
+    llamadas = []
+
+    def resolver_general(session, usuario_db):
+        llamadas.append("general")
+        return "partido-general"
+
+    def resolver_comunidades(session, usuario_db):
+        llamadas.append("comunidades")
+        return "partido-comunidades"
+
+    monkeypatch.setattr(UtilesDiscord, "resolver_partido_spin_general", resolver_general)
+    monkeypatch.setattr(UtilesDiscord, "resolver_partido_spin_comunidades", resolver_comunidades)
+
+    assert UtilesDiscord.resolver_partido_spin(object(), object(), AMBITO_SPIN_GENERAL) == "partido-general"
+    assert llamadas == ["general"]
+
+
+def test_resolver_partido_spin_delega_solo_en_comunidades(monkeypatch):
+    import UtilesDiscord
+
+    llamadas = []
+
+    def resolver_general(session, usuario_db):
+        llamadas.append("general")
+        return "partido-general"
+
+    def resolver_comunidades(session, usuario_db):
+        llamadas.append("comunidades")
+        return "partido-comunidades"
+
+    monkeypatch.setattr(UtilesDiscord, "resolver_partido_spin_general", resolver_general)
+    monkeypatch.setattr(UtilesDiscord, "resolver_partido_spin_comunidades", resolver_comunidades)
+
+    assert UtilesDiscord.resolver_partido_spin(object(), object(), "Comunidades") == "partido-comunidades"
+    assert llamadas == ["comunidades"]
+
+
+def test_resolver_partido_spin_rechaza_ambito_no_valido(monkeypatch):
+    import pytest
+    import UtilesDiscord
+
+    def resolver_no_debe_llamarse(session, usuario_db):
+        raise AssertionError("No debe consultar proveedores con un ámbito no válido")
+
+    monkeypatch.setattr(UtilesDiscord, "resolver_partido_spin_general", resolver_no_debe_llamarse)
+    monkeypatch.setattr(UtilesDiscord, "resolver_partido_spin_comunidades", resolver_no_debe_llamarse)
+
+    with pytest.raises(ValueError, match="Ámbito de Spin no válido"):
+        UtilesDiscord.resolver_partido_spin(object(), object(), "Ticket")
