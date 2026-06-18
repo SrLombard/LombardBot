@@ -21,6 +21,7 @@ from SpinConstantes import (
     AMBITO_SPIN_GENERAL,
     TIPO_SPIN,
     TIPO_SPIN_AUTO_RELEASE,
+    TIPO_SPIN_ADMIN_RELEASE,
     TIPO_SPIN_ENCONTRADO,
     CANAL_SPIN_COMUNIDADES_ID,
     CANAL_SPIN_GENERAL_ID,
@@ -669,6 +670,57 @@ async def editar_primer_mensaje_spin(channel, *, content=None, view=None):
     if kwargs:
         await primer_mensaje.edit(**kwargs)
     return primer_mensaje
+
+
+async def liberar_reserva_spin_administrativa(ambito, usuario_admin):
+    """Libera explícitamente una cola de Spin por acción administrativa.
+
+    ``logicaSpin.md`` exige que administradores/comisarios usen un comando
+    específico en vez del botón `Encontrado`. La operación libera primero el
+    estado interno y después intenta actualizar Discord, para no dejar la cola
+    bloqueada si falla una acción secundaria.
+    """
+
+    ambito_normalizado = normalizar_ambito_spin(ambito)
+    if not ambito_normalizado:
+        raise ValueError(f"Ámbito de Spin no válido: {ambito!r}")
+
+    async with obtener_bloqueo_reserva_spin(ambito_normalizado):
+        reserva = obtener_reserva_spin(ambito_normalizado)
+        if not reserva:
+            return False
+
+        limpiar_reserva_spin(ambito_normalizado)
+        if reserva.timeout_task:
+            reserva.timeout_task.cancel()
+
+    nombre_ambito = "Spin Comunidades" if ambito_normalizado == AMBITO_SPIN_COMUNIDADES else "Spin General"
+
+    if reserva.canal_partido:
+        try:
+            await reserva.canal_partido.send(f"El {nombre_ambito} ha sido liberado por administración.")
+        except Exception as exc:
+            print(f"No se pudo enviar el mensaje de liberación administrativa de {nombre_ambito}: {exc}")
+
+    try:
+        vista = SpinButtonsView(ambito_normalizado)
+        vista.actualizar_botones(spin_habilitado=True)
+        await editar_primer_mensaje_spin(
+            reserva.canal_spin,
+            content=mensaje_spin_libre(ambito_normalizado),
+            view=vista,
+        )
+    except Exception as exc:
+        print(f"No se pudo editar el primer mensaje de {nombre_ambito} tras liberación administrativa: {exc}")
+
+    nombre_usuario = getattr(usuario_admin, "name", str(usuario_admin))
+    usuario_discord_id = getattr(usuario_admin, "id", None)
+    thread = Thread(
+        target=GestorSQL.insertar_spin,
+        args=(nombre_usuario, datetime.utcnow(), TIPO_SPIN_ADMIN_RELEASE, ambito_normalizado, usuario_discord_id),
+    )
+    thread.start()
+    return True
 
 
 class SpinButtonsView(discord.ui.View):

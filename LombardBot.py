@@ -1884,6 +1884,38 @@ async def AgregaMensajeSpin_error(ctx, error):
         await ctx.send(ayuda_agregar_mensaje_spin(), delete_after=20)
         return
     raise error
+
+
+def usuario_puede_liberar_spin(interaction: discord.Interaction):
+    permisos = getattr(getattr(interaction, "user", None), "guild_permissions", None)
+    if getattr(permisos, "administrator", False):
+        return True
+    return any(getattr(rol, "name", "") in {"Comisario", "Administrador", "Moderadores"} for rol in getattr(interaction.user, "roles", []))
+
+
+@bot.tree.command(name="liberarspin", description="Libera administrativamente una cola de Spin.")
+@app_commands.describe(ambito="Ámbito de Spin: General o Comunidades")
+@app_commands.choices(ambito=[
+    app_commands.Choice(name="General", value="General"),
+    app_commands.Choice(name="Comunidades", value="Comunidades"),
+])
+async def liberar_spin(interaction: discord.Interaction, ambito: str):
+    if not usuario_puede_liberar_spin(interaction):
+        await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
+        return
+
+    ambito_normalizado = normalizar_ambito_spin(ambito)
+    if not ambito_normalizado:
+        await interaction.response.send_message("Ámbito de Spin no válido. Usa General o Comunidades.", ephemeral=True)
+        return
+
+    liberado = await UtilesDiscord.liberar_reserva_spin_administrativa(ambito_normalizado, interaction.user)
+    nombre_ambito = "Comunidades" if ambito_normalizado == AMBITO_SPIN_COMUNIDADES else "General"
+    if not liberado:
+        await interaction.response.send_message(f"El Spin {nombre_ambito} ya estaba libre.", ephemeral=True)
+        return
+
+    await interaction.response.send_message(f"El Spin {nombre_ambito} ha sido liberado por administración.", ephemeral=True)
    
 
 @bot.tree.command(name="dado", description="Lanza un dado!")
