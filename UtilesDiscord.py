@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from typing import Optional
 from threading import Thread
 import threading
+import logging
 import Imagenes
 
 from sqlalchemy.sql.functions import now
@@ -35,6 +36,7 @@ import asyncio
 from datetime import datetime
 
 
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -533,13 +535,30 @@ def mensaje_spin_reservado(partido: SpinMatchResult):
 
     menciones = f"<@{partido.jugador1_discord_id}> y <@{partido.jugador2_discord_id}>"
     if partido.ambito == AMBITO_SPIN_COMUNIDADES:
-        if partido.indice_partido and partido.equipo_a_nombre and partido.equipo_b_nombre:
+        datos_descriptivos_completos = (
+            partido.indice_partido is not None
+            and bool(partido.equipo_a_nombre)
+            and bool(partido.equipo_b_nombre)
+        )
+        if datos_descriptivos_completos:
             return (
                 f"Spin de comunidades reservado para el partido individual {partido.indice_partido} "
                 f"del enfrentamiento {partido.equipo_a_nombre} vs {partido.equipo_b_nombre}: "
                 f"{menciones} pueden buscar partido."
             )
-        return f"Spin de comunidades reservado: {menciones} pueden buscar partido."
+
+        LOGGER.warning(
+            "Spin Comunidades reservado con datos descriptivos incompletos",
+            extra={
+                "spin_torneo_id": partido.torneo_id,
+                "spin_partido_id": partido.partido_id,
+                "spin_enfrentamiento_id": partido.enfrentamiento_id,
+                "spin_indice_partido": partido.indice_partido,
+                "spin_equipo_a_nombre": partido.equipo_a_nombre,
+                "spin_equipo_b_nombre": partido.equipo_b_nombre,
+            },
+        )
+        return f"Spin Comunidades reservado: {menciones} pueden buscar partido."
     return f"Spin General reservado: {menciones} pueden buscar partido."
 
 

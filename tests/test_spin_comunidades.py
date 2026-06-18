@@ -17,7 +17,7 @@ from GestorSQL import (
     Usuario,
 )
 from SpinConstantes import AMBITO_SPIN_COMUNIDADES
-from UtilesDiscord import resolver_partido_spin_comunidades
+from UtilesDiscord import SpinMatchResult, mensaje_spin_reservado, resolver_partido_spin_comunidades
 
 
 def _session():
@@ -92,6 +92,48 @@ def _partido(torneo, enfrentamiento, equipo_a, equipo_b, local, visitante, *, in
         estado=estado,
         partido_bloodbowl_id=partido_bloodbowl_id,
     )
+
+
+def test_mensaje_spin_comunidades_usa_texto_simple_si_faltan_datos_descriptivos(caplog):
+    resultado = SpinMatchResult(
+        ambito=AMBITO_SPIN_COMUNIDADES,
+        canal_partido_id=902,
+        jugador1_discord_id=101,
+        jugador2_discord_id=202,
+        fecha=None,
+        torneo_id=1,
+        partido_id=2,
+        enfrentamiento_id=3,
+        indice_partido=None,
+        equipo_a_nombre="Equipo A",
+        equipo_b_nombre="Equipo B",
+    )
+
+    mensaje = mensaje_spin_reservado(resultado)
+
+    assert mensaje == "Spin Comunidades reservado: <@101> y <@202> pueden buscar partido."
+    assert "datos descriptivos incompletos" in caplog.text
+
+
+def test_mensaje_spin_comunidades_usa_texto_simple_si_falta_nombre_equipo(caplog):
+    resultado = SpinMatchResult(
+        ambito=AMBITO_SPIN_COMUNIDADES,
+        canal_partido_id=902,
+        jugador1_discord_id=101,
+        jugador2_discord_id=202,
+        fecha=None,
+        torneo_id=1,
+        partido_id=2,
+        enfrentamiento_id=3,
+        indice_partido=1,
+        equipo_a_nombre="",
+        equipo_b_nombre="Equipo B",
+    )
+
+    mensaje = mensaje_spin_reservado(resultado)
+
+    assert mensaje == "Spin Comunidades reservado: <@101> y <@202> pueden buscar partido."
+    assert "datos descriptivos incompletos" in caplog.text
 
 
 def test_resolver_partido_spin_comunidades_devuelve_spin_match_result_con_datos_necesarios():
@@ -965,7 +1007,7 @@ def test_mensaje_spin_reservado_comunidades_usa_contexto_o_fallback():
         "Spin de comunidades reservado para el partido individual 2 "
         "del enfrentamiento Equipo A vs Equipo B: <@102> y <@101> pueden buscar partido."
     )
-    assert mensaje_spin_reservado(incompleto) == "Spin de comunidades reservado: <@102> y <@101> pueden buscar partido."
+    assert mensaje_spin_reservado(incompleto) == "Spin Comunidades reservado: <@102> y <@101> pueden buscar partido."
     assert "None" not in mensaje_spin_reservado(incompleto)
 
 
