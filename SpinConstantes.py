@@ -7,6 +7,8 @@ antes de usarse en la lógica o persistirse.
 
 from enum import Enum
 import unicodedata
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 class AmbitoSpin(str, Enum):
@@ -96,6 +98,37 @@ def normalizar_ambito_spin(texto, *, permitir_todos=False):
 
     opciones = _TEXTOS_AMBITO_SPIN_TODOS if permitir_todos else _TEXTOS_AMBITO_SPIN
     return opciones.get(_normalizar_texto_ambito(texto))
+
+
+def formatear_linea_historial_spin(fecha, usuario, tipo, ambito):
+    """Devuelve una línea no ambigua para el historial de ``/ultimosspins``.
+
+    ``logicaSpin.md`` recomienda que cada registro visible incluya el ámbito
+    incluso cuando la consulta ya esté filtrada por ``General`` o
+    ``Comunidades``. El formato mantiene la lectura compacta heredada:
+    ``[GENERAL] Usuario - Spin - fecha``.
+    """
+
+    ambito_normalizado = normalizar_ambito_spin(ambito) or AMBITO_SPIN_GENERAL
+    if isinstance(fecha, datetime):
+        fecha_madrid = (
+            fecha.replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo("Europe/Madrid"))
+            if fecha.tzinfo is None
+            else fecha.astimezone(ZoneInfo("Europe/Madrid"))
+        )
+        fecha_texto = fecha_madrid.strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        fecha_texto = str(fecha)
+    return f"[{ambito_normalizado}] {usuario} - {tipo} - {fecha_texto}"
+
+
+def formatear_historial_spins(registros):
+    """Formatea registros de Spin como bloque de líneas con ámbito explícito."""
+
+    lineas = ["Historial de Spin (Europe/Madrid)"]
+    for fecha, usuario, tipo, ambito in registros:
+        lineas.append(formatear_linea_historial_spin(fecha, usuario, tipo, ambito))
+    return "```" + "\n".join(lineas) + "```"
 
 
 def normalizar_filtro_historial_spin(texto):

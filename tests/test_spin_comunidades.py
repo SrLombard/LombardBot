@@ -846,3 +846,28 @@ def test_asegurar_columna_ambito_spin_migra_registros_heredados():
     with engine.connect() as conexion:
         ambitos = conexion.execute(text("SELECT ambito FROM Spin")).scalars().all()
     assert ambitos == [AMBITO_SPIN_GENERAL]
+
+
+def test_formatear_historial_spins_muestra_ambito_en_cada_linea():
+    from SpinConstantes import AMBITO_SPIN_GENERAL, formatear_historial_spins
+
+    salida = formatear_historial_spins(
+        [
+            (datetime(2026, 6, 18, 18, 15), "UsuarioX", "Spin", AMBITO_SPIN_GENERAL),
+            (datetime(2026, 6, 18, 18, 20), "UsuarioY", "Encontrado", AMBITO_SPIN_COMUNIDADES),
+        ]
+    )
+
+    assert "[GENERAL] UsuarioX - Spin - 2026-06-18 20:15:00" in salida
+    assert "[COMUNIDADES] UsuarioY - Encontrado - 2026-06-18 20:20:00" in salida
+    assert "| Ámbito |" not in salida
+
+
+def test_formatear_historial_spins_asume_general_para_registros_heredados():
+    from SpinConstantes import formatear_historial_spins
+
+    salida = formatear_historial_spins(
+        [(datetime(2026, 6, 18, 18, 15), "UsuarioX", "Spin", None)]
+    )
+
+    assert "[GENERAL] UsuarioX - Spin - 2026-06-18 20:15:00" in salida

@@ -37,6 +37,7 @@ from SpinConstantes import (
     AMBITO_SPIN_TODOS,
     ayuda_agregar_mensaje_spin,
     mensaje_spin_libre,
+    formatear_historial_spins,
     normalizar_filtro_historial_spin,
     normalizar_ambito_spin,
 )
@@ -2352,15 +2353,9 @@ async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int
             consulta = consulta.filter(GestorSQL.Spin.ambito == filtro_ambito)
         resultados = consulta.order_by(GestorSQL.Spin.fecha.asc(), GestorSQL.Spin.idSpin.asc()).all()
         
-        # Formatear los resultados en Markdown
-        tabla_markdown = "```| Fecha (Europe/Madrid) | Usuario | Acción | Ámbito |\n|----------------------|---------|--------|--------|"
-        for fecha, usuario, tipo, ambito_registro in resultados:
-            fecha_madrid = fecha.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('Europe/Madrid')) if fecha.tzinfo is None else fecha.astimezone(ZoneInfo('Europe/Madrid'))
-            tabla_markdown += f"\n| {fecha_madrid.strftime('%Y-%m-%d %H:%M:%S')} | {usuario} | {tipo} | {ambito_registro or AMBITO_SPIN_GENERAL} |"
-        
-        tabla_markdown += "```"
-        
-        await interaction.response.send_message(tabla_markdown)
+        # Formatear los resultados como líneas compactas con ámbito explícito en
+        # cada registro, incluso cuando `/ultimosspins` se filtra por ámbito.
+        await interaction.response.send_message(formatear_historial_spins(resultados))
     except Exception as e:
         print(f"Error al consultar la tabla Spin: {e}")
         await interaction.response.send_message("```Error al realizar la consulta.```")
