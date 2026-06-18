@@ -21,6 +21,12 @@ AMBITO_SPIN_COMUNIDADES = AmbitoSpin.COMUNIDADES.value
 AMBITOS_SPIN = frozenset(ambito.value for ambito in AmbitoSpin)
 AMBITO_SPIN_TODOS = "TODOS"
 
+# Canal actual de Spin General; se conserva para compatibilidad operativa.
+CANAL_SPIN_GENERAL_ID = 1224128423929315468
+# Canal independiente para Spin Comunidades. Configurar el ID real al activarlo.
+CANAL_SPIN_COMUNIDADES_ID = None
+# El mensaje público que se edita es el primer mensaje del canal, no un ID persistido.
+
 _TEXTOS_AMBITO_SPIN = {
     "general": AMBITO_SPIN_GENERAL,
     "comunidades": AMBITO_SPIN_COMUNIDADES,

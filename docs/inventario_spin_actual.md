@@ -12,7 +12,6 @@ Se buscaron estas referencias explícitas:
 - `UsuarioSpin`
 - `AgregarMensajeSpin`
 - `ultimosspins`
-- `idMensajeSpin`
 - `your_bot:spin`
 - `your_bot:encontrado`
 
@@ -21,19 +20,19 @@ Se buscaron estas referencias explícitas:
 | Responsabilidad | Archivo(s) actuales | Observaciones |
 | --- | --- | --- |
 | Vista de botones | `UtilesDiscord.py`, `ComandosAntiguos.py`, uso en `LombardBot.py` | La vista activa parece ser `UtilesDiscord.SpinButtonsView`; `ComandosAntiguos.py` conserva una versión antigua. |
-| Estado global | `UtilesDiscord.py`, referencias antiguas en `ComandosAntiguos.py` | `UsuarioSpin` es una única cola global; `idMensajeSpin` es un ID fijo. |
+| Estado global | `UtilesDiscord.py`, referencias antiguas en `ComandosAntiguos.py` | `UsuarioSpin` es una única cola global; ya no se mantiene un ID fijo del mensaje de Spin como fuente de verdad. |
 | Creación de mensaje de Spin | `LombardBot.py` | Comando prefijado `!AgregaMensajeSpin`, sin argumento de ámbito. |
 | Comando `/ultimosspins` | `LombardBot.py` | Slash command con argumento `minutos`; no filtra por ámbito. |
 | Inserciones en tabla `Spin` | `UtilesDiscord.py`, `GestorSQL.py`, versión antigua en `ComandosAntiguos.py` | `GestorSQL.insertar_spin(usuario, fecha, tipo)` inserta `user`, `fecha`, `tipo`; no existe `ambito`. |
-| Configuración de canal o mensaje | `UtilesDiscord.py`, `LombardBot.py`, menciones de texto en `UtilesDiscord.py` | No hay constantes separadas para canal Spin General/Comunidades. El código activo guarda `mensaje_spin_id` desde la interacción y también existe `idMensajeSpin` fijo. |
+| Configuración de canal o mensaje | `UtilesDiscord.py`, `LombardBot.py`, menciones de texto en `UtilesDiscord.py` | Existen constantes separadas para canal Spin General/Comunidades. El estado público del Spin se edita tomando el primer mensaje del canal. |
 
 ## Detalle por archivo
 
 ### `UtilesDiscord.py`
 
-- Define el estado global actual: `UsuarioSpin = None` e `idMensajeSpin = 1224072683097030698`.
+- Define el estado global actual: `UsuarioSpin = None`.
 - Define `SpinButtonsView`, la vista persistente actual con `timeout=None`.
-- Dentro de la vista almacena estado de instancia: `spin_timeout_task`, `mensaje_spin_id`, `canal` y `canal_partido`.
+- Dentro de la vista almacena estado de instancia: `spin_timeout_task`, `canal` y `canal_partido`.
 - El botón `Spin` usa `custom_id='your_bot:spin'`.
 - El botón `Encontrado` usa `custom_id='your_bot:encontrado'`.
 - `spin_callback` usa una única cola global (`UsuarioSpin`) y busca partidos generales en:
@@ -46,7 +45,7 @@ Se buscaron estas referencias explícitas:
 - `spin_callback` envía mensaje al canal del partido, deshabilita/habilita botones, edita el primer mensaje del canal y registra `tipo='Spin'`.
 - `encontrado_callback` solo libera si pulsa el mismo usuario guardado en `UsuarioSpin`, edita el primer mensaje a libre y registra `tipo='Encontrado'`.
 - `auto_release_spin` libera tras 300 segundos, envía mensaje al canal del partido, DM al usuario, edita botones/primer mensaje y registra `tipo='Encontrado'` con usuario `LOMBARDBOT`.
-- Hay menciones hardcodeadas al canal de Spin en textos de creación de canales: `<#1224128423929315468>`.
+- Los textos de creación de canales referencian `CANAL_SPIN_GENERAL_ID` para mantener compatibilidad con el canal actual.
 
 ### `LombardBot.py`
 
@@ -71,7 +70,7 @@ Se buscaron estas referencias explícitas:
 ### `ComandosAntiguos.py`
 
 - Contiene una implementación antigua de `SpinButtonsView` con los mismos `custom_id` (`your_bot:spin` y `your_bot:encontrado`).
-- Usa `UsuarioSpin` e `idMensajeSpin`, pero en este archivo no aparecen definidos localmente en las referencias revisadas.
+- Usa `UsuarioSpin`; el estado público del Spin se localiza como primer mensaje del canal.
 - Inserta en `Spin` llamando a `GestorSQL.insertar_spin(...)` en el flujo antiguo de `Spin`.
 - Por el nombre del archivo y la existencia de la vista activa en `UtilesDiscord.py`, parece código histórico; conviene confirmar antes de modificarlo.
 
@@ -80,7 +79,7 @@ Se buscaron estas referencias explícitas:
 - Actualmente hay una sola cola global (`UsuarioSpin`), no colas independientes `GENERAL` y `COMUNIDADES`.
 - Los botones usan `your_bot:spin` y `your_bot:encontrado`, sin ámbito en el `custom_id`.
 - La creación actual del mensaje de Spin no acepta argumento de ámbito.
-- `/ultimosspins` no acepta argumento `ambito` ni muestra el ámbito.
-- La tabla/modelo `Spin` no tiene columna `ambito`.
-- No se han encontrado constantes separadas para canal de Spin General y canal de Spin Comunidades.
-- Existe dependencia de IDs de mensaje/canal hardcodeados (`idMensajeSpin` y menciones a canal), aunque parte del código activo también edita el primer mensaje del canal.
+- `/ultimosspins` acepta argumento `ambito` para filtrar el historial.
+- La tabla/modelo `Spin` tiene columna `ambito`.
+- Existen constantes separadas para canal de Spin General y canal de Spin Comunidades.
+- Existe dependencia del ID de canal de Spin General por compatibilidad, centralizada como constante; el mensaje público se edita como primer mensaje del canal.

@@ -340,6 +340,11 @@ class SpinButtonsView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
+    async def obtener_primer_mensaje(self, channel):
+        async for mensaje in channel.history(oldest_first=True, limit=1):
+            return mensaje
+        return None
+
     @discord.ui.button(label="Spin",style=discord.ButtonStyle.green, custom_id='your_bot:spin')
     async def Spin_callback(self, interaction: discord.Interaction,button: discord.ui.Button):
         global UsuarioSpin
@@ -367,10 +372,10 @@ class SpinButtonsView(discord.ui.View):
             button.disabled = True 
             await interaction.message.edit(content=message.content, view=self)
             
-            # Edita el mensaje con el estado actual (se asume que tienes el ID del mensaje a editar)
-            mensaje_id = idMensajeSpin
-            mensaje = await channel.fetch_message(mensaje_id)
-            await mensaje.edit(content=f'**{UsuarioSpin} puede buscar partido**')
+            # El estado público del Spin se edita en el primer mensaje del canal.
+            mensaje = await self.obtener_primer_mensaje(channel)
+            if mensaje:
+                await mensaje.edit(content=f'**{UsuarioSpin} puede buscar partido**')
             
             thread = Thread(target=GestorSQL.insertar_spin, args=(UsuarioSpin, now, 'Spin'))
             thread.start()
@@ -399,10 +404,10 @@ class SpinButtonsView(discord.ui.View):
                 
             button.disabled = True 
             await interaction.message.edit(content=message.content, view=self)
-            # Edita el mensaje para reflejar el cambio de estado
-            mensaje_id = idMensajeSpin
-            mensaje = await channel.fetch_message(mensaje_id)
-            await mensaje.edit(content='El spin está **LIBRE**')
+            # El estado público del Spin se edita en el primer mensaje del canal.
+            mensaje = await self.obtener_primer_mensaje(channel)
+            if mensaje:
+                await mensaje.edit(content='El spin está **LIBRE**')
         # Si no es UsuarioSpin, ignora la pulsación
 
 

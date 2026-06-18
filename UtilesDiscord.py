@@ -14,7 +14,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql import case,func
 
 import GestorSQL
-from SpinConstantes import AMBITO_SPIN_GENERAL
+from SpinConstantes import AMBITO_SPIN_GENERAL, CANAL_SPIN_GENERAL_ID
 
 import asyncio
 from datetime import datetime
@@ -23,7 +23,7 @@ from datetime import datetime
 
 
 UsuarioSpin = None
-idMensajeSpin = 1224072683097030698
+
 
 def get_int_value(dictionary, key):
     value = dictionary.get(key)
@@ -245,7 +245,7 @@ Por favor, acuerden una fecha para jugar el primer partido.""" + mensajePreferen
 
 Cuando acordéis una fecha **usad** el comando `/fecha` para que el bot pueda registrar vuestro partido con el horario de España. Esto es **OBLIGATORIO** y para la administración será clave a la hora de tomar decisiones en caso de que alguien no se presente. {fecha}
 
-Justo antes de jugar el partido tendréis que **USAR EL CANAL**  <#1224128423929315468> y **LIBERARLO** al encontrar partido. De esta manera no os emparejará con otra persona.
+Justo antes de jugar el partido tendréis que **USAR EL CANAL**  <#{CANAL_SPIN_GENERAL_ID}> y **LIBERARLO** al encontrar partido. De esta manera no os emparejará con otra persona.
 
 Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
 """
@@ -256,7 +256,7 @@ Por favor, acuerden una fecha para jugar el primer partido.""" + mensajePreferen
 
 Cuando acordéis una fecha **usad** el comando `/fecha` para que el bot pueda registrar vuestro partido con el horario de España. Esto es **OBLIGATORIO** y para la administración será clave a la hora de tomar decisiones en caso de que alguien no se presente. {fecha}
 
-Justo antes de jugar el partido tendréis que **USAR EL CANAL**  <#1224128423929315468> y **LIBERADLO** al encontrar partido. De esta manera no os emparejará con otra persona.
+Justo antes de jugar el partido tendréis que **USAR EL CANAL**  <#{CANAL_SPIN_GENERAL_ID}> y **LIBERADLO** al encontrar partido. De esta manera no os emparejará con otra persona.
 
 Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
 """
@@ -327,11 +327,10 @@ class SpinButtonsView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.spin_timeout_task = None
-        self.mensaje_spin_id = None  # Almacena el ID del mensaje de spin
-        self.canal = None  # Almacena el canal del mensaje de spin
+        self.canal = None  # Canal Spin; el mensaje editado será el primer mensaje del canal.
         self.canal_partido = None # Almacena el canal del partido
 
-    async def auto_release_spin(self, user):
+    async def auto_release_spin(self, user, mensaje_botones=None):
         await asyncio.sleep(300)  # Espera 5 minutos
         global UsuarioSpin
         if UsuarioSpin == user:
@@ -343,20 +342,20 @@ class SpinButtonsView(discord.ui.View):
             # Envía un mensaje privado al usuario informándole que el spin ha sido liberado automáticamente
             await user.send('Tu spin ha sido liberado automáticamente debido a la inactividad.')
 
-            # Recupera el mensaje de spin y actualiza la vista
-            if self.canal and self.mensaje_spin_id:
-                mensaje_spin = await self.canal.fetch_message(self.mensaje_spin_id)
-                # Encuentra y actualiza los botones
+            # Actualiza los botones sin usar un ID persistido como fuente de verdad.
+            if mensaje_botones:
                 for item in self.children:
                     if isinstance(item, discord.ui.Button):
                         if item.label == "Spin":
                             item.disabled = False
                         elif item.label == "Encontrado":
                             item.disabled = True
-                await mensaje_spin.edit(view=self)  # Actualiza la vista con los botones actualizados
-                
-            primer_mensaje = await self.obtener_primer_mensaje(mensaje_spin.channel)
-            await primer_mensaje.edit(content='El spin está **LIBRE**')
+                await mensaje_botones.edit(view=self)
+
+            # El estado público del Spin se edita en el primer mensaje del canal.
+            primer_mensaje = await self.obtener_primer_mensaje(self.canal) if self.canal else None
+            if primer_mensaje:
+                await primer_mensaje.edit(content='El spin está **LIBRE**')
             
             thread = Thread(target=GestorSQL.insertar_spin, args=('LOMBARDBOT', datetime.utcnow(), 'Encontrado', AMBITO_SPIN_GENERAL))
             thread.start()
@@ -372,8 +371,7 @@ class SpinButtonsView(discord.ui.View):
         global UsuarioSpin
         await interaction.response.defer()
         self.canal = interaction.channel
-        self.mensaje_spin_id = interaction.message.id
-               
+
         user = interaction.user
 
         if UsuarioSpin is not None:
@@ -387,7 +385,7 @@ class SpinButtonsView(discord.ui.View):
         # Inicia el temporizador para la liberación automática del spin
         if self.spin_timeout_task:
             self.spin_timeout_task.cancel()  # Cancela el temporizador anterior si existe
-        self.spin_timeout_task = asyncio.create_task(self.auto_release_spin(user))
+        self.spin_timeout_task = asyncio.create_task(self.auto_release_spin(user, interaction.message))
 
         # Buscar usuario en la base de datos
         Session = GestorSQL.sessionmaker(bind=GestorSQL.conexionEngine())
@@ -508,6 +506,7 @@ class SpinButtonsView(discord.ui.View):
         button.disabled = True
         await interaction.message.edit(view=self)
 
+        # El estado público del Spin se edita en el primer mensaje del canal.
         primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
         await primer_mensaje.edit(content=f'<@{coach1_id_discord}> y <@{coach2_id_discord}> pueden buscar partido')
 
@@ -542,6 +541,7 @@ class SpinButtonsView(discord.ui.View):
             button.disabled = True
             await interaction.message.edit(view=self)
 
+            # El estado público del Spin se edita en el primer mensaje del canal.
             primer_mensaje = await self.obtener_primer_mensaje(channel)
             await primer_mensaje.edit(content='El spin está **LIBRE**')
             thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado', AMBITO_SPIN_GENERAL))
