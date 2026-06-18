@@ -606,7 +606,11 @@ async def test_encontrado_callback_no_hace_excepcion_por_admin_ni_comisario(monk
     try:
         await UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL).encontrado_callback.callback(interaction)
         assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is reserva
-        assert mensajes == [("Solo uno de los jugadores del partido reservado puede liberar este Spin.", True)]
+        assert mensajes == [(
+            "Solo uno de los jugadores del partido reservado puede liberar este Spin. "
+            "Si necesitas liberarlo como administración, usa `/liberarspin`.",
+            True,
+        )]
     finally:
         UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
 

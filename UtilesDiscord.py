@@ -124,6 +124,33 @@ def discord_ids_jugadores_reserva(reserva):
     }
 
 
+def usuario_tiene_rol_administrativo_spin(usuario):
+    """Indica si un usuario debe ser dirigido al comando administrativo.
+
+    Esto no autoriza el botón `Encontrado`: solo permite mostrar una respuesta
+    más útil a administradores/comisarios que no sean jugadores del partido.
+    """
+
+    permisos = getattr(usuario, "guild_permissions", None)
+    if getattr(permisos, "administrator", False):
+        return True
+
+    roles_administrativos = {"Comisario", "Administrador", "Moderadores"}
+    return any(
+        getattr(rol, "name", "") in roles_administrativos
+        for rol in getattr(usuario, "roles", [])
+    )
+
+
+def mensaje_encontrado_no_autorizado(usuario):
+    if usuario_tiene_rol_administrativo_spin(usuario):
+        return (
+            "Solo uno de los jugadores del partido reservado puede liberar este Spin. "
+            "Si necesitas liberarlo como administración, usa `/liberarspin`."
+        )
+    return "Solo uno de los jugadores del partido reservado puede liberar este Spin."
+
+
 def get_int_value(dictionary, key):
     value = dictionary.get(key)
     return 0 if value is None else value
@@ -897,7 +924,7 @@ class SpinButtonsView(discord.ui.View):
                 return
 
             if user.id not in discord_ids_jugadores_reserva(reserva):
-                await interaction.followup.send("Solo uno de los jugadores del partido reservado puede liberar este Spin.", ephemeral=True)
+                await interaction.followup.send(mensaje_encontrado_no_autorizado(user), ephemeral=True)
                 return
 
             limpiar_reserva_spin(ambito)
