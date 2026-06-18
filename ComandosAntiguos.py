@@ -377,7 +377,7 @@ class SpinButtonsView(discord.ui.View):
             if mensaje:
                 await mensaje.edit(content=f'**{UsuarioSpin} puede buscar partido**')
             
-            thread = Thread(target=GestorSQL.insertar_spin, args=(UsuarioSpin, now, 'Spin'))
+            thread = Thread(target=GestorSQL.insertar_spin, args=(UsuarioSpin, now, 'Spin', 'GENERAL'))
             thread.start()
 
     @discord.ui.button(label="Encontrado",style=discord.ButtonStyle.blurple, custom_id='your_bot:encontrado')
