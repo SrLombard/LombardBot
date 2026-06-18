@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
@@ -248,4 +249,47 @@ def test_reservas_spin_arrancan_liberadas_tras_cargar_modulo():
     UtilesDiscord = importlib.reload(UtilesDiscord)
 
     assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is None
+    assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_COMUNIDADES) is None
+
+
+def test_reservas_spin_tienen_bloqueos_independientes_por_ambito():
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL, AMBITO_SPIN_COMUNIDADES
+
+    assert UtilesDiscord.obtener_bloqueo_reserva_spin(AMBITO_SPIN_GENERAL) is not UtilesDiscord.obtener_bloqueo_reserva_spin(AMBITO_SPIN_COMUNIDADES)
+
+
+@pytest.mark.asyncio
+async def test_spin_callback_con_reserva_activa_solo_responde_en_esa_cola(monkeypatch):
+    from types import SimpleNamespace
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL, AMBITO_SPIN_COMUNIDADES
+
+    mensajes = []
+
+    class Response:
+        async def defer(self):
+            pass
+
+    class Followup:
+        async def send(self, mensaje, *, ephemeral=False):
+            mensajes.append((mensaje, ephemeral))
+
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = object()
+    UtilesDiscord.reservas_spin[AMBITO_SPIN_COMUNIDADES] = None
+    monkeypatch.setattr(UtilesDiscord.GestorSQL, "conexionEngine", lambda: (_ for _ in ()).throw(AssertionError("No debe consultar la base de datos si la cola está reservada")))
+
+    vista = UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL)
+    interaction = SimpleNamespace(
+        response=Response(),
+        followup=Followup(),
+        user=SimpleNamespace(id=123, mention="<@123>", name="Usuario"),
+    )
+
+    try:
+        await vista.spin_callback(interaction, None)
+    finally:
+        UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
+
+    assert mensajes == [("Ya hay un usuario buscando partido en esta cola.", True)]
     assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_COMUNIDADES) is None

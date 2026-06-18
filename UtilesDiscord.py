@@ -76,11 +76,19 @@ reservas_spin = {
     AMBITO_SPIN_GENERAL: None,
     AMBITO_SPIN_COMUNIDADES: None,
 }
+bloqueos_reservas_spin = {
+    AMBITO_SPIN_GENERAL: asyncio.Lock(),
+    AMBITO_SPIN_COMUNIDADES: asyncio.Lock(),
+}
 UsuarioSpin = None
 
 
 def obtener_reserva_spin(ambito):
     return reservas_spin.get(ambito)
+
+
+def obtener_bloqueo_reserva_spin(ambito):
+    return bloqueos_reservas_spin[ambito]
 
 
 def guardar_reserva_spin(reserva):
@@ -660,56 +668,57 @@ class SpinButtonsView(discord.ui.View):
         ambito = self.ambito
         user = interaction.user
 
-        if obtener_reserva_spin(ambito) is not None:
-            await interaction.followup.send(f'{user.mention}, ya hay un partido reservado en esta cola de Spin.', ephemeral=True)
-            return
-
-        Session = GestorSQL.sessionmaker(bind=GestorSQL.conexionEngine())
-        session = Session()
-        timeout_task = None
-        try:
-            usuario_db = session.query(GestorSQL.Usuario).filter(GestorSQL.Usuario.id_discord == user.id).first()
-            if not usuario_db:
-                await interaction.followup.send("No se encontró tu usuario en la base de datos.", ephemeral=True)
+        async with obtener_bloqueo_reserva_spin(ambito):
+            if obtener_reserva_spin(ambito) is not None:
+                await interaction.followup.send('Ya hay un usuario buscando partido en esta cola.', ephemeral=True)
                 return
 
+            Session = GestorSQL.sessionmaker(bind=GestorSQL.conexionEngine())
+            session = Session()
+            timeout_task = None
             try:
-                partido_spin = buscar_partido_spin(session, usuario_db, ambito)
-            except ValueError:
-                await interaction.followup.send("El ámbito de Spin no es válido. Avise a un administrador.", ephemeral=True)
-                return
-            if not partido_spin:
-                await interaction.followup.send("No tienes ningún partido pendiente en esta cola de Spin.", ephemeral=True)
-                return
+                usuario_db = session.query(GestorSQL.Usuario).filter(GestorSQL.Usuario.id_discord == user.id).first()
+                if not usuario_db:
+                    await interaction.followup.send("No se encontró tu usuario en la base de datos.", ephemeral=True)
+                    return
 
-            canal_partido_id = partido_spin.canal_partido_id
-            coach1_id_discord = partido_spin.jugador1_discord_id
-            coach2_id_discord = partido_spin.jugador2_discord_id
+                try:
+                    partido_spin = buscar_partido_spin(session, usuario_db, ambito)
+                except ValueError:
+                    await interaction.followup.send("El ámbito de Spin no es válido. Avise a un administrador.", ephemeral=True)
+                    return
+                if not partido_spin:
+                    await interaction.followup.send("No tienes ningún partido pendiente en esta cola de Spin.", ephemeral=True)
+                    return
 
-            canal_partido = interaction.guild.get_channel(canal_partido_id) if canal_partido_id else None
-            descripcion_partido = partido_spin.descripcion_corta
-            timeout_task = asyncio.create_task(self.auto_release_spin(ambito, user, interaction.message))
-            reserva = SpinReservation(ambito, user, coach1_id_discord, coach2_id_discord, interaction.channel, canal_partido, descripcion_partido, timeout_task, partido_spin)
-            guardar_reserva_spin(reserva)
+                canal_partido_id = partido_spin.canal_partido_id
+                coach1_id_discord = partido_spin.jugador1_discord_id
+                coach2_id_discord = partido_spin.jugador2_discord_id
 
-            if canal_partido:
-                if ambito == AMBITO_SPIN_COMUNIDADES:
-                    await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear vuestro partido de comunidades.')
-                else:
-                    await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
+                canal_partido = interaction.guild.get_channel(canal_partido_id) if canal_partido_id else None
+                descripcion_partido = partido_spin.descripcion_corta
+                timeout_task = asyncio.create_task(self.auto_release_spin(ambito, user, interaction.message))
+                reserva = SpinReservation(ambito, user, coach1_id_discord, coach2_id_discord, interaction.channel, canal_partido, descripcion_partido, timeout_task, partido_spin)
+                guardar_reserva_spin(reserva)
 
-            self.actualizar_botones(spin_habilitado=False)
-            await interaction.message.edit(view=self)
+                if canal_partido:
+                    if ambito == AMBITO_SPIN_COMUNIDADES:
+                        await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear vuestro partido de comunidades.')
+                    else:
+                        await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
 
-            primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
-            if primer_mensaje:
-                await primer_mensaje.edit(content=descripcion_partido)
+                self.actualizar_botones(spin_habilitado=False)
+                await interaction.message.edit(view=self)
 
-            await interaction.followup.send(f"Ahora puedes buscar partido en {self.nombre_ambito()}.", ephemeral=True)
-            thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Spin', ambito))
-            thread.start()
-        finally:
-            session.close()
+                primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
+                if primer_mensaje:
+                    await primer_mensaje.edit(content=descripcion_partido)
+
+                await interaction.followup.send(f"Ahora puedes buscar partido en {self.nombre_ambito()}.", ephemeral=True)
+                thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Spin', ambito))
+                thread.start()
+            finally:
+                session.close()
 
     @discord.ui.button(label="Encontrado", style=discord.ButtonStyle.blurple, custom_id='lombardbot:encontrado:general', disabled=True)
     async def encontrado_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
