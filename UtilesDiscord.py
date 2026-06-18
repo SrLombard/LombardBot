@@ -589,9 +589,6 @@ def buscar_partido_spin(session, usuario_db, ambito):
 
 
 class SpinButtonsView(discord.ui.View):
-    CUSTOM_ID_SPIN_LEGACY = 'your_bot:spin'
-    CUSTOM_ID_ENCONTRADO_LEGACY = 'your_bot:encontrado'
-
     def __init__(self, ambito=AMBITO_SPIN_GENERAL):
         super().__init__(timeout=None)
         self.ambito = normalizar_ambito_spin(ambito) or AMBITO_SPIN_GENERAL
@@ -604,13 +601,9 @@ class SpinButtonsView(discord.ui.View):
         return self.ambito.casefold()
 
     def custom_id_spin(self):
-        if self.ambito == AMBITO_SPIN_GENERAL:
-            return self.CUSTOM_ID_SPIN_LEGACY
         return f"lombardbot:spin:{self.sufijo_custom_id()}"
 
     def custom_id_encontrado(self):
-        if self.ambito == AMBITO_SPIN_GENERAL:
-            return self.CUSTOM_ID_ENCONTRADO_LEGACY
         return f"lombardbot:encontrado:{self.sufijo_custom_id()}"
 
     def _aplicar_ambito_a_botones(self):
@@ -620,6 +613,7 @@ class SpinButtonsView(discord.ui.View):
                     child.custom_id = self.custom_id_spin()
                 elif child.label == "Encontrado":
                     child.custom_id = self.custom_id_encontrado()
+                    child.disabled = True
 
     async def auto_release_spin(self, ambito, user, mensaje_botones=None):
         await asyncio.sleep(300)  # Espera 5 minutos
@@ -660,7 +654,7 @@ class SpinButtonsView(discord.ui.View):
             return mensaje  #primer mensaje encontrado
         return None  #None si no hay mensajes
 
-    @discord.ui.button(label="Spin", style=discord.ButtonStyle.green, custom_id='your_bot:spin')
+    @discord.ui.button(label="Spin", style=discord.ButtonStyle.green, custom_id='lombardbot:spin:general')
     async def spin_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         ambito = self.ambito
@@ -717,7 +711,7 @@ class SpinButtonsView(discord.ui.View):
         finally:
             session.close()
 
-    @discord.ui.button(label="Encontrado", style=discord.ButtonStyle.blurple, custom_id='your_bot:encontrado')
+    @discord.ui.button(label="Encontrado", style=discord.ButtonStyle.blurple, custom_id='lombardbot:encontrado:general', disabled=True)
     async def encontrado_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         user = interaction.user

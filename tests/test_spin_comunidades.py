@@ -205,10 +205,33 @@ def test_spin_buttons_view_parametriza_custom_ids_por_ambito():
     assert vista_general.ambito == AMBITO_SPIN_GENERAL
     assert vista_comunidades.ambito == AMBITO_SPIN_COMUNIDADES
     assert ids_general == {
-        "Spin": "your_bot:spin",
-        "Encontrado": "your_bot:encontrado",
+        "Spin": "lombardbot:spin:general",
+        "Encontrado": "lombardbot:encontrado:general",
     }
     assert ids_comunidades == {
         "Spin": "lombardbot:spin:comunidades",
         "Encontrado": "lombardbot:encontrado:comunidades",
+    }
+
+
+def test_spin_buttons_view_no_usa_custom_ids_heredados():
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL, AMBITO_SPIN_COMUNIDADES
+
+    ids = {
+        boton.custom_id
+        for vista in (
+            UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL),
+            UtilesDiscord.SpinButtonsView(AMBITO_SPIN_COMUNIDADES),
+        )
+        for boton in vista.children
+    }
+
+    assert "your_bot:spin" not in ids
+    assert "your_bot:encontrado" not in ids
+    assert ids == {
+        "lombardbot:spin:general",
+        "lombardbot:encontrado:general",
+        "lombardbot:spin:comunidades",
+        "lombardbot:encontrado:comunidades",
     }

@@ -221,8 +221,8 @@ async def reloj_de_cuco():
 
 @bot.event
 async def on_ready():
-    # Registramos una misma vista parametrizada por ámbito. Los custom_id heredados
-    # siguen apuntando a GENERAL y Comunidades usa identificadores propios.
+    # Registramos vistas persistentes separadas por ámbito. Cada una usa custom_id
+    # propio para evitar conflictos entre Spin General y Spin Comunidades.
     bot.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL))
     bot.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_COMUNIDADES))
     await bot.tree.sync()
@@ -1818,13 +1818,17 @@ async def actualizar_configuracion(ctx):
 
 @bot.command(name="AgregarVista")
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
-async def agregar_vista(ctx, message_id: int):
+async def agregar_vista(ctx, message_id: int, ambito: str = "General"):
     # Intenta obtener el mensaje objetivo y añadirle la vista
     try:
+        ambito_normalizado = normalizar_ambito_spin(ambito)
+        if not ambito_normalizado:
+            await ctx.send("Ámbito de Spin no válido. Usa General o Comunidades.", delete_after=20)
+            return
         # Obten el canal y luego el mensaje usando el ID proporcionado
         message = await ctx.channel.fetch_message(message_id)
-        # Edita el mensaje para añadir la vista
-        await message.edit(view=UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL))
+        # Edita el mensaje para añadir la vista del ámbito indicado
+        await message.edit(view=UtilesDiscord.SpinButtonsView(ambito_normalizado))
         # Borra el mensaje que invocó el comando
         await ctx.message.delete()
         # Envía confirmación y luego borra ese mensaje después de 20 segundos
