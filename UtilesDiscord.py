@@ -19,6 +19,9 @@ import GestorSQL
 from SpinConstantes import (
     AMBITO_SPIN_COMUNIDADES,
     AMBITO_SPIN_GENERAL,
+    TIPO_SPIN,
+    TIPO_SPIN_AUTO_RELEASE,
+    TIPO_SPIN_ENCONTRADO,
     CANAL_SPIN_COMUNIDADES_ID,
     CANAL_SPIN_GENERAL_ID,
     mensaje_spin_libre,
@@ -739,7 +742,7 @@ class SpinButtonsView(discord.ui.View):
         except Exception as exc:
             print(f"No se pudo editar el primer mensaje de {nombre_ambito} tras timeout: {exc}")
 
-        thread = Thread(target=GestorSQL.insertar_spin, args=('LOMBARDBOT', datetime.utcnow(), 'Encontrado', ambito))
+        thread = Thread(target=GestorSQL.insertar_spin, args=('LOMBARDBOT', datetime.utcnow(), TIPO_SPIN_AUTO_RELEASE, ambito))
         thread.start()
 
     def actualizar_botones(self, spin_habilitado):
@@ -821,7 +824,7 @@ class SpinButtonsView(discord.ui.View):
                         await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
 
                 await interaction.followup.send(f"Ahora puedes buscar partido en {self.nombre_ambito()}.", ephemeral=True)
-                thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Spin', ambito, user.id))
+                thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), TIPO_SPIN, ambito, user.id))
                 thread.start()
             finally:
                 session.close()
@@ -863,7 +866,7 @@ class SpinButtonsView(discord.ui.View):
             print(f"No se pudo editar el primer mensaje de {self.nombre_ambito()} al liberar: {exc}")
 
         await interaction.followup.send(f"Has liberado el {self.nombre_ambito()}.", ephemeral=True)
-        thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado', ambito, user.id))
+        thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), TIPO_SPIN_ENCONTRADO, ambito, user.id))
         thread.start()
 
             

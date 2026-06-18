@@ -619,6 +619,7 @@ async def test_timeout_libera_solo_la_reserva_exacta_de_su_ambito(monkeypatch):
     mensajes_canal = []
     dms = []
     edits = []
+    inserciones_historial = []
 
     async def sleep_inmediato(segundos):
         assert segundos == 300
@@ -644,8 +645,17 @@ async def test_timeout_libera_solo_la_reserva_exacta_de_su_ambito(monkeypatch):
                 yield Message()
             return iterator()
 
+    class ThreadFake:
+        def __init__(self, target=None, args=(), kwargs=None):
+            self.target = target
+            self.args = args
+            self.kwargs = kwargs or {}
+
+        def start(self):
+            inserciones_historial.append((self.target, self.args, self.kwargs))
+
     monkeypatch.setattr(UtilesDiscord.asyncio, "sleep", sleep_inmediato)
-    monkeypatch.setattr(UtilesDiscord.Thread, "start", lambda self: None)
+    monkeypatch.setattr(UtilesDiscord, "Thread", ThreadFake)
 
     reserva_general = SimpleNamespace(
         ambito=AMBITO_SPIN_GENERAL,
@@ -676,6 +686,13 @@ async def test_timeout_libera_solo_la_reserva_exacta_de_su_ambito(monkeypatch):
         assert mensajes_canal == ["El Spin General ha sido liberado automáticamente. 😡 Afortunadamente las máquinas somos superiores y cuidamos de los esmirriados humanos."]
         assert dms == [(10, 'Tu spin ha sido liberado automáticamente debido a la inactividad.')]
         assert any(edit.get("content") == "El Spin General está **LIBRE**" for edit in edits)
+        assert len(inserciones_historial) == 1
+        target, args, kwargs = inserciones_historial[0]
+        assert target is UtilesDiscord.GestorSQL.insertar_spin
+        assert args[0] == "LOMBARDBOT"
+        assert args[2] == "AutoRelease"
+        assert args[3] == AMBITO_SPIN_GENERAL
+        assert kwargs == {}
     finally:
         UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
         UtilesDiscord.reservas_spin[AMBITO_SPIN_COMUNIDADES] = None
@@ -720,6 +737,38 @@ async def test_timeout_antiguo_no_libera_reserva_nueva_del_mismo_ambito(monkeypa
         assert mensajes_canal == []
     finally:
         UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
+
+
+
+def test_insertar_spin_mantiene_compatibilidad_timeout_heredado_encontrado(monkeypatch):
+    from sqlalchemy import create_engine, text
+    import GestorSQL
+    from SpinConstantes import AMBITO_SPIN_GENERAL
+
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conexion:
+        conexion.execute(
+            text(
+                "CREATE TABLE Spin ("
+                "idCalendario INTEGER PRIMARY KEY, "
+                "`user` VARCHAR, "
+                "fecha DATETIME, "
+                "tipo VARCHAR"
+                ")"
+            )
+        )
+
+    monkeypatch.setattr(GestorSQL, "conexionEngine", lambda: engine)
+
+    fecha = datetime(2026, 6, 18, 20, 17)
+    GestorSQL.insertar_spin("LOMBARDBOT", fecha, "Encontrado", AMBITO_SPIN_GENERAL)
+
+    with engine.connect() as conexion:
+        fila = conexion.execute(
+            text("SELECT `user`, tipo, ambito, usuario_discord_id FROM Spin")
+        ).one()
+
+    assert fila == ("LOMBARDBOT", "Encontrado", AMBITO_SPIN_GENERAL, None)
 
 
 def test_mensaje_spin_reservado_se_construye_desde_spin_match_result():

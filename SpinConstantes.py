@@ -20,6 +20,9 @@ AMBITO_SPIN_GENERAL = AmbitoSpin.GENERAL.value
 AMBITO_SPIN_COMUNIDADES = AmbitoSpin.COMUNIDADES.value
 AMBITOS_SPIN = frozenset(ambito.value for ambito in AmbitoSpin)
 AMBITO_SPIN_TODOS = "TODOS"
+TIPO_SPIN = "Spin"
+TIPO_SPIN_ENCONTRADO = "Encontrado"
+TIPO_SPIN_AUTO_RELEASE = "AutoRelease"
 
 MENSAJES_SPIN_LIBRE = {
     AMBITO_SPIN_GENERAL: "El Spin General está **LIBRE**",
