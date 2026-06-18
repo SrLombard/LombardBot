@@ -1852,18 +1852,28 @@ async def agregar_vista(ctx, message_id: int, ambito: str = "General"):
     except Exception as e:
         await ctx.send(f"Error: {e}", delete_after=20)
 
-@bot.command(name="AgregaMensajeSpin")
+@bot.command(name="AgregaMensajeSpin", aliases=["AgregarMensajeSpin"])
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
-async def AgregaMensajeSpin(ctx, ambito: str = "General"):
+async def AgregaMensajeSpin(ctx, ambito: str):
     ambito_normalizado = normalizar_ambito_spin(ambito)
     if not ambito_normalizado:
         await ctx.send("Ámbito de Spin no válido. Usa General o Comunidades.", delete_after=20)
         return
 
-    await ctx.send(mensaje_spin_libre(ambito_normalizado))
-    await ctx.send("¡Úsame para Spinear!", view=UtilesDiscord.SpinButtonsView(ambito_normalizado))
+    await ctx.send(
+        mensaje_spin_libre(ambito_normalizado),
+        view=UtilesDiscord.SpinButtonsView(ambito_normalizado),
+    )
     UtilesDiscord.limpiar_reserva_spin(ambito_normalizado)
     await ctx.message.delete()
+
+
+@AgregaMensajeSpin.error
+async def AgregaMensajeSpin_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument) and error.param.name == "ambito":
+        await ctx.send("Debes indicar el ámbito del Spin: General o Comunidades.", delete_after=20)
+        return
+    raise error
    
 
 @bot.tree.command(name="dado", description="Lanza un dado!")
