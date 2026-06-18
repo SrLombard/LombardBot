@@ -17,6 +17,12 @@ from sqlalchemy.orm import aliased, joinedload
 from sqlalchemy.sql import case,func
 
 import GestorSQL
+from ComunidadesConstantes import (
+    PARTIDO_ADMINISTRADO,
+    PARTIDO_EN_CURSO,
+    PARTIDO_FINALIZADO,
+    PARTIDO_PENDIENTE,
+)
 from SpinConstantes import (
     AMBITO_SPIN_COMUNIDADES,
     AMBITO_SPIN_GENERAL,
@@ -695,8 +701,12 @@ def resolver_partido_spin_comunidades(session, usuario_db):
             GestorSQL.ComunidadesPartido.usuario_visitante_id == usuario_db.idUsuarios,
         ),
         GestorSQL.ComunidadesPartido.canal_discord_id != None,
-        GestorSQL.ComunidadesPartido.estado.in_(("PENDIENTE", "EN_CURSO")),
-        ~GestorSQL.ComunidadesPartido.estado.in_(("FINALIZADO", "ADMINISTRADO")),
+        GestorSQL.ComunidadesPartido.estado.in_(
+            (PARTIDO_PENDIENTE, PARTIDO_EN_CURSO)
+        ),
+        ~GestorSQL.ComunidadesPartido.estado.in_(
+            (PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO)
+        ),
         GestorSQL.ComunidadesPartido.partido_bloodbowl_id.is_(None),
     ).all()
 
