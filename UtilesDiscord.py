@@ -438,8 +438,14 @@ def _spin_match_desde_partido_general(partido):
     )
 
 
-def buscar_partido_spin_general(session, usuario_db):
-    """Devuelve el partido de Spin General normalizado o ``None``."""
+def resolver_partido_spin_general(session, usuario_db):
+    """Resuelve el partido elegible de Spin General o ``None``.
+
+    ``logicaSpin.md`` define Spin General como la búsqueda agregada en
+    Calendario, PlayOffsOro, PlayOffsPlata, PlayOffsBronce, Ticket y
+    SuizoEmparejamiento, conservando los filtros existentes y devolviendo un
+    ``SpinMatchResult`` normalizado.
+    """
 
     partidos_calendario = session.query(GestorSQL.Calendario).filter(
         or_(GestorSQL.Calendario.coach1 == usuario_db.idUsuarios, GestorSQL.Calendario.coach2 == usuario_db.idUsuarios),
@@ -485,6 +491,12 @@ def buscar_partido_spin_general(session, usuario_db):
         for partido in partidos_calendario + partidos_playoffs_oro + partidos_playoffs_plata + partidos_playoffs_bronce + partidos_ticket + partidos_suizo
     ]
     return min(resultados, key=_clave_orden_spin) if resultados else None
+
+
+def buscar_partido_spin_general(session, usuario_db):
+    """Alias heredado para resolver el partido de Spin General."""
+
+    return resolver_partido_spin_general(session, usuario_db)
 
 
 def buscar_partido_spin_comunidades(session, usuario_db):
@@ -539,7 +551,7 @@ def buscar_partido_spin_comunidades(session, usuario_db):
 def buscar_partido_spin(session, usuario_db, ambito):
     if ambito == AMBITO_SPIN_COMUNIDADES:
         return buscar_partido_spin_comunidades(session, usuario_db)
-    return buscar_partido_spin_general(session, usuario_db)
+    return resolver_partido_spin_general(session, usuario_db)
 
 
 class SpinButtonsView(discord.ui.View):
