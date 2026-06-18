@@ -75,6 +75,14 @@ class SpinReservation:
     partido: SpinMatchResult
 
 
+@dataclass(frozen=True)
+class SpinEstadoTransitorio:
+    """Estado interno no reservable mientras una cola se está liberando."""
+
+    ambito: str
+    estado: str = "LIBERANDO"
+
+
 # Almacén en memoria de reservas activas. Cada ámbito de Spin tiene una cola
 # independiente; UsuarioSpin queda solo como alias heredado no funcional.
 reservas_spin = {
@@ -96,14 +104,50 @@ def obtener_bloqueo_reserva_spin(ambito):
     return bloqueos_reservas_spin[ambito]
 
 
+def reserva_spin_activa(reserva):
+    return isinstance(reserva, SpinReservation)
+
+
 def guardar_reserva_spin(reserva):
     reservas_spin[reserva.ambito] = reserva
+
+
+def marcar_liberando_spin(ambito):
+    reservas_spin[ambito] = SpinEstadoTransitorio(ambito)
 
 
 def limpiar_reserva_spin(ambito):
     reserva = reservas_spin.get(ambito)
     reservas_spin[ambito] = None
     return reserva
+
+
+async def tomar_reserva_para_liberar_spin(ambito, reserva_esperada=None):
+    """Marca una reserva como ``LIBERANDO`` de forma idempotente.
+
+    Devuelve la reserva activa que debe liberar el llamador, o ``None`` si la
+    cola ya estaba libre, ya estaba en proceso de liberación, o la reserva
+    activa no coincide con ``reserva_esperada``. No toca otras colas porque el
+    bloqueo y el estado están indexados por ámbito.
+    """
+
+    async with obtener_bloqueo_reserva_spin(ambito):
+        reserva = obtener_reserva_spin(ambito)
+        if not reserva_spin_activa(reserva):
+            return None
+        if reserva_esperada is not None and reserva is not reserva_esperada:
+            return None
+        marcar_liberando_spin(ambito)
+        if reserva.timeout_task:
+            reserva.timeout_task.cancel()
+        return reserva
+
+
+async def finalizar_liberacion_spin(ambito):
+    """Deja libre una cola tras una liberación ya tomada."""
+
+    async with obtener_bloqueo_reserva_spin(ambito):
+        limpiar_reserva_spin(ambito)
 
 
 def discord_ids_jugadores_reserva(reserva):
@@ -712,14 +756,9 @@ async def liberar_reserva_spin_administrativa(ambito, usuario_admin):
     if not ambito_normalizado:
         raise ValueError(f"Ámbito de Spin no válido: {ambito!r}")
 
-    async with obtener_bloqueo_reserva_spin(ambito_normalizado):
-        reserva = obtener_reserva_spin(ambito_normalizado)
-        if not reserva:
-            return False
-
-        limpiar_reserva_spin(ambito_normalizado)
-        if reserva.timeout_task:
-            reserva.timeout_task.cancel()
+    reserva = await tomar_reserva_para_liberar_spin(ambito_normalizado)
+    if not reserva:
+        return False
 
     nombre_ambito = "Spin Comunidades" if ambito_normalizado == AMBITO_SPIN_COMUNIDADES else "Spin General"
 
@@ -747,6 +786,7 @@ async def liberar_reserva_spin_administrativa(ambito, usuario_admin):
         args=(nombre_usuario, datetime.utcnow(), TIPO_SPIN_ADMIN_RELEASE, ambito_normalizado, usuario_discord_id),
     )
     thread.start()
+    await finalizar_liberacion_spin(ambito_normalizado)
     return True
 
 
@@ -790,11 +830,9 @@ class SpinButtonsView(discord.ui.View):
         await asyncio.sleep(300)  # Espera 5 minutos
         ambito = reserva_esperada.ambito
 
-        async with obtener_bloqueo_reserva_spin(ambito):
-            reserva = obtener_reserva_spin(ambito)
-            if reserva is not reserva_esperada:
-                return
-            limpiar_reserva_spin(ambito)
+        reserva = await tomar_reserva_para_liberar_spin(ambito, reserva_esperada=reserva_esperada)
+        if not reserva:
+            return
 
         nombre_ambito = self.nombre_ambito()
         if reserva.canal_partido:
@@ -823,6 +861,7 @@ class SpinButtonsView(discord.ui.View):
 
         thread = Thread(target=GestorSQL.insertar_spin, args=('LOMBARDBOT', datetime.utcnow(), TIPO_SPIN_AUTO_RELEASE, ambito))
         thread.start()
+        await finalizar_liberacion_spin(ambito)
 
     def actualizar_botones(self, spin_habilitado):
         for child in self.children:
@@ -841,103 +880,120 @@ class SpinButtonsView(discord.ui.View):
         ambito = self.ambito
         user = interaction.user
 
+        # Primera comprobación rápida por ámbito. No mantenemos el bloqueo
+        # durante la búsqueda SQL para no retener la cola mientras hacemos I/O;
+        # por eso se repite la comprobación justo antes de crear la reserva.
         async with obtener_bloqueo_reserva_spin(ambito):
             if obtener_reserva_spin(ambito) is not None:
                 await interaction.followup.send('Ya hay un usuario buscando partido en esta cola.', ephemeral=True)
                 return
 
-            Session = GestorSQL.sessionmaker(bind=GestorSQL.conexionEngine())
-            session = Session()
-            try:
-                usuario_db = session.query(GestorSQL.Usuario).filter(GestorSQL.Usuario.id_discord == user.id).first()
-                if not usuario_db:
+        Session = GestorSQL.sessionmaker(bind=GestorSQL.conexionEngine())
+        session = Session()
+        try:
+            usuario_db = session.query(GestorSQL.Usuario).filter(GestorSQL.Usuario.id_discord == user.id).first()
+            if not usuario_db:
+                partido_spin = None
+                mensaje_error = "No se encontró tu usuario en la base de datos."
+            else:
+                try:
+                    partido_spin = buscar_partido_spin(session, usuario_db, ambito)
+                    mensaje_error = None if partido_spin else "No tienes ningún partido pendiente en esta cola de Spin."
+                except ValueError:
                     partido_spin = None
-                    mensaje_error = "No se encontró tu usuario en la base de datos."
-                else:
-                    try:
-                        partido_spin = buscar_partido_spin(session, usuario_db, ambito)
-                        mensaje_error = None if partido_spin else "No tienes ningún partido pendiente en esta cola de Spin."
-                    except ValueError:
-                        partido_spin = None
-                        mensaje_error = "El ámbito de Spin no es válido. Avise a un administrador."
-            finally:
-                session.close()
+                    mensaje_error = "El ámbito de Spin no es válido. Avise a un administrador."
+        finally:
+            session.close()
 
-            if mensaje_error:
-                await interaction.followup.send(mensaje_error, ephemeral=True)
+        if mensaje_error:
+            await interaction.followup.send(mensaje_error, ephemeral=True)
+            return
+
+        canal_partido_id = partido_spin.canal_partido_id
+        coach1_id_discord = partido_spin.jugador1_discord_id
+        coach2_id_discord = partido_spin.jugador2_discord_id
+        canal_partido = interaction.guild.get_channel(canal_partido_id) if canal_partido_id else None
+        descripcion_partido = partido_spin.descripcion_corta
+        reserva = SpinReservation(
+            ambito,
+            user,
+            coach1_id_discord,
+            coach2_id_discord,
+            interaction.channel,
+            canal_partido,
+            descripcion_partido,
+            None,
+            partido_spin,
+        )
+
+        async with obtener_bloqueo_reserva_spin(ambito):
+            # Revalidación requerida antes de crear la reserva: otra interacción
+            # simultánea pudo reservar o iniciar LIBERANDO mientras buscábamos.
+            if obtener_reserva_spin(ambito) is not None:
+                await interaction.followup.send('Ya hay un usuario buscando partido en esta cola.', ephemeral=True)
                 return
-
-            # A partir de aquí solo se usan datos escalares copiados en
-            # SpinMatchResult; la sesión SQL ya está cerrada antes de tocar
-            # Discord para evitar fugas o conexiones retenidas durante awaits.
-            timeout_task = None
-            canal_partido_id = partido_spin.canal_partido_id
-            coach1_id_discord = partido_spin.jugador1_discord_id
-            coach2_id_discord = partido_spin.jugador2_discord_id
-
-            canal_partido = interaction.guild.get_channel(canal_partido_id) if canal_partido_id else None
-            descripcion_partido = partido_spin.descripcion_corta
-            reserva = SpinReservation(ambito, user, coach1_id_discord, coach2_id_discord, interaction.channel, canal_partido, descripcion_partido, None, partido_spin)
             timeout_task = asyncio.create_task(self.auto_release_spin(reserva))
             reserva.timeout_task = timeout_task
             guardar_reserva_spin(reserva)
 
-            self.actualizar_botones(spin_habilitado=False)
-            try:
-                await editar_primer_mensaje_spin(
-                    interaction.channel,
-                    content=descripcion_partido,
-                    view=self,
-                )
-            except Exception as exc:
-                limpiar_reserva_spin(ambito)
-                if timeout_task:
-                    timeout_task.cancel()
-                self.actualizar_botones(spin_habilitado=True)
-                await interaction.followup.send(
-                    "No se pudo localizar o editar el mensaje principal de Spin. "
-                    "La reserva interna ha quedado liberada; recrea el mensaje con "
-                    f"`!AgregarMensajeSpin {ambito.title()}` si es necesario.",
-                    ephemeral=True,
-                )
-                print(f"No se pudo reservar {self.nombre_ambito()} al editar el primer mensaje: {exc}")
-                return
+        self.actualizar_botones(spin_habilitado=False)
+        try:
+            await editar_primer_mensaje_spin(
+                interaction.channel,
+                content=descripcion_partido,
+                view=self,
+            )
+        except Exception as exc:
+            async with obtener_bloqueo_reserva_spin(ambito):
+                if obtener_reserva_spin(ambito) is reserva:
+                    limpiar_reserva_spin(ambito)
+            if reserva.timeout_task:
+                reserva.timeout_task.cancel()
+            self.actualizar_botones(spin_habilitado=True)
+            await interaction.followup.send(
+                "No se pudo localizar o editar el mensaje principal de Spin. "
+                "La reserva interna ha quedado liberada; recrea el mensaje con "
+                f"`!AgregarMensajeSpin {ambito.title()}` si es necesario.",
+                ephemeral=True,
+            )
+            print(f"No se pudo reservar {self.nombre_ambito()} al editar el primer mensaje: {exc}")
+            return
 
-            if canal_partido:
-                if ambito == AMBITO_SPIN_COMUNIDADES:
-                    await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear vuestro partido de comunidades.')
-                else:
-                    await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
+        if canal_partido:
+            if ambito == AMBITO_SPIN_COMUNIDADES:
+                await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear vuestro partido de comunidades.')
+            else:
+                await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
 
-            await interaction.followup.send(f"Ahora puedes buscar partido en {self.nombre_ambito()}.", ephemeral=True)
-            thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), TIPO_SPIN, ambito, user.id))
-            thread.start()
+        await interaction.followup.send(f"Ahora puedes buscar partido en {self.nombre_ambito()}.", ephemeral=True)
+        thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), TIPO_SPIN, ambito, user.id))
+        thread.start()
 
     @discord.ui.button(label="Encontrado", style=discord.ButtonStyle.blurple, custom_id='lombardbot:encontrado:general', disabled=True)
     async def encontrado_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         user = interaction.user
-        # El ámbito de la vista identifica de forma inequívoca la cola a liberar.
-        # No se consulta ni se modifica ninguna reserva fuera de esta clave.
         ambito = self.ambito
 
         async with obtener_bloqueo_reserva_spin(ambito):
             reserva = obtener_reserva_spin(ambito)
-
-            if not reserva:
+            if not reserva_spin_activa(reserva):
                 await interaction.followup.send("No hay ningún Spin reservado en esta cola.", ephemeral=True)
                 return
-
             if user.id not in discord_ids_jugadores_reserva(reserva):
                 await interaction.followup.send(mensaje_encontrado_no_autorizado(user), ephemeral=True)
                 return
 
-            limpiar_reserva_spin(ambito)
-            if reserva.timeout_task:
-                reserva.timeout_task.cancel()
+        reserva = await tomar_reserva_para_liberar_spin(ambito, reserva_esperada=reserva)
+        if not reserva:
+            await interaction.followup.send("No hay ningún Spin reservado en esta cola.", ephemeral=True)
+            return
 
         if reserva.canal_partido:
-            await reserva.canal_partido.send(f"El {self.nombre_ambito()} ha sido liberado.")
+            try:
+                await reserva.canal_partido.send(f"El {self.nombre_ambito()} ha sido liberado.")
+            except Exception as exc:
+                print(f"No se pudo enviar el mensaje de liberación de {self.nombre_ambito()}: {exc}")
 
         self.actualizar_botones(spin_habilitado=True)
         try:
@@ -952,6 +1008,7 @@ class SpinButtonsView(discord.ui.View):
         await interaction.followup.send(f"Has liberado el {self.nombre_ambito()}.", ephemeral=True)
         thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), TIPO_SPIN_ENCONTRADO, ambito, user.id))
         thread.start()
+        await finalizar_liberacion_spin(ambito)
 
             
 #Singleton para las necesidades del discord
