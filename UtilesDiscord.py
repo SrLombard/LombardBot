@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from dataclasses import dataclass
 from threading import Thread
 import threading
 import Imagenes
@@ -14,7 +15,13 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.sql import case,func
 
 import GestorSQL
-from SpinConstantes import AMBITO_SPIN_GENERAL, CANAL_SPIN_GENERAL_ID
+from SpinConstantes import (
+    AMBITO_SPIN_COMUNIDADES,
+    AMBITO_SPIN_GENERAL,
+    CANAL_SPIN_COMUNIDADES_ID,
+    CANAL_SPIN_GENERAL_ID,
+    normalizar_ambito_spin,
+)
 
 import asyncio
 from datetime import datetime
@@ -22,7 +29,41 @@ from datetime import datetime
 
 
 
+@dataclass
+class SpinReservation:
+    """Reserva temporal independiente de una cola de Spin."""
+
+    ambito: str
+    usuario_spin: object
+    jugador1_discord_id: int
+    jugador2_discord_id: int
+    canal_spin: object
+    canal_partido: object
+    descripcion_partido: str
+    timeout_task: asyncio.Task
+
+
+# Almacén en memoria de reservas activas. Cada ámbito de Spin tiene una cola
+# independiente; UsuarioSpin queda solo como alias heredado no funcional.
+reservas_spin = {
+    AMBITO_SPIN_GENERAL: None,
+    AMBITO_SPIN_COMUNIDADES: None,
+}
 UsuarioSpin = None
+
+
+def obtener_reserva_spin(ambito):
+    return reservas_spin.get(ambito)
+
+
+def guardar_reserva_spin(reserva):
+    reservas_spin[reserva.ambito] = reserva
+
+
+def limpiar_reserva_spin(ambito):
+    reserva = reservas_spin.get(ambito)
+    reservas_spin[ambito] = None
+    return reserva
 
 
 def get_int_value(dictionary, key):
@@ -324,42 +365,46 @@ Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
                 
 
 class SpinButtonsView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, ambito=AMBITO_SPIN_GENERAL):
         super().__init__(timeout=None)
-        self.spin_timeout_task = None
-        self.canal = None  # Canal Spin; el mensaje editado será el primer mensaje del canal.
-        self.canal_partido = None # Almacena el canal del partido
+        self.ambito = normalizar_ambito_spin(ambito) or AMBITO_SPIN_GENERAL
 
-    async def auto_release_spin(self, user, mensaje_botones=None):
+    def nombre_ambito(self):
+        return "Spin Comunidades" if self.ambito == AMBITO_SPIN_COMUNIDADES else "Spin General"
+
+    async def auto_release_spin(self, ambito, user, mensaje_botones=None):
         await asyncio.sleep(300)  # Espera 5 minutos
-        global UsuarioSpin
-        if UsuarioSpin == user:
-            UsuarioSpin = None  # Libera el spin
-            if self.canal_partido:
-                await self.canal_partido.send("El spin ha sido liberado automáticamente.😡 Afortunadamente las máquinas somos superiores y cuidamos de los esmirriados humanos")
-                self.canal_partido = None 
-            
-            # Envía un mensaje privado al usuario informándole que el spin ha sido liberado automáticamente
-            await user.send('Tu spin ha sido liberado automáticamente debido a la inactividad.')
+        reserva = obtener_reserva_spin(ambito)
+        if not reserva or reserva.usuario_spin != user:
+            return
 
-            # Actualiza los botones sin usar un ID persistido como fuente de verdad.
-            if mensaje_botones:
-                for item in self.children:
-                    if isinstance(item, discord.ui.Button):
-                        if item.label == "Spin":
-                            item.disabled = False
-                        elif item.label == "Encontrado":
-                            item.disabled = True
-                await mensaje_botones.edit(view=self)
+        limpiar_reserva_spin(ambito)
+        if reserva.canal_partido:
+            if ambito == AMBITO_SPIN_COMUNIDADES:
+                await reserva.canal_partido.send("El Spin Comunidades ha sido liberado automáticamente. 😡 La comunidad ha sobrevivido a otro intento fallido de coordinación humana.")
+            else:
+                await reserva.canal_partido.send("El Spin General ha sido liberado automáticamente. 😡 Afortunadamente las máquinas somos superiores y cuidamos de los esmirriados humanos.")
 
-            # El estado público del Spin se edita en el primer mensaje del canal.
-            primer_mensaje = await self.obtener_primer_mensaje(self.canal) if self.canal else None
-            if primer_mensaje:
-                await primer_mensaje.edit(content='El spin está **LIBRE**')
-            
-            thread = Thread(target=GestorSQL.insertar_spin, args=('LOMBARDBOT', datetime.utcnow(), 'Encontrado', AMBITO_SPIN_GENERAL))
-            thread.start()
+        await user.send('Tu spin ha sido liberado automáticamente debido a la inactividad.')
 
+        if mensaje_botones:
+            self.actualizar_botones(spin_habilitado=True)
+            await mensaje_botones.edit(view=self)
+
+        primer_mensaje = await self.obtener_primer_mensaje(reserva.canal_spin) if reserva.canal_spin else None
+        if primer_mensaje:
+            await primer_mensaje.edit(content=f'El {self.nombre_ambito()} está **LIBRE**')
+
+        thread = Thread(target=GestorSQL.insertar_spin, args=('LOMBARDBOT', datetime.utcnow(), 'Encontrado', ambito))
+        thread.start()
+
+    def actualizar_botones(self, spin_habilitado):
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                if child.label == "Spin":
+                    child.disabled = not spin_habilitado
+                elif child.label == "Encontrado":
+                    child.disabled = spin_habilitado
 
     async def obtener_primer_mensaje(self, channel):
         async for mensaje in channel.history(oldest_first=True, limit=1):
@@ -368,184 +413,132 @@ class SpinButtonsView(discord.ui.View):
 
     @discord.ui.button(label="Spin", style=discord.ButtonStyle.green, custom_id='your_bot:spin')
     async def spin_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        global UsuarioSpin
         await interaction.response.defer()
-        self.canal = interaction.channel
-
+        ambito = self.ambito
         user = interaction.user
 
-        if UsuarioSpin is not None:
-            # Usa followup.send para enviar un mensaje efímero después de deferir
-            await interaction.followup.send(f'{user.mention}, ya hay un usuario buscando partido.', ephemeral=True)
+        if obtener_reserva_spin(ambito) is not None:
+            await interaction.followup.send(f'{user.mention}, ya hay un partido reservado en esta cola de Spin.', ephemeral=True)
             return
-        else:
-            UsuarioSpin = user
-            
-            
-        # Inicia el temporizador para la liberación automática del spin
-        if self.spin_timeout_task:
-            self.spin_timeout_task.cancel()  # Cancela el temporizador anterior si existe
-        self.spin_timeout_task = asyncio.create_task(self.auto_release_spin(user, interaction.message))
 
-        # Buscar usuario en la base de datos
         Session = GestorSQL.sessionmaker(bind=GestorSQL.conexionEngine())
         session = Session()
-        usuario_db = session.query(GestorSQL.Usuario).filter(GestorSQL.Usuario.id_discord == user.id).first()
-        if not usuario_db:
-            UsuarioSpin = None
-            await interaction.followup.send("No se encontró tu usuario en la base de datos.", ephemeral=True)
-            return
+        timeout_task = None
+        try:
+            usuario_db = session.query(GestorSQL.Usuario).filter(GestorSQL.Usuario.id_discord == user.id).first()
+            if not usuario_db:
+                await interaction.followup.send("No se encontró tu usuario en la base de datos.", ephemeral=True)
+                return
 
-        # Buscar partidos asociados en las tablas Calendario y PlayOffs
-        partidos_calendario = session.query(GestorSQL.Calendario).filter(
-            or_(
-                GestorSQL.Calendario.coach1 == usuario_db.idUsuarios,
-                GestorSQL.Calendario.coach2 == usuario_db.idUsuarios
-            ),
-            GestorSQL.Calendario.canalAsociado != None,
-            GestorSQL.Calendario.partidos_idPartidos == None
-        ).all()
-        
-        partidos_playoffs_oro = session.query(GestorSQL.PlayOffsOro).filter(
-            or_(
-                GestorSQL.PlayOffsOro.coach1 == usuario_db.idUsuarios,
-                GestorSQL.PlayOffsOro.coach2 == usuario_db.idUsuarios
-            ),
-            GestorSQL.PlayOffsOro.canalAsociado != None,
-            GestorSQL.PlayOffsOro.partidos_idPartidos == None
-        ).all()
-        
-        partidos_playoffs_plata = session.query(GestorSQL.PlayOffsPlata).filter(
-            or_(
-                GestorSQL.PlayOffsPlata.coach1 == usuario_db.idUsuarios,
-                GestorSQL.PlayOffsPlata.coach2 == usuario_db.idUsuarios
-            ),
-            GestorSQL.PlayOffsPlata.canalAsociado != None,
-            GestorSQL.PlayOffsPlata.partidos_idPartidos == None
-        ).all()
-        
-        partidos_playoffs_bronce = session.query(GestorSQL.PlayOffsBronce).filter(
-            or_(
-                GestorSQL.PlayOffsBronce.coach1 == usuario_db.idUsuarios,
-                GestorSQL.PlayOffsBronce.coach2 == usuario_db.idUsuarios
-            ),
-            GestorSQL.PlayOffsBronce.canalAsociado != None,
-            GestorSQL.PlayOffsBronce.partidos_idPartidos == None
-        ).all()
+            if ambito == AMBITO_SPIN_COMUNIDADES:
+                await interaction.followup.send("No tienes ningún partido pendiente en esta cola de Spin.", ephemeral=True)
+                return
 
-        partidos_ticket = session.query(GestorSQL.Ticket).filter(
-            or_(
-                GestorSQL.Ticket.coach1 == usuario_db.idUsuarios,
-                GestorSQL.Ticket.coach2 == usuario_db.idUsuarios
-            ),
-            GestorSQL.Ticket.canalAsociado != None,
-            GestorSQL.Ticket.partidos_idPartidos == None
-        ).all()
-        participantes_suizo = session.query(GestorSQL.SuizoParticipante).filter(
-            GestorSQL.SuizoParticipante.usuario_id == usuario_db.idUsuarios,
-            GestorSQL.SuizoParticipante.estado == "ACTIVO"
-        ).all()
-        torneos_suizo_ids = [p.torneo_id for p in participantes_suizo]
-        partidos_suizo = []
-        if torneos_suizo_ids:
-            partidos_suizo = session.query(GestorSQL.SuizoEmparejamiento).filter(
-                GestorSQL.SuizoEmparejamiento.torneo_id.in_(torneos_suizo_ids),
-                or_(
-                    GestorSQL.SuizoEmparejamiento.coach1_usuario_id == usuario_db.idUsuarios,
-                    GestorSQL.SuizoEmparejamiento.coach2_usuario_id == usuario_db.idUsuarios
-                ),
-                GestorSQL.SuizoEmparejamiento.canal_id != None,
-                GestorSQL.SuizoEmparejamiento.estado == "PENDIENTE"
+            partidos_calendario = session.query(GestorSQL.Calendario).filter(
+                or_(GestorSQL.Calendario.coach1 == usuario_db.idUsuarios, GestorSQL.Calendario.coach2 == usuario_db.idUsuarios),
+                GestorSQL.Calendario.canalAsociado != None,
+                GestorSQL.Calendario.partidos_idPartidos == None
             ).all()
+            partidos_playoffs_oro = session.query(GestorSQL.PlayOffsOro).filter(
+                or_(GestorSQL.PlayOffsOro.coach1 == usuario_db.idUsuarios, GestorSQL.PlayOffsOro.coach2 == usuario_db.idUsuarios),
+                GestorSQL.PlayOffsOro.canalAsociado != None,
+                GestorSQL.PlayOffsOro.partidos_idPartidos == None
+            ).all()
+            partidos_playoffs_plata = session.query(GestorSQL.PlayOffsPlata).filter(
+                or_(GestorSQL.PlayOffsPlata.coach1 == usuario_db.idUsuarios, GestorSQL.PlayOffsPlata.coach2 == usuario_db.idUsuarios),
+                GestorSQL.PlayOffsPlata.canalAsociado != None,
+                GestorSQL.PlayOffsPlata.partidos_idPartidos == None
+            ).all()
+            partidos_playoffs_bronce = session.query(GestorSQL.PlayOffsBronce).filter(
+                or_(GestorSQL.PlayOffsBronce.coach1 == usuario_db.idUsuarios, GestorSQL.PlayOffsBronce.coach2 == usuario_db.idUsuarios),
+                GestorSQL.PlayOffsBronce.canalAsociado != None,
+                GestorSQL.PlayOffsBronce.partidos_idPartidos == None
+            ).all()
+            partidos_ticket = session.query(GestorSQL.Ticket).filter(
+                or_(GestorSQL.Ticket.coach1 == usuario_db.idUsuarios, GestorSQL.Ticket.coach2 == usuario_db.idUsuarios),
+                GestorSQL.Ticket.canalAsociado != None,
+                GestorSQL.Ticket.partidos_idPartidos == None
+            ).all()
+            participantes_suizo = session.query(GestorSQL.SuizoParticipante).filter(
+                GestorSQL.SuizoParticipante.usuario_id == usuario_db.idUsuarios,
+                GestorSQL.SuizoParticipante.estado == "ACTIVO"
+            ).all()
+            torneos_suizo_ids = [p.torneo_id for p in participantes_suizo]
+            partidos_suizo = []
+            if torneos_suizo_ids:
+                partidos_suizo = session.query(GestorSQL.SuizoEmparejamiento).filter(
+                    GestorSQL.SuizoEmparejamiento.torneo_id.in_(torneos_suizo_ids),
+                    or_(GestorSQL.SuizoEmparejamiento.coach1_usuario_id == usuario_db.idUsuarios, GestorSQL.SuizoEmparejamiento.coach2_usuario_id == usuario_db.idUsuarios),
+                    GestorSQL.SuizoEmparejamiento.canal_id != None,
+                    GestorSQL.SuizoEmparejamiento.estado == "PENDIENTE"
+                ).all()
 
-        partidos = (
-            partidos_calendario
-            + partidos_playoffs_oro
-            + partidos_playoffs_plata
-            + partidos_playoffs_bronce
-            + partidos_ticket
-            + partidos_suizo
-        )
+            partidos = partidos_calendario + partidos_playoffs_oro + partidos_playoffs_plata + partidos_playoffs_bronce + partidos_ticket + partidos_suizo
+            if not partidos:
+                await interaction.followup.send("No tienes ningún partido pendiente en esta cola de Spin.", ephemeral=True)
+                return
 
-        if not partidos:
-            UsuarioSpin = None
-            await interaction.followup.send("No tienes ningún partido. No puedes spinear.", ephemeral=True)
-            return
+            now_time = datetime.utcnow()
+            partido = min(partidos, key=lambda p: abs((p.fecha - now_time).total_seconds()) if getattr(p, 'fecha', None) else float('inf'))
+            canal_partido_id = getattr(partido, "canalAsociado", None) or getattr(partido, "canal_id", None)
+            if hasattr(partido, "usuario_coach1"):
+                coach1_id_discord = partido.usuario_coach1.id_discord
+                coach2_id_discord = partido.usuario_coach2.id_discord
+            else:
+                coach1_id_discord = partido.coach1_usuario.id_discord
+                coach2_id_discord = partido.coach2_usuario.id_discord if partido.coach2_usuario else partido.coach1_usuario.id_discord
 
-        now_time = datetime.utcnow()
+            canal_partido = interaction.guild.get_channel(canal_partido_id) if canal_partido_id else None
+            descripcion_partido = f'{self.nombre_ambito()} reservado: <@{coach1_id_discord}> y <@{coach2_id_discord}> pueden buscar partido.'
+            timeout_task = asyncio.create_task(self.auto_release_spin(ambito, user, interaction.message))
+            reserva = SpinReservation(ambito, user, coach1_id_discord, coach2_id_discord, interaction.channel, canal_partido, descripcion_partido, timeout_task)
+            guardar_reserva_spin(reserva)
 
-        def proximidad(p):
-            if getattr(p, 'fecha', None):
-                return abs((p.fecha - now_time).total_seconds())
-            return float('inf')
+            if canal_partido:
+                await canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
 
-        partido = min(partidos, key=proximidad)
-        
-        canal_partido_id = getattr(partido, "canalAsociado", None)
-        if canal_partido_id is None:
-            canal_partido_id = getattr(partido, "canal_id", None)
-
-        if hasattr(partido, "usuario_coach1"):
-            coach1_id_discord = partido.usuario_coach1.id_discord
-            coach2_id_discord = partido.usuario_coach2.id_discord
-        else:
-            coach1_id_discord = partido.coach1_usuario.id_discord
-            coach2_id_discord = partido.coach2_usuario.id_discord if partido.coach2_usuario else partido.coach1_usuario.id_discord
-
-        self.canal_partido = interaction.guild.get_channel(canal_partido_id) if canal_partido_id else None
-        if self.canal_partido:
-            await self.canal_partido.send(f'<@{coach1_id_discord}> y <@{coach2_id_discord}> podéis spinear')
-
-        encontrado_button = None
-        for child in self.children:
-            if isinstance(child, discord.ui.Button) and child.label == "Encontrado":
-                encontrado_button = child
-                child.disabled = False
-                break
-
-        button.disabled = True
-        await interaction.message.edit(view=self)
-
-        # El estado público del Spin se edita en el primer mensaje del canal.
-        primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
-        await primer_mensaje.edit(content=f'<@{coach1_id_discord}> y <@{coach2_id_discord}> pueden buscar partido')
-
-        await interaction.followup.send("Ahora puedes buscar partido.", ephemeral=True)
-
-        thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Spin', AMBITO_SPIN_GENERAL))
-        thread.start()
-            
-    @discord.ui.button(label="Encontrado", style=discord.ButtonStyle.blurple, custom_id='your_bot:encontrado')
-    async def encontrado_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        global UsuarioSpin
-
-        await interaction.response.defer()
-        user = interaction.user
-        channel = interaction.channel
-
-        if user == UsuarioSpin:
-            UsuarioSpin = None
-            if self.canal_partido:
-                await self.canal_partido.send("El spin ha sido liberado.")
-                self.canal_partido = None 
-            if self.spin_timeout_task:
-                self.spin_timeout_task.cancel()  # Asegura cancelar el temporizador
-
-            spin_button = None
-            for child in self.children:
-                if isinstance(child, discord.ui.Button) and child.label == "Spin":
-                    spin_button = child
-                    child.disabled = False
-                    break
-
-            button.disabled = True
+            self.actualizar_botones(spin_habilitado=False)
             await interaction.message.edit(view=self)
 
-            # El estado público del Spin se edita en el primer mensaje del canal.
-            primer_mensaje = await self.obtener_primer_mensaje(channel)
-            await primer_mensaje.edit(content='El spin está **LIBRE**')
-            thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado', AMBITO_SPIN_GENERAL))
+            primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
+            if primer_mensaje:
+                await primer_mensaje.edit(content=descripcion_partido)
+
+            await interaction.followup.send(f"Ahora puedes buscar partido en {self.nombre_ambito()}.", ephemeral=True)
+            thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Spin', ambito))
             thread.start()
+        finally:
+            session.close()
+
+    @discord.ui.button(label="Encontrado", style=discord.ButtonStyle.blurple, custom_id='your_bot:encontrado')
+    async def encontrado_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        user = interaction.user
+        ambito = self.ambito
+        reserva = obtener_reserva_spin(ambito)
+
+        if not reserva:
+            await interaction.followup.send("No hay ningún Spin reservado en esta cola.", ephemeral=True)
+            return
+
+        if user.id not in (reserva.jugador1_discord_id, reserva.jugador2_discord_id):
+            await interaction.followup.send("Solo uno de los jugadores del partido reservado puede liberar este Spin.", ephemeral=True)
+            return
+
+        limpiar_reserva_spin(ambito)
+        if reserva.canal_partido:
+            await reserva.canal_partido.send(f"El {self.nombre_ambito()} ha sido liberado.")
+        if reserva.timeout_task:
+            reserva.timeout_task.cancel()
+
+        self.actualizar_botones(spin_habilitado=True)
+        await interaction.message.edit(view=self)
+
+        primer_mensaje = await self.obtener_primer_mensaje(interaction.channel)
+        if primer_mensaje:
+            await primer_mensaje.edit(content=f'El {self.nombre_ambito()} está **LIBRE**')
+        thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), 'Encontrado', ambito))
+        thread.start()
 
             
 #Singleton para las necesidades del discord

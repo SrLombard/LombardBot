@@ -32,6 +32,8 @@ import GestorSQL
 import Encuesta
 from UtilesDiscord import DiscordClientSingleton
 from SpinConstantes import (
+    AMBITO_SPIN_COMUNIDADES,
+    AMBITO_SPIN_GENERAL,
     AMBITO_SPIN_TODOS,
     normalizar_ambito_spin,
 )
@@ -219,7 +221,8 @@ async def reloj_de_cuco():
 
 @bot.event
 async def on_ready():
-    bot.add_view(UtilesDiscord.SpinButtonsView())
+    bot.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL))
+    bot.add_view(UtilesDiscord.SpinButtonsView(AMBITO_SPIN_COMUNIDADES))
     await bot.tree.sync()
     #await GestionExcel.ActualizarExcels()
     if not programador_tareas.is_running():
@@ -1819,7 +1822,7 @@ async def agregar_vista(ctx, message_id: int):
         # Obten el canal y luego el mensaje usando el ID proporcionado
         message = await ctx.channel.fetch_message(message_id)
         # Edita el mensaje para añadir la vista
-        await message.edit(view=UtilesDiscord.SpinButtonsView())
+        await message.edit(view=UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL))
         # Borra el mensaje que invocó el comando
         await ctx.message.delete()
         # Envía confirmación y luego borra ese mensaje después de 20 segundos
@@ -1832,10 +1835,16 @@ async def agregar_vista(ctx, message_id: int):
 
 @bot.command(name="AgregaMensajeSpin")
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
-async def AgregaMensajeSpin(ctx):
-    mensaje =await ctx.send("'El spin está **LIBRE**'")
-    await ctx.send("¡Úsame para Spinear!", view=UtilesDiscord.SpinButtonsView())
-    UtilesDiscord.UsuarioSpin = None
+async def AgregaMensajeSpin(ctx, ambito: str = "General"):
+    ambito_normalizado = normalizar_ambito_spin(ambito)
+    if not ambito_normalizado:
+        await ctx.send("Ámbito de Spin no válido. Usa General o Comunidades.", delete_after=20)
+        return
+
+    nombre_ambito = "Spin Comunidades" if ambito_normalizado == AMBITO_SPIN_COMUNIDADES else "Spin General"
+    await ctx.send(f"El {nombre_ambito} está **LIBRE**")
+    await ctx.send("¡Úsame para Spinear!", view=UtilesDiscord.SpinButtonsView(ambito_normalizado))
+    UtilesDiscord.limpiar_reserva_spin(ambito_normalizado)
     await ctx.message.delete()
    
 
