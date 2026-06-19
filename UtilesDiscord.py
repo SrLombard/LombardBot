@@ -844,12 +844,10 @@ async def liberar_reserva_spin_administrativa(ambito, usuario_admin):
             print(f"No se pudo enviar el mensaje de liberación administrativa de {nombre_ambito}: {exc}")
 
     try:
-        vista = SpinButtonsView(ambito_normalizado)
-        vista.actualizar_botones(spin_habilitado=True)
         await editar_primer_mensaje_spin(
             reserva.canal_spin,
             content=mensaje_spin_libre(ambito_normalizado),
-            view=vista,
+            view=crear_vista_spin_para_estado(ambito_normalizado, reservada=False),
         )
     except Exception as exc:
         print(f"No se pudo editar el primer mensaje de {nombre_ambito} tras liberación administrativa: {exc}")
@@ -865,10 +863,11 @@ async def liberar_reserva_spin_administrativa(ambito, usuario_admin):
 
 
 class SpinButtonsView(discord.ui.View):
-    def __init__(self, ambito=AMBITO_SPIN_GENERAL):
+    def __init__(self, ambito=AMBITO_SPIN_GENERAL, *, spin_habilitado=True):
         super().__init__(timeout=None)
         self.ambito = normalizar_ambito_spin(ambito) or AMBITO_SPIN_GENERAL
         self._aplicar_ambito_a_botones()
+        self.actualizar_botones(spin_habilitado=spin_habilitado)
 
     def nombre_ambito(self):
         return "Spin Comunidades" if self.ambito == AMBITO_SPIN_COMUNIDADES else "Spin General"
@@ -889,7 +888,6 @@ class SpinButtonsView(discord.ui.View):
                     child.custom_id = self.custom_id_spin()
                 elif child.label == "Encontrado":
                     child.custom_id = self.custom_id_encontrado()
-                    child.disabled = True
 
     async def auto_release_spin(self, reserva_esperada, mensaje_botones=None):
         """Libera por timeout únicamente la reserva concreta que creó la tarea.
@@ -922,11 +920,10 @@ class SpinButtonsView(discord.ui.View):
             print(f"No se pudo enviar DM de timeout de {nombre_ambito}: {exc}")
 
         try:
-            self.actualizar_botones(spin_habilitado=True)
             await editar_primer_mensaje_spin(
                 reserva.canal_spin,
                 content=mensaje_spin_libre(ambito),
-                view=self,
+                view=crear_vista_spin_para_estado(ambito, reservada=False),
             )
         except Exception as exc:
             print(f"No se pudo editar el primer mensaje de {nombre_ambito} tras timeout: {exc}")
@@ -1007,12 +1004,11 @@ class SpinButtonsView(discord.ui.View):
             reserva.timeout_task = timeout_task
             guardar_reserva_spin(reserva)
 
-        self.actualizar_botones(spin_habilitado=False)
         try:
             await editar_primer_mensaje_spin(
                 interaction.channel,
                 content=descripcion_partido,
-                view=self,
+                view=crear_vista_spin_para_estado(ambito, reservada=True),
             )
         except Exception as exc:
             async with obtener_bloqueo_reserva_spin(ambito):
@@ -1020,7 +1016,6 @@ class SpinButtonsView(discord.ui.View):
                     limpiar_reserva_spin(ambito)
             if reserva.timeout_task:
                 reserva.timeout_task.cancel()
-            self.actualizar_botones(spin_habilitado=True)
             await interaction.followup.send(
                 "No se pudo localizar o editar el mensaje principal de Spin. "
                 "La reserva interna ha quedado liberada; recrea el mensaje con "
@@ -1064,12 +1059,11 @@ class SpinButtonsView(discord.ui.View):
             except Exception as exc:
                 print(f"No se pudo enviar el mensaje de liberación de {self.nombre_ambito()}: {exc}")
 
-        self.actualizar_botones(spin_habilitado=True)
         try:
             await editar_primer_mensaje_spin(
                 reserva.canal_spin,
                 content=mensaje_spin_libre(ambito),
-                view=self,
+                view=crear_vista_spin_para_estado(ambito, reservada=False),
             )
         except Exception as exc:
             print(f"No se pudo editar el primer mensaje de {self.nombre_ambito()} al liberar: {exc}")
@@ -1078,7 +1072,19 @@ class SpinButtonsView(discord.ui.View):
         thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), TIPO_SPIN_ENCONTRADO, ambito, user.id))
         thread.start()
 
-            
+
+def crear_vista_spin_para_estado(ambito, *, reservada=False):
+    """Crea una vista de Spin con botones coherentes para un único ámbito.
+
+    Según ``logicaSpin.md``, una cola libre muestra `Spin` habilitado y
+    `Encontrado` deshabilitado; una cola reservada invierte esos estados. Se
+    devuelve una instancia nueva para editar solo el mensaje del canal del
+    ámbito afectado, sin reutilizar ni mutar la vista de la otra cola.
+    """
+
+    ambito_normalizado = normalizar_ambito_spin(ambito) or AMBITO_SPIN_GENERAL
+    return SpinButtonsView(ambito_normalizado, spin_habilitado=not reservada)
+
 #Singleton para las necesidades del discord
 class DiscordClientSingleton:
     bot_instance = None

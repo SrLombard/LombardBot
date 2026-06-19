@@ -1163,3 +1163,139 @@ def test_resolver_partido_spin_comunidades_deja_sin_fecha_detras_de_fechados():
     finally:
         session.close()
         engine.dispose()
+
+
+def _estado_botones_spin(vista):
+    return {boton.label: boton.disabled for boton in vista.children}
+
+
+def test_crear_vista_spin_para_estado_invierte_botones_solo_en_reservada():
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL, AMBITO_SPIN_COMUNIDADES
+
+    vista_general_libre = UtilesDiscord.crear_vista_spin_para_estado(AMBITO_SPIN_GENERAL, reservada=False)
+    vista_general_reservada = UtilesDiscord.crear_vista_spin_para_estado(AMBITO_SPIN_GENERAL, reservada=True)
+    vista_comunidades_libre = UtilesDiscord.crear_vista_spin_para_estado(AMBITO_SPIN_COMUNIDADES, reservada=False)
+
+    assert _estado_botones_spin(vista_general_libre) == {"Spin": False, "Encontrado": True}
+    assert _estado_botones_spin(vista_general_reservada) == {"Spin": True, "Encontrado": False}
+    assert _estado_botones_spin(vista_comunidades_libre) == {"Spin": False, "Encontrado": True}
+    assert {boton.label: boton.custom_id for boton in vista_general_reservada.children} == {
+        "Spin": "lombardbot:spin:general",
+        "Encontrado": "lombardbot:encontrado:general",
+    }
+    assert {boton.label: boton.custom_id for boton in vista_comunidades_libre.children} == {
+        "Spin": "lombardbot:spin:comunidades",
+        "Encontrado": "lombardbot:encontrado:comunidades",
+    }
+
+
+@pytest.mark.asyncio
+async def test_spin_callback_edita_primer_mensaje_reservado_y_no_muta_la_otra_vista(monkeypatch):
+    from types import SimpleNamespace
+    import UtilesDiscord
+    from SpinConstantes import AMBITO_SPIN_GENERAL, AMBITO_SPIN_COMUNIDADES
+
+    mensajes = []
+    edits = []
+    avisos_partido = []
+
+    class Response:
+        async def defer(self):
+            pass
+
+    class Followup:
+        async def send(self, mensaje, *, ephemeral=False):
+            mensajes.append((mensaje, ephemeral))
+
+    class Message:
+        async def edit(self, **kwargs):
+            edits.append(kwargs)
+
+    class Channel:
+        def history(self, *, oldest_first=False, limit=1):
+            async def iterator():
+                yield Message()
+            return iterator()
+
+    class CanalPartido:
+        async def send(self, mensaje):
+            avisos_partido.append(mensaje)
+
+    class Guild:
+        def get_channel(self, canal_id):
+            assert canal_id == 9001
+            return CanalPartido()
+
+    class Query:
+        def filter(self, *args, **kwargs):
+            return self
+
+        def first(self):
+            return SimpleNamespace(idUsuarios=55)
+
+    class Session:
+        def query(self, modelo):
+            return Query()
+
+        def close(self):
+            pass
+
+    class TimeoutTask:
+        def __init__(self):
+            self.cancelled = False
+
+        def cancel(self):
+            self.cancelled = True
+
+    def create_task_fake(coro):
+        coro.close()
+        return TimeoutTask()
+
+    partido = UtilesDiscord.SpinMatchResult(
+        ambito=AMBITO_SPIN_GENERAL,
+        canal_partido_id=9001,
+        jugador1_discord_id=111,
+        jugador2_discord_id=222,
+        fecha=None,
+        descripcion_corta="Spin General reservado: <@111> y <@222> pueden buscar partido.",
+    )
+
+    vista_comunidades = UtilesDiscord.SpinButtonsView(AMBITO_SPIN_COMUNIDADES)
+    estado_comunidades_inicial = _estado_botones_spin(vista_comunidades)
+
+    monkeypatch.setattr(UtilesDiscord.GestorSQL, "conexionEngine", lambda: object())
+    monkeypatch.setattr(UtilesDiscord.GestorSQL, "sessionmaker", lambda bind=None: Session)
+    monkeypatch.setattr(UtilesDiscord, "buscar_partido_spin", lambda session, usuario_db, ambito: partido)
+    monkeypatch.setattr(UtilesDiscord.asyncio, "create_task", create_task_fake)
+    monkeypatch.setattr(UtilesDiscord.Thread, "start", lambda self: None)
+
+    interaction = SimpleNamespace(
+        response=Response(),
+        followup=Followup(),
+        user=SimpleNamespace(id=111, name="Jugador"),
+        guild=Guild(),
+        channel=Channel(),
+    )
+
+    try:
+        await UtilesDiscord.SpinButtonsView(AMBITO_SPIN_GENERAL).spin_callback.callback(interaction)
+
+        assert UtilesDiscord.reserva_spin_activa(UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL))
+        assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_COMUNIDADES) is None
+        assert len(edits) == 1
+        assert edits[0]["content"] == "Spin General reservado: <@111> y <@222> pueden buscar partido."
+        assert _estado_botones_spin(edits[0]["view"]) == {"Spin": True, "Encontrado": False}
+        assert {boton.label: boton.custom_id for boton in edits[0]["view"].children} == {
+            "Spin": "lombardbot:spin:general",
+            "Encontrado": "lombardbot:encontrado:general",
+        }
+        assert _estado_botones_spin(vista_comunidades) == estado_comunidades_inicial
+        assert avisos_partido == ["<@111> y <@222>, podéis spinear."]
+        assert mensajes == [("Ahora puedes buscar partido en Spin General.", True)]
+    finally:
+        reserva = UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL)
+        if getattr(reserva, "timeout_task", None):
+            reserva.timeout_task.cancel()
+        UtilesDiscord.reservas_spin[AMBITO_SPIN_GENERAL] = None
+        UtilesDiscord.reservas_spin[AMBITO_SPIN_COMUNIDADES] = None
