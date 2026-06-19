@@ -24,6 +24,7 @@ from GestorSQL import (
     ComunidadesPartido,
     ComunidadesRonda,
     ComunidadesTorneo,
+    PreferenciasFecha,
     Usuario,
 )
 
@@ -69,6 +70,13 @@ def _crear_escenario(session):
         Usuario(idUsuarios=22, id_discord=202, nombre_discord="B Dos"),
     ]
     session.add_all(usuarios)
+    session.add_all(
+        [
+            PreferenciasFecha(idUsuarios=12, preferencia="laborables desde las 20:00"),
+            PreferenciasFecha(idUsuarios=22, preferencia="fines de semana"),
+            PreferenciasFecha(idUsuarios=11, preferencia="no debe aparecer en partido 1"),
+        ]
+    )
     ronda = ComunidadesRonda(
         torneo_id=torneo.id,
         numero=1,
@@ -241,6 +249,12 @@ def test_materializa_dos_canales_con_permisos_mensajes_y_estado():
         assert "**Equipos:** [A] Equipo A vs [B] Equipo B" in guild.creaciones[0]["canal"].mensajes[0]
         assert "**Fecha límite:** 2026-07-08 22:00" in guild.creaciones[0]["canal"].mensajes[0]
         assert "registrad la quedada en este canal con `/fecha`" in guild.creaciones[0]["canal"].mensajes[0]
+        assert "### Preferencias horarias" in guild.creaciones[0]["canal"].mensajes[0]
+        assert "<@102> suele poder jugar laborables desde las 20:00" in guild.creaciones[0]["canal"].mensajes[0]
+        assert "<@202> suele poder jugar fines de semana" in guild.creaciones[0]["canal"].mensajes[0]
+        assert "no debe aparecer en partido 1" not in guild.creaciones[0]["canal"].mensajes[0]
+        assert "Antes de iniciar el partido tenéis que **USAR** el canal de Spin Comunidades" in guild.creaciones[0]["canal"].mensajes[0]
+        assert guild.creaciones[0]["canal"].mensajes[0].rstrip().endswith("y **LIBERARLO** al encontrar partido.")
         enfrentamiento = session.get(ComunidadesEnfrentamiento, enfrentamiento_id)
         assert enfrentamiento.estado == "PARTIDOS_CREADOS"
         assert [partido.canal_discord_id for partido in enfrentamiento.partidos] == [901, 902]

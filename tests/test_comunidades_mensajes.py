@@ -85,7 +85,7 @@ def test_etiqueta_equipo_antepone_la_comunidad_entre_corchetes():
     )
 
 
-def test_mensaje_general_muestra_datos_del_torneo_y_preferencias_despues_de_jugadores():
+def test_mensaje_general_muestra_datos_del_torneo_sin_preferencias_horarias():
     torneo = SimpleNamespace(
         plantilla_mensaje_ronda1="Aviso de primera ronda",
         plantilla_mensaje_rondas_siguientes="Aviso posterior",
@@ -100,9 +100,9 @@ def test_mensaje_general_muestra_datos_del_torneo_y_preferencias_despues_de_juga
     assert "- <@101> — **OrcoBB** — Orcos" in general
     assert "- <@102> — **RataBB** — Skaven" in general
     assert "Incorrecta" not in general
-    assert general.index("<@101> — **OrcoBB**") < general.index("### Preferencias horarias")
-    assert "<@101> suele poder jugar laborables desde las 20:00" in general
-    assert "<@201> suele poder jugar fines de semana" in general
+    assert "### Preferencias horarias" not in general
+    assert "<@101> suele poder jugar laborables desde las 20:00" not in general
+    assert "<@201> suele poder jugar fines de semana" not in general
     assert "<@202> suele poder jugar" not in general
     assert adicional == "Aviso de primera ronda"
 

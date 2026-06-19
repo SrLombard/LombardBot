@@ -6,6 +6,8 @@ import logging
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional, Tuple
 
+from SpinConstantes import CANAL_SPIN_COMUNIDADES_ID
+
 
 MAX_CANALES_POR_CATEGORIA_COMUNIDADES = 40
 LOGGER = logging.getLogger(__name__)
@@ -304,6 +306,26 @@ def _mensaje_partido_comunidades(enfrentamiento: Any, partido: Any) -> str:
     defensor_discord_id = int(partido.defensor_usuario.id_discord)
     equipo_local = etiqueta_equipo_comunidades(partido.equipo_local)
     equipo_visitante = etiqueta_equipo_comunidades(partido.equipo_visitante)
+    preferencias = []
+    for usuario in (partido.usuario_local, partido.usuario_visitante):
+        preferencia = getattr(
+            getattr(usuario, "preferencias_fecha", None), "preferencia", ""
+        )
+        if preferencia and str(preferencia).strip():
+            preferencias.append(
+                f"- {mencion_usuario_comunidades(usuario)} suele poder jugar "
+                f"{texto_discord_seguro_comunidades(str(preferencia).strip())}"
+            )
+    seccion_preferencias = ""
+    if preferencias:
+        seccion_preferencias = "\n\n### Preferencias horarias\n" + "\n".join(
+            preferencias
+        )
+    canal_spin = (
+        f"<#{int(CANAL_SPIN_COMUNIDADES_ID)}>"
+        if CANAL_SPIN_COMUNIDADES_ID is not None
+        else "el canal de Spin Comunidades"
+    )
     return (
         f"## Partido {int(partido.indice)} — Mesa {int(enfrentamiento.mesa_numero)}\n"
         f"**Equipos:** {equipo_local} vs {equipo_visitante}\n"
@@ -313,6 +335,9 @@ def _mensaje_partido_comunidades(enfrentamiento: Any, partido: Any) -> str:
         f"**Fecha límite:** {enfrentamiento.ronda.fecha_fin.strftime('%Y-%m-%d %H:%M')}\n"
         "Cuando acordéis el día y la hora del partido, registrad la quedada "
         "en este canal con `/fecha`."
+        f"{seccion_preferencias}\n\n"
+        f"⚠️ Antes de iniciar el partido tenéis que **USAR** {canal_spin} "
+        "y **LIBERARLO** al encontrar partido."
     )
 
 
@@ -631,7 +656,6 @@ def mensajes_canal_enfrentamiento_comunidades(
 
     equipos = (enfrentamiento.equipo_a, enfrentamiento.equipo_b)
     lineas_jugadores = []
-    preferencias = []
     for equipo in equipos:
         if lineas_jugadores:
             lineas_jugadores.append("")
@@ -647,22 +671,9 @@ def mensajes_canal_enfrentamiento_comunidades(
                 f"- {mencion_usuario_comunidades(usuario)} — "
                 f"**{nombre_bloodbowl}** — {raza}"
             )
-            preferencia = getattr(
-                getattr(usuario, "preferencias_fecha", None), "preferencia", ""
-            )
-            if preferencia and str(preferencia).strip():
-                preferencias.append(
-                    f"- {mencion_usuario_comunidades(usuario)} suele poder jugar "
-                    f"{texto_discord_seguro_comunidades(str(preferencia).strip())}"
-                )
 
     estado_a = estado_visible(fotos[int(enfrentamiento.equipo_a_id)])
     estado_b = estado_visible(fotos[int(enfrentamiento.equipo_b_id)])
-    seccion_preferencias = ""
-    if preferencias:
-        seccion_preferencias = "\n\n### Preferencias horarias\n" + "\n".join(
-            preferencias
-        )
 
     jugadores = "\n".join(lineas_jugadores)
     mensaje_general = (
@@ -670,8 +681,7 @@ def mensajes_canal_enfrentamiento_comunidades(
         f"{etiqueta_equipo_comunidades(enfrentamiento.equipo_a)} vs "
         f"{etiqueta_equipo_comunidades(enfrentamiento.equipo_b)}\n\n"
         "### Jugadores\n"
-        f"{jugadores}"
-        f"{seccion_preferencias}\n\n"
+        f"{jugadores}\n\n"
         "### Selección de atacante\n"
         "Cada equipo dispone de **24 horas** para seleccionar atacante con "
         "`/comunidades_seleccion_atacante`. La elección es secreta hasta que "
