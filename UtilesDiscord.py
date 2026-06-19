@@ -30,6 +30,7 @@ from SpinConstantes import (
     TIPO_SPIN_AUTO_RELEASE,
     TIPO_SPIN_ADMIN_RELEASE,
     TIPO_SPIN_ENCONTRADO,
+    MENSAJE_SIN_PARTIDO_COLA_SPIN,
     CANAL_SPIN_COMUNIDADES_ID,
     CANAL_SPIN_GENERAL_ID,
     mensaje_canal_partido_liberacion_administrativa,
@@ -966,7 +967,7 @@ class SpinButtonsView(discord.ui.View):
             else:
                 try:
                     partido_spin = buscar_partido_spin(session, usuario_db, ambito)
-                    mensaje_error = None if partido_spin else "No tienes ningún partido pendiente en esta cola de Spin."
+                    mensaje_error = None if partido_spin else MENSAJE_SIN_PARTIDO_COLA_SPIN
                 except ValueError:
                     partido_spin = None
                     mensaje_error = "El ámbito de Spin no es válido. Avise a un administrador."

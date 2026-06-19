@@ -216,7 +216,7 @@ def test_resolver_partido_spin_delega_solo_en_general(monkeypatch):
 
     def resolver_general(session, usuario_db):
         llamadas.append("general")
-        return "partido-general"
+        return None
 
     def resolver_comunidades(session, usuario_db):
         llamadas.append("comunidades")
@@ -225,7 +225,7 @@ def test_resolver_partido_spin_delega_solo_en_general(monkeypatch):
     monkeypatch.setattr(UtilesDiscord, "resolver_partido_spin_general", resolver_general)
     monkeypatch.setattr(UtilesDiscord, "resolver_partido_spin_comunidades", resolver_comunidades)
 
-    assert UtilesDiscord.resolver_partido_spin(object(), object(), AMBITO_SPIN_GENERAL) == "partido-general"
+    assert UtilesDiscord.resolver_partido_spin(object(), object(), AMBITO_SPIN_GENERAL) is None
     assert llamadas == ["general"]
 
 
@@ -240,12 +240,12 @@ def test_resolver_partido_spin_delega_solo_en_comunidades(monkeypatch):
 
     def resolver_comunidades(session, usuario_db):
         llamadas.append("comunidades")
-        return "partido-comunidades"
+        return None
 
     monkeypatch.setattr(UtilesDiscord, "resolver_partido_spin_general", resolver_general)
     monkeypatch.setattr(UtilesDiscord, "resolver_partido_spin_comunidades", resolver_comunidades)
 
-    assert UtilesDiscord.resolver_partido_spin(object(), object(), "Comunidades") == "partido-comunidades"
+    assert UtilesDiscord.resolver_partido_spin(object(), object(), "Comunidades") is None
     assert llamadas == ["comunidades"]
 
 

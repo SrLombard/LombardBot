@@ -26,6 +26,7 @@ TIPO_SPIN = "Spin"
 TIPO_SPIN_ENCONTRADO = "Encontrado"
 TIPO_SPIN_AUTO_RELEASE = "AutoRelease"
 TIPO_SPIN_ADMIN_RELEASE = "LiberacionAdmin"
+MENSAJE_SIN_PARTIDO_COLA_SPIN = "No tienes ningún partido pendiente en esta cola de Spin."
 
 MENSAJES_SPIN_LIBRE = {
     AMBITO_SPIN_GENERAL: "El Spin General está **LIBRE**",
