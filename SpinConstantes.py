@@ -123,7 +123,7 @@ def mensaje_canal_partido_liberacion_automatica(ambito):
 # Canal actual de Spin General; se conserva para compatibilidad operativa.
 CANAL_SPIN_GENERAL_ID = 1224128423929315468
 # Canal independiente para Spin Comunidades. Configurar el ID real al activarlo.
-CANAL_SPIN_COMUNIDADES_ID = None
+CANAL_SPIN_COMUNIDADES_ID = 1517230730630008922
 # El mensaje público que se edita es el primer mensaje del canal, no un ID persistido.
 
 _TEXTOS_AMBITO_SPIN = {
