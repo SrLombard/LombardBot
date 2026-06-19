@@ -37,6 +37,11 @@ MENSAJES_CANAL_PARTIDO_LIBERACION_MANUAL = {
     AMBITO_SPIN_COMUNIDADES: "El Spin Comunidades ha sido liberado.",
 }
 
+MENSAJES_CANAL_PARTIDO_LIBERACION_ADMINISTRATIVA = {
+    AMBITO_SPIN_GENERAL: "El Spin General ha sido liberado por administración.",
+    AMBITO_SPIN_COMUNIDADES: "El Spin Comunidades ha sido liberado por administración.",
+}
+
 MENSAJES_CANAL_PARTIDO_LIBERACION_AUTOMATICA = {
     AMBITO_SPIN_GENERAL: (
         "El Spin General ha sido liberado automáticamente. 😡 Afortunadamente "
@@ -95,6 +100,15 @@ def mensaje_canal_partido_liberacion_manual(ambito):
     if not ambito_normalizado:
         raise ValueError(f"Ámbito de Spin no válido: {ambito!r}")
     return MENSAJES_CANAL_PARTIDO_LIBERACION_MANUAL[ambito_normalizado]
+
+
+def mensaje_canal_partido_liberacion_administrativa(ambito):
+    """Devuelve el texto canónico al liberar una reserva por administración."""
+
+    ambito_normalizado = normalizar_ambito_spin(ambito)
+    if not ambito_normalizado:
+        raise ValueError(f"Ámbito de Spin no válido: {ambito!r}")
+    return MENSAJES_CANAL_PARTIDO_LIBERACION_ADMINISTRATIVA[ambito_normalizado]
 
 
 def mensaje_canal_partido_liberacion_automatica(ambito):

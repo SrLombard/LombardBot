@@ -914,7 +914,7 @@ async def test_liberacion_administrativa_inserta_historial_con_ambito_y_admin(mo
 
     assert liberado is True
     assert UtilesDiscord.obtener_reserva_spin(AMBITO_SPIN_GENERAL) is None
-    assert canal_partido.mensajes == ["El Spin General ha sido liberado."]
+    assert canal_partido.mensajes == ["El Spin General ha sido liberado por administración."]
     assert canal_spin.mensaje.ediciones[0]["content"] == "El Spin General está **LIBRE**"
     assert len(hilos) == 1
     assert hilos[0].target is UtilesDiscord.GestorSQL.insertar_spin
@@ -1069,11 +1069,16 @@ def test_formatear_historial_spins_asume_general_para_registros_heredados():
 def test_mensajes_liberacion_canal_partido_respetan_ambito_general():
     from SpinConstantes import (
         AMBITO_SPIN_GENERAL,
+        mensaje_canal_partido_liberacion_administrativa,
         mensaje_canal_partido_liberacion_automatica,
         mensaje_canal_partido_liberacion_manual,
     )
 
     assert mensaje_canal_partido_liberacion_manual(AMBITO_SPIN_GENERAL) == "El Spin General ha sido liberado."
+    assert (
+        mensaje_canal_partido_liberacion_administrativa(AMBITO_SPIN_GENERAL)
+        == "El Spin General ha sido liberado por administración."
+    )
     automatico = mensaje_canal_partido_liberacion_automatica(AMBITO_SPIN_GENERAL)
     assert automatico == (
         "El Spin General ha sido liberado automáticamente. 😡 Afortunadamente "

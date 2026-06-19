@@ -32,6 +32,7 @@ from SpinConstantes import (
     TIPO_SPIN_ENCONTRADO,
     CANAL_SPIN_COMUNIDADES_ID,
     CANAL_SPIN_GENERAL_ID,
+    mensaje_canal_partido_liberacion_administrativa,
     mensaje_canal_partido_liberacion_automatica,
     mensaje_canal_partido_liberacion_manual,
     mensaje_spin_libre,
@@ -157,7 +158,7 @@ async def tomar_reserva_para_liberar_spin(ambito, reserva_esperada=None):
         if reserva_esperada is not None and reserva is not reserva_esperada:
             return None
         marcar_liberando_spin(ambito)
-        if reserva.timeout_task:
+        if reserva.timeout_task and reserva.timeout_task is not asyncio.current_task():
             reserva.timeout_task.cancel()
         return reserva
 
@@ -833,11 +834,12 @@ async def liberar_reserva_spin_administrativa(ambito, usuario_admin):
     if not reserva:
         return False
 
+    await finalizar_liberacion_spin(ambito_normalizado)
     nombre_ambito = "Spin Comunidades" if ambito_normalizado == AMBITO_SPIN_COMUNIDADES else "Spin General"
 
     if reserva.canal_partido:
         try:
-            await reserva.canal_partido.send(mensaje_canal_partido_liberacion_manual(ambito_normalizado))
+            await reserva.canal_partido.send(mensaje_canal_partido_liberacion_administrativa(ambito_normalizado))
         except Exception as exc:
             print(f"No se pudo enviar el mensaje de liberación administrativa de {nombre_ambito}: {exc}")
 
@@ -859,7 +861,6 @@ async def liberar_reserva_spin_administrativa(ambito, usuario_admin):
         args=(nombre_usuario, datetime.utcnow(), TIPO_SPIN_ADMIN_RELEASE, ambito_normalizado, usuario_discord_id),
     )
     thread.start()
-    await finalizar_liberacion_spin(ambito_normalizado)
     return True
 
 
@@ -907,6 +908,7 @@ class SpinButtonsView(discord.ui.View):
         if not reserva:
             return
 
+        await finalizar_liberacion_spin(ambito)
         nombre_ambito = self.nombre_ambito()
         if reserva.canal_partido:
             try:
@@ -931,7 +933,6 @@ class SpinButtonsView(discord.ui.View):
 
         thread = Thread(target=GestorSQL.insertar_spin, args=('LOMBARDBOT', datetime.utcnow(), TIPO_SPIN_AUTO_RELEASE, ambito))
         thread.start()
-        await finalizar_liberacion_spin(ambito)
 
     def actualizar_botones(self, spin_habilitado):
         for child in self.children:
@@ -1056,6 +1057,7 @@ class SpinButtonsView(discord.ui.View):
             await interaction.followup.send("No hay ningún Spin reservado en esta cola.", ephemeral=True)
             return
 
+        await finalizar_liberacion_spin(ambito)
         if reserva.canal_partido:
             try:
                 await reserva.canal_partido.send(mensaje_canal_partido_liberacion_manual(ambito))
@@ -1065,7 +1067,7 @@ class SpinButtonsView(discord.ui.View):
         self.actualizar_botones(spin_habilitado=True)
         try:
             await editar_primer_mensaje_spin(
-                interaction.channel,
+                reserva.canal_spin,
                 content=mensaje_spin_libre(ambito),
                 view=self,
             )
@@ -1075,7 +1077,6 @@ class SpinButtonsView(discord.ui.View):
         await interaction.followup.send(f"Has liberado el {self.nombre_ambito()}.", ephemeral=True)
         thread = Thread(target=GestorSQL.insertar_spin, args=(user.name, datetime.utcnow(), TIPO_SPIN_ENCONTRADO, ambito, user.id))
         thread.start()
-        await finalizar_liberacion_spin(ambito)
 
             
 #Singleton para las necesidades del discord
