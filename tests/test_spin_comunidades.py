@@ -290,6 +290,31 @@ def test_mensaje_spin_libre_centraliza_textos_por_ambito():
     assert mensaje_spin_libre("COMUNIDADES") == MENSAJES_SPIN_LIBRE[AMBITO_SPIN_COMUNIDADES]
 
 
+def test_normalizar_ambito_spin_acepta_variantes_de_mayusculas():
+    from SpinConstantes import (
+        AMBITO_SPIN_COMUNIDADES,
+        AMBITO_SPIN_GENERAL,
+        normalizar_ambito_spin,
+        normalizar_filtro_historial_spin,
+        mensaje_ambito_spin_no_valido,
+    )
+
+    assert normalizar_ambito_spin("general") == AMBITO_SPIN_GENERAL
+    assert normalizar_ambito_spin("GeNeRaL") == AMBITO_SPIN_GENERAL
+    assert normalizar_ambito_spin("comunidades") == AMBITO_SPIN_COMUNIDADES
+    assert normalizar_ambito_spin("CoMuNiDaDeS") == AMBITO_SPIN_COMUNIDADES
+    assert normalizar_filtro_historial_spin("todos") is None
+    assert normalizar_filtro_historial_spin("ToDoS") is None
+    assert normalizar_ambito_spin("Ticket") is None
+    assert (
+        mensaje_ambito_spin_no_valido("Ticket")
+        == "Ámbito de Spin no válido: `Ticket`. Usa General o Comunidades."
+    )
+    assert (
+        mensaje_ambito_spin_no_valido("Ticket", permitir_todos=True)
+        == "Ámbito de Spin no válido: `Ticket`. Usa General, Comunidades o Todos."
+    )
+
 def test_spin_buttons_view_parametriza_custom_ids_por_ambito():
     import UtilesDiscord
     from SpinConstantes import AMBITO_SPIN_GENERAL, AMBITO_SPIN_COMUNIDADES

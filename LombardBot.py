@@ -40,6 +40,7 @@ from SpinConstantes import (
     formatear_historial_spins,
     normalizar_filtro_historial_spin,
     normalizar_ambito_spin,
+    mensaje_ambito_spin_no_valido,
 )
 import GestionExcel
 import aiohttp
@@ -1839,7 +1840,7 @@ async def agregar_vista(ctx, message_id: int, ambito: str = "General"):
     try:
         ambito_normalizado = normalizar_ambito_spin(ambito)
         if not ambito_normalizado:
-            await ctx.send("Ámbito de Spin no válido. Usa General o Comunidades.", delete_after=20)
+            await ctx.send(mensaje_ambito_spin_no_valido(ambito), delete_after=20)
             return
         # Obten el canal y luego el mensaje usando el ID proporcionado
         message = await ctx.channel.fetch_message(message_id)
@@ -1865,7 +1866,7 @@ async def AgregaMensajeSpin(ctx, ambito: str = None):
     ambito_normalizado = normalizar_ambito_spin(ambito)
     if not ambito_normalizado:
         await ctx.send(
-            f"Ámbito de Spin no válido: `{ambito}`.\n{ayuda_agregar_mensaje_spin()}",
+            f"{mensaje_ambito_spin_no_valido(ambito)}\n{ayuda_agregar_mensaje_spin()}",
             delete_after=20,
         )
         return
@@ -1895,10 +1896,6 @@ def usuario_puede_liberar_spin(interaction: discord.Interaction):
 
 @bot.tree.command(name="liberarspin", description="Libera administrativamente una cola de Spin.")
 @app_commands.describe(ambito="Ámbito de Spin: General o Comunidades")
-@app_commands.choices(ambito=[
-    app_commands.Choice(name="General", value="General"),
-    app_commands.Choice(name="Comunidades", value="Comunidades"),
-])
 async def liberar_spin(interaction: discord.Interaction, ambito: str):
     if not usuario_puede_liberar_spin(interaction):
         await interaction.response.send_message("No tienes permiso para usar este comando.", ephemeral=True)
@@ -1906,7 +1903,7 @@ async def liberar_spin(interaction: discord.Interaction, ambito: str):
 
     ambito_normalizado = normalizar_ambito_spin(ambito)
     if not ambito_normalizado:
-        await interaction.response.send_message("Ámbito de Spin no válido. Usa General o Comunidades.", ephemeral=True)
+        await interaction.response.send_message(mensaje_ambito_spin_no_valido(ambito), ephemeral=True)
         return
 
     liberado = await UtilesDiscord.liberar_reserva_spin_administrativa(ambito_normalizado, interaction.user)
@@ -2356,11 +2353,6 @@ async def PruebaBD(ctx):
     
 @bot.tree.command(name="ultimosspins")
 @app_commands.describe(ambito="Ámbito de Spin: General, Comunidades o Todos")
-@app_commands.choices(ambito=[
-    app_commands.Choice(name="General", value="General"),
-    app_commands.Choice(name="Comunidades", value="Comunidades"),
-    app_commands.Choice(name="Todos", value="Todos"),
-])
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
 async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int, ambito: str = "Todos"):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
@@ -2374,7 +2366,7 @@ async def obtener_spins_recientes(interaction: discord.Interaction, minutos: int
     try:
         filtro_ambito = normalizar_filtro_historial_spin(ambito)
         if filtro_ambito is None and normalizar_ambito_spin(ambito, permitir_todos=True) != AMBITO_SPIN_TODOS:
-            respuesta = "```Ámbito no válido. Usa General, Comunidades o Todos.```"
+            respuesta = f"```{mensaje_ambito_spin_no_valido(ambito, permitir_todos=True)}```"
             ephemeral = True
         else:
             # Realizar la consulta filtrando por fecha y, si procede, por ámbito.

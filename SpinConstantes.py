@@ -146,13 +146,22 @@ def _normalizar_texto_ambito(texto):
 def normalizar_ambito_spin(texto, *, permitir_todos=False):
     """Convierte textos de usuario a ámbitos internos de Spin.
 
-    Acepta los textos visibles ``General``, ``Comunidades`` y, cuando
-    ``permitir_todos`` es verdadero, ``Todos``. También acepta directamente los
-    valores internos ``GENERAL`` y ``COMUNIDADES``.
+    Acepta variantes simples de mayúsculas/minúsculas de los textos visibles
+    ``General``, ``Comunidades`` y, cuando ``permitir_todos`` es verdadero,
+    ``Todos``. También acepta directamente los valores internos ``GENERAL`` y
+    ``COMUNIDADES``. Los valores desconocidos devuelven ``None`` para que cada
+    comando pueda rechazarlos con un mensaje claro.
     """
 
     opciones = _TEXTOS_AMBITO_SPIN_TODOS if permitir_todos else _TEXTOS_AMBITO_SPIN
     return opciones.get(_normalizar_texto_ambito(texto))
+
+
+def mensaje_ambito_spin_no_valido(texto, *, permitir_todos=False):
+    """Devuelve un error claro para ámbitos de Spin desconocidos."""
+
+    valores = "General, Comunidades o Todos" if permitir_todos else "General o Comunidades"
+    return f"Ámbito de Spin no válido: `{texto}`. Usa {valores}."
 
 
 def formatear_linea_historial_spin(fecha, usuario, tipo, ambito):
