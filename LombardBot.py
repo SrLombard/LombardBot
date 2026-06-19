@@ -9342,6 +9342,156 @@ async def func_proximos_partidos_suizo_emparejamiento(bot, usuario, torneo_id, c
     finally:
         session.close()
 
+
+
+CANAL_ANUNCIOS_SUIZO_COMUNIDADES_ID = 1517230301544185926
+
+
+def _tag_comunidad_anuncio(nombre_comunidad) -> str:
+    """Devuelve el prefijo corto de comunidad para anuncios diarios."""
+    nombre = (nombre_comunidad or "Comunidad").strip()
+    return f"[{nombre}]"
+
+
+def _nombre_jugador_anuncio(nombre_discord, id_discord=None) -> str:
+    """Prefiere mencionar al jugador en Discord y mantiene fallback legible."""
+    if id_discord:
+        return f"<@{int(id_discord)}>"
+    return f"**{nombre_discord or 'Jugador'}**"
+
+
+async def func_proximos_partidos_suizo_comunidades(bot, usuario=None, canal_destino_id=CANAL_ANUNCIOS_SUIZO_COMUNIDADES_ID, respuesta_privada=False):
+    """Anuncia los partidos individuales de suizo por comunidades previstos para hoy.
+
+    El formato de comunidades opera sobre equipos, pero el anuncio diario debe
+    centrarse en los dos jugadores del partido individual y anteponer el tag de
+    comunidad a cada jugador, sin publicar el nombre del equipo.
+    """
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+
+    ahora = datetime.now()
+    fin = (ahora + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
+
+    canal_destino = bot.get_channel(int(canal_destino_id)) if canal_destino_id else None
+
+    if respuesta_privada:
+        if usuario is None:
+            print("No se indicó usuario para enviar el aviso de comunidades por privado.")
+            session.close()
+            return
+        try:
+            canal_destino = await usuario.create_dm()
+        except Exception as e:
+            print(f"No se pudo crear un DM con el usuario: {e}")
+            session.close()
+            return
+    else:
+        if not canal_destino:
+            if hasattr(usuario, 'channel'):
+                canal_destino = usuario.channel
+            else:
+                print("No se encontró un canal válido para enviar el mensaje de comunidades.")
+                session.close()
+                return
+
+    UsuarioLocal = aliased(GestorSQL.Usuario)
+    UsuarioVisitante = aliased(GestorSQL.Usuario)
+    EquipoLocal = aliased(GestorSQL.ComunidadesEquipo)
+    EquipoVisitante = aliased(GestorSQL.ComunidadesEquipo)
+    ComunidadLocal = aliased(GestorSQL.ComunidadesComunidad)
+    ComunidadVisitante = aliased(GestorSQL.ComunidadesComunidad)
+
+    eventos = (
+        session.query(
+            GestorSQL.ComunidadesPartido,
+            GestorSQL.ComunidadesRonda.numero.label("ronda_numero"),
+            UsuarioLocal.nombre_discord.label("nombre_local"),
+            UsuarioLocal.id_discord.label("id_discord_local"),
+            UsuarioVisitante.nombre_discord.label("nombre_visitante"),
+            UsuarioVisitante.id_discord.label("id_discord_visitante"),
+            ComunidadLocal.nombre.label("comunidad_local"),
+            ComunidadVisitante.nombre.label("comunidad_visitante"),
+        )
+        .join(
+            GestorSQL.ComunidadesEnfrentamiento,
+            GestorSQL.ComunidadesPartido.enfrentamiento_id == GestorSQL.ComunidadesEnfrentamiento.id,
+        )
+        .join(GestorSQL.ComunidadesRonda, GestorSQL.ComunidadesEnfrentamiento.ronda_id == GestorSQL.ComunidadesRonda.id)
+        .join(UsuarioLocal, GestorSQL.ComunidadesPartido.usuario_local_id == UsuarioLocal.idUsuarios)
+        .join(UsuarioVisitante, GestorSQL.ComunidadesPartido.usuario_visitante_id == UsuarioVisitante.idUsuarios)
+        .join(
+            EquipoLocal,
+            and_(
+                GestorSQL.ComunidadesPartido.equipo_local_id == EquipoLocal.id,
+                GestorSQL.ComunidadesPartido.torneo_id == EquipoLocal.torneo_id,
+            ),
+        )
+        .join(
+            ComunidadLocal,
+            and_(
+                EquipoLocal.comunidad_id == ComunidadLocal.id,
+                EquipoLocal.torneo_id == ComunidadLocal.torneo_id,
+            ),
+        )
+        .join(
+            EquipoVisitante,
+            and_(
+                GestorSQL.ComunidadesPartido.equipo_visitante_id == EquipoVisitante.id,
+                GestorSQL.ComunidadesPartido.torneo_id == EquipoVisitante.torneo_id,
+            ),
+        )
+        .join(
+            ComunidadVisitante,
+            and_(
+                EquipoVisitante.comunidad_id == ComunidadVisitante.id,
+                EquipoVisitante.torneo_id == ComunidadVisitante.torneo_id,
+            ),
+        )
+        .filter(
+            GestorSQL.ComunidadesPartido.fecha.isnot(None),
+            GestorSQL.ComunidadesPartido.fecha >= ahora,
+            GestorSQL.ComunidadesPartido.fecha <= fin,
+            GestorSQL.ComunidadesPartido.estado.in_([PARTIDO_PENDIENTE, PARTIDO_EN_CURSO]),
+        )
+        .order_by(GestorSQL.ComunidadesPartido.fecha)
+        .all()
+    )
+
+    if not eventos:
+        session.close()
+        return
+
+    partidos = []
+    menciones = set()
+    for partido, ronda_numero, nombre_local, id_local, nombre_visitante, id_visitante, comunidad_local, comunidad_visitante in eventos:
+        jugador_local = _nombre_jugador_anuncio(nombre_local, id_local)
+        jugador_visitante = _nombre_jugador_anuncio(nombre_visitante, id_visitante)
+        if id_local:
+            menciones.add(f"<@{int(id_local)}>")
+        if id_visitante:
+            menciones.add(f"<@{int(id_visitante)}>")
+        partidos.append(
+            f"Mesa {partido.enfrentamiento.mesa_numero}.{partido.indice} (R{ronda_numero}): "
+            f"{_tag_comunidad_anuncio(comunidad_local)} {jugador_local} VS "
+            f"{_tag_comunidad_anuncio(comunidad_visitante)} {jugador_visitante}, "
+            f"<t:{int(partido.fecha.timestamp())}:f>"
+        )
+
+    mensaje = (
+        "**Hoy hay partidos del Suizo por Comunidades. ¡Venid a animar a vuestra comunidad!**\n\n"
+        + "\n".join(partidos)
+    )
+    if menciones:
+        mensaje += "\n\nJugadores convocados: " + " ".join(sorted(menciones))
+
+    try:
+        await canal_destino.send(mensaje)
+    except Exception as e:
+        print(f"No se pudo enviar el mensaje de suizo por comunidades: {e}")
+    finally:
+        session.close()
+
 dias_semana = [
     "Monday",
     "Tuesday",
@@ -9380,9 +9530,19 @@ actualizacion_peticiones = (
     }
 )
 
+aviso_suizo_comunidades = (
+    func_proximos_partidos_suizo_comunidades,
+    {
+        "bot": bot,
+        "usuario": maestros[0],
+        "canal_destino_id": CANAL_ANUNCIOS_SUIZO_COMUNIDADES_ID,
+        "respuesta_privada": False
+    }
+)
+
 tareas_programadas = {
     dia: {
-        "09": [aviso_playoffs],
+        "09": [aviso_playoffs, aviso_suizo_comunidades],
         "10": [aviso_suizo, actualizacion_peticiones],
         "22": [actualizacion_peticiones],
     }
