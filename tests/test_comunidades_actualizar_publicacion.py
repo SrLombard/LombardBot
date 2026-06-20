@@ -105,6 +105,29 @@ def test_publicacion_comunidades_genera_resultado_con_plantilla_comunidades():
     assert "es_comunidades" in cuerpo_imagen
 
 
+def test_publicacion_comunidades_usa_session_get_y_reutiliza_hilo_completado():
+    fuente = Path("LombardBot.py").read_text(encoding="utf-8")
+    inicio = fuente.index("async def publicar_resultado_partido_comunidades")
+    fin = fuente.index(
+        "\n\nasync def _reintentar_publicaciones_ronda_comunidades", inicio
+    )
+    cuerpo = fuente[inicio:fin]
+
+    assert "session.get(GestorSQL.ComunidadesPartido, int(partido_id))" in cuerpo
+    assert ".query(GestorSQL.ComunidadesPartido).get" not in cuerpo
+    assert "await _resolver_hilo_resultados_publicacion_comunidades(" in cuerpo
+
+    inicio_helper = fuente.index(
+        "async def _resolver_hilo_resultados_publicacion_comunidades"
+    )
+    fin_helper = fuente.index("\n\nasync def _enviar_unico_comunidades", inicio_helper)
+    helper = fuente[inicio_helper:fin_helper]
+
+    assert 'estado_hilo == "COMPLETADA" and hilo_id' in helper
+    assert "await _resolver_canal_notificacion_comunidades(ctx, int(hilo_id))" in helper
+    assert "otro proceso está creando el hilo de resultados" in helper
+
+
 def test_datos_plantilla_comunidades_incluyen_comunidades_y_vs_exacto(
     comunidades_session,
     escenario_comunidades_factory,
@@ -135,6 +158,38 @@ def test_datos_plantilla_comunidades_incluyen_comunidades_y_vs_exacto(
     }
     assert " Vs " in datos["comunidadVS"]["0"]
     assert " vs " not in datos["comunidadVS"]["0"]
+
+
+def test_comunidades_publica_antiguos_lee_api_y_publica_sin_actualizar_bd():
+    fuente = Path("LombardBot.py").read_text(encoding="utf-8")
+    inicio = fuente.index('@bot.command(name="comunidades_publica_antiguos")')
+    fin = fuente.index("\n\nLOGGER_COMUNIDADES", inicio)
+    cuerpo = fuente[inicio:fin]
+
+    assert "APIBbowl.obtener_partidos" in cuerpo
+    assert "_extraer_resultado_api_comunidades(match)" in cuerpo
+    assert "ComunidadesPartido.partido_bloodbowl_id" in cuerpo
+    assert "registrar_resultado_partido_comunidades" not in cuerpo
+    assert "session.commit()" not in cuerpo
+    assert "session.rollback()" in cuerpo
+    assert "await publicar_imagen_resultado_partido_comunidades_sin_bd(" in cuerpo
+    assert "id_foro=FORO_RESULTADOS_COMUNIDADES_ID" in cuerpo
+
+
+def test_publicar_antiguos_helper_no_usa_idempotencia_persistida():
+    fuente = Path("LombardBot.py").read_text(encoding="utf-8")
+    inicio = fuente.index(
+        "async def publicar_imagen_resultado_partido_comunidades_sin_bd"
+    )
+    fin = fuente.index('@bot.command(name="comunidades_publica_antiguos")', inicio)
+    cuerpo = fuente[inicio:fin]
+
+    assert "_crear_imagen_resultado_comunidades(session, partido, match)" in cuerpo
+    assert "hilo.send" in cuerpo
+    assert "_enviar_unico_comunidades" not in cuerpo
+    assert "_reservar_publicacion_comunidades" not in cuerpo
+    assert "_finalizar_publicacion_comunidades" not in cuerpo
+    assert "session.commit()" not in cuerpo
 
 
 def test_suizo_normal_sigue_usando_foro_general_y_plantilla_resultado_actual():
