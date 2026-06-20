@@ -5434,8 +5434,11 @@ def _crear_imagen_resultado_comunidades(session, partido, match=None):
     else:
         ganador = {"ruta": "./plantillas/Empate.png", "x": 729, "y": 241}
 
+    comunidad_local = str(partido.equipo_local.comunidad.nombre)
+    comunidad_visitante = str(partido.equipo_visitante.comunidad.nombre)
+
     return Imagenes.crear_imagen(
-        "resultado",
+        "resultadoComunidades",
         "",
         entrenadores={
             "0": _nombre_usuario_comunidades(partido.usuario_local),
@@ -5463,6 +5466,9 @@ def _crear_imagen_resultado_comunidades(session, partido, match=None):
         ganador=ganador,
         grupo={"0": 1},
         lado={"izquierdo": "#5f8dd3", "derecho": "#c95f5f"},
+        comunidad1={"0": comunidad_local},
+        comunidad2={"0": comunidad_visitante},
+        comunidadVS={"0": f"{comunidad_local} Vs {comunidad_visitante}"},
     )
 
 

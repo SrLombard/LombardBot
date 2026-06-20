@@ -8,7 +8,7 @@ from unidecode import unidecode
 
 import GestorSQL
 from sqlalchemy import BIGINT, create_engine, Column, Integer, String, ForeignKey, false, true,text
-from sqlalchemy import and_, or_ 
+from sqlalchemy import and_, or_
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.orm import aliased
@@ -17,7 +17,12 @@ from sqlalchemy.sql import case,func
 def cargar_configuracion(nombre_plantilla):
     with open('configuracion.json', 'r') as archivo_json:
         configuracion = json.load(archivo_json)
-        return configuracion.get(nombre_plantilla)
+        configuracion_plantilla = configuracion.get(nombre_plantilla)
+        if configuracion_plantilla is None and nombre_plantilla == 'resultadoComunidades':
+            # La plantilla de comunidades reutiliza el layout de resultado y puede
+            # añadir campos propios si configuracion.json los define en el futuro.
+            return configuracion.get('resultado')
+        return configuracion_plantilla
 
 def recalcular_x(draw, texto, fuente, x_inicial, y, alineacion):
     if alineacion == "centrado":
@@ -35,11 +40,11 @@ def crear_imagen(nombre_plantilla, apellidos, **datos):
     if configuracion is None:
         print("Plantilla no encontrada.")
         return None
-    
+
     ruta_plantilla = f"./plantillas/{nombre_plantilla}{apellidos}.png"
     imagen = Image.open(ruta_plantilla)
     draw = ImageDraw.Draw(imagen)
-    
+
     for elemento in configuracion:
         x = elemento['posicion_x']
         y = elemento['posicion_y']
@@ -67,7 +72,7 @@ def crear_imagen(nombre_plantilla, apellidos, **datos):
             alto_banner = int(elemento.get('alto', 50))
             transparencia = int(elemento.get('transparencia', 0))  # Porcentaje de transparencia
             lado = elemento.get('lado', 'izquierdo')
-            nombre_diccionario = 'lado'          
+            nombre_diccionario = 'lado'
             diccionario_datos = datos.get(nombre_diccionario, {})
             color = diccionario_datos.get(lado, "")
 
@@ -88,14 +93,14 @@ def crear_imagen(nombre_plantilla, apellidos, **datos):
                     alpha = int(255 * ((ancho_banner - i) / ancho_banner)) if transparencia > 0 else 255
                 else:
                     alpha = 255  # Sin transparencia si el lado no est� especificado correctamente
-            
+
                 # Dibujar l�neas verticales con el color calculado
                 draw_capa.line([(i, 0), (i, alto_banner)], fill=(r, g, b, alpha))
 
             # Pegar el rect�ngulo en la imagen principal
-            imagen.paste(capa_trapezoide, (x, y), capa_trapezoide)        
+            imagen.paste(capa_trapezoide, (x, y), capa_trapezoide)
         elif 'ganador' in elemento:
-            nombre_diccionario = 'ganador'          
+            nombre_diccionario = 'ganador'
             diccionario_datos = datos.get(nombre_diccionario, {})
             icono_ruta = diccionario_datos.get("ruta", "")
             x=diccionario_datos.get("x", "")
@@ -108,21 +113,21 @@ def crear_imagen(nombre_plantilla, apellidos, **datos):
             imagen.paste(icono_victoria, (x, y), icono_victoria)
 
         elif  'icono' in elemento:
-            # Procesar icono           
-            nombre_diccionario = elemento['nombre_diccionario']           
+            # Procesar icono
+            nombre_diccionario = elemento['nombre_diccionario']
             clave = elemento['clave']
             diccionario_datos = datos.get(nombre_diccionario, {})
             texto = diccionario_datos.get(clave, "")
-            texto = unidecode(texto) 
+            texto = unidecode(texto)
             icono_ruta = f"./Iconos/{texto}.png"
             try:
                 icono_imagen = Image.open(icono_ruta)
             except IOError:
                 print(f"No se pudo abrir el archivo: {icono_ruta}")
                 continue
-            
-            ancho_icono = int(elemento.get('ancho_icono', 100))  
-            alto_icono = int(elemento.get('alto_icono', 100))  
+
+            ancho_icono = int(elemento.get('ancho_icono', 100))
+            alto_icono = int(elemento.get('alto_icono', 100))
             icono_imagen = icono_imagen.resize((ancho_icono,alto_icono), Image.LANCZOS)
 
             if alineacion == "centrado":
@@ -143,7 +148,7 @@ def crear_imagen(nombre_plantilla, apellidos, **datos):
             else:
                 color = elemento.get('color', '#FFFFFF')
 
-            fuente = ImageFont.truetype(f"./fonts/{elemento['fuente']}", elemento['size'])   
+            fuente = ImageFont.truetype(f"./fonts/{elemento['fuente']}", elemento['size'])
             if  'titulo' in elemento:
                 texto = seleccionarTitulo(grupo)
             elif 'mitexto' in elemento:
@@ -153,14 +158,14 @@ def crear_imagen(nombre_plantilla, apellidos, **datos):
                 clave = elemento['clave']
                 diccionario_datos = datos.get(nombre_diccionario, {})
                 texto = str(diccionario_datos.get(clave, ""))
-            
+
             x_texto = recalcular_x(draw, texto, fuente, x, y, alineacion)
             if elemento.get('efecto') == 'contorno':
                 outline_color = elemento.get('outlineColor','#FFFFFF')
                 outline_width = int(elemento.get('ancho_contorno', 2))
-                dibujaContorno(draw, x_texto, y, texto, f"./fonts/{elemento['fuente']}", color, outline_color, outline_width,elemento['size'])                                      
+                dibujaContorno(draw, x_texto, y, texto, f"./fonts/{elemento['fuente']}", color, outline_color, outline_width,elemento['size'])
             draw.text((x_texto, y), texto, fill=color, font=fuente)
-                
+
     numero_aleatorio = random.randint(100000, 999999)
     ruta_imagen_final = f"./temp/imagenes/{nombre_plantilla}_{numero_aleatorio}.png"
     imagen.save(ruta_imagen_final)
@@ -188,7 +193,7 @@ def eliminar_imagen(ruta_imagen):
         print(f"Imagen {ruta_imagen} eliminada correctamente.")
     except Exception as e:
         print(f"Error al eliminar la imagen {ruta_imagen}: {e}")
-        
+
 def seleccionar_color(apellidos):
     if apellidos in [1, 2, 3,4]:
         return '#B69200'
@@ -228,9 +233,32 @@ def seleccionarTitulo(apellidos):
         return "División Bronce E"
     if apellidos == 15:
         return "División Bronce F"
-    
 
-async def imagenResultado(idPartido):
+
+
+def _datos_comunidades_resultado(session, id_partido_bloodbowl):
+    """Devuelve los campos extra esperados por resultadoComunidades.png."""
+    partido_comunidades = (
+        session.query(GestorSQL.ComunidadesPartido)
+        .filter(GestorSQL.ComunidadesPartido.partido_bloodbowl_id == str(id_partido_bloodbowl))
+        .first()
+    )
+    if not partido_comunidades:
+        return {"comunidad1": {}, "comunidad2": {}, "comunidadVS": {}}
+
+    comunidad_local = getattr(getattr(partido_comunidades.equipo_local, "comunidad", None), "nombre", "")
+    comunidad_visitante = getattr(getattr(partido_comunidades.equipo_visitante, "comunidad", None), "nombre", "")
+    return {
+        "comunidad1": {"0": comunidad_local},
+        "comunidad2": {"0": comunidad_visitante},
+        "comunidadVS": {"0": f"{comunidad_local} Vs {comunidad_visitante}"},
+    }
+
+
+async def imagenResultadoComunidades(idPartido):
+    return await imagenResultado(idPartido, ambito="comunidades", es_comunidades=True)
+
+async def imagenResultado(idPartido, ambito=None, es_comunidades=False):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
     try:
@@ -245,6 +273,13 @@ async def imagenResultado(idPartido):
         ganador = {}
         grupo = {}
         lado = {}
+        comunidades = {}
+
+        plantilla_resultado = (
+            'resultadoComunidades'
+            if es_comunidades or str(ambito or '').strip().lower() in {'comunidades', 'suizo_comunidades'}
+            else 'resultado'
+        )
 
         partido = session.query(GestorSQL.Partidos).filter_by(idPartidos=idPartido).first()
         if not partido:
@@ -312,8 +347,11 @@ async def imagenResultado(idPartido):
         else:
             ganador = {"ruta": "./plantillas/Empate.png", "x": 729, "y": 241}
 
+        if plantilla_resultado == 'resultadoComunidades':
+            comunidades = _datos_comunidades_resultado(session, idPartido)
+
         ruta_imagen = crear_imagen(
-            "resultado", "",
+            plantilla_resultado, "",
             entrenadores=entrenadores,
             resultados=resultados,
             escudos=escudos,
@@ -325,6 +363,7 @@ async def imagenResultado(idPartido):
             ganador=ganador,
             grupo=grupo,
             lado=lado,
+            **comunidades,
         )
 
         return ruta_imagen

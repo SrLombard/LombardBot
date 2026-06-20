@@ -360,7 +360,7 @@ def crearEmbedPartido(coach, coachVisitante, match, propietario):
     return embed
 
 
-async def publicar(ctx, titulo, mensaje=None, embed=None,id_foro=None,idPartido=None):
+async def publicar(ctx, titulo, mensaje=None, embed=None,id_foro=None,idPartido=None, es_comunidades=False):
     if id_foro:
         canal_foro = discord.utils.get(ctx.guild.channels, id=id_foro)
     else:
@@ -383,7 +383,7 @@ async def publicar(ctx, titulo, mensaje=None, embed=None,id_foro=None,idPartido=
         elif embed:
             await hilo_existente.send(embed=embed)
         elif idPartido: 
-            ruta_imagen = await Imagenes.imagenResultado(idPartido)
+            ruta_imagen = await Imagenes.imagenResultado(idPartido, es_comunidades=es_comunidades)
             with open(ruta_imagen, 'rb') as file:
                 await hilo_existente.send(file=discord.File(file))
         
@@ -399,7 +399,7 @@ async def publicar(ctx, titulo, mensaje=None, embed=None,id_foro=None,idPartido=
         elif idPartido:
             nuevo_hilo_msg = await canal_foro.create_thread(name=titulo, content='Resultados de ' + titulo)
             nuevo_hilo = nuevo_hilo_msg.thread  
-            ruta_imagen = await Imagenes.imagenResultado(idPartido)
+            ruta_imagen = await Imagenes.imagenResultado(idPartido, es_comunidades=es_comunidades)
             with open(ruta_imagen, 'rb') as file:
                 await nuevo_hilo.send(file=discord.File(file))
         
