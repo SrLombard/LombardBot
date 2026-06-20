@@ -105,6 +105,29 @@ def test_publicacion_comunidades_genera_resultado_con_plantilla_comunidades():
     assert "es_comunidades" in cuerpo_imagen
 
 
+def test_publicacion_comunidades_usa_session_get_y_reutiliza_hilo_completado():
+    fuente = Path("LombardBot.py").read_text(encoding="utf-8")
+    inicio = fuente.index("async def publicar_resultado_partido_comunidades")
+    fin = fuente.index(
+        "\n\nasync def _reintentar_publicaciones_ronda_comunidades", inicio
+    )
+    cuerpo = fuente[inicio:fin]
+
+    assert "session.get(GestorSQL.ComunidadesPartido, int(partido_id))" in cuerpo
+    assert ".query(GestorSQL.ComunidadesPartido).get" not in cuerpo
+    assert "await _resolver_hilo_resultados_publicacion_comunidades(" in cuerpo
+
+    inicio_helper = fuente.index(
+        "async def _resolver_hilo_resultados_publicacion_comunidades"
+    )
+    fin_helper = fuente.index("\n\nasync def _enviar_unico_comunidades", inicio_helper)
+    helper = fuente[inicio_helper:fin_helper]
+
+    assert 'estado_hilo == "COMPLETADA" and hilo_id' in helper
+    assert "await _resolver_canal_notificacion_comunidades(ctx, int(hilo_id))" in helper
+    assert "otro proceso está creando el hilo de resultados" in helper
+
+
 def test_datos_plantilla_comunidades_incluyen_comunidades_y_vs_exacto(
     comunidades_session,
     escenario_comunidades_factory,

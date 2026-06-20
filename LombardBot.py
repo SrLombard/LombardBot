@@ -5322,6 +5322,58 @@ def _finalizar_publicacion_comunidades(
         session.close()
 
 
+def _estado_publicacion_comunidades(clave: str):
+    """Devuelve el estado persistido de una publicación idempotente."""
+    Session = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = Session()
+    try:
+        operacion = (
+            session.query(GestorSQL.ComunidadesOperacionIdempotente)
+            .filter(GestorSQL.ComunidadesOperacionIdempotente.clave == str(clave))
+            .one_or_none()
+        )
+        if operacion is None:
+            return None, None
+        return operacion.estado, operacion.recurso_externo_id
+    finally:
+        session.close()
+
+
+async def _resolver_hilo_resultados_publicacion_comunidades(
+    ctx, canal_foro, titulo: str, clave_hilo: str, reserva_hilo: bool
+):
+    """Localiza o crea el hilo de resultados sin bloquear reintentos válidos."""
+    hilo = await _buscar_hilo_resultados_comunidades(canal_foro, titulo)
+    if hilo is not None:
+        if reserva_hilo:
+            _finalizar_publicacion_comunidades(
+                clave_hilo, mensaje_id=getattr(hilo, "id", None)
+            )
+        return hilo
+
+    if reserva_hilo:
+        try:
+            creado = await canal_foro.create_thread(
+                name=titulo, content=f"Resultados de {titulo}"
+            )
+            hilo = creado.thread
+            _finalizar_publicacion_comunidades(
+                clave_hilo, mensaje_id=getattr(hilo, "id", None)
+            )
+            return hilo
+        except Exception:
+            _finalizar_publicacion_comunidades(clave_hilo, liberar=True)
+            raise
+
+    estado_hilo, hilo_id = _estado_publicacion_comunidades(clave_hilo)
+    if estado_hilo == "COMPLETADA" and hilo_id:
+        hilo = await _resolver_canal_notificacion_comunidades(ctx, int(hilo_id))
+        if hilo is not None:
+            return hilo
+        raise RuntimeError("hilo de resultados ya registrado, pero Discord no lo devuelve")
+    raise RuntimeError("otro proceso está creando el hilo de resultados")
+
+
 async def _enviar_unico_comunidades(
     canal, tipo: str, registro_id: int, contenido: str, **kwargs
 ) -> bool:
@@ -5929,7 +5981,7 @@ async def publicar_resultado_partido_comunidades(
     reserva idempotente persistida, de modo que los reintentos no repiten las
     publicaciones que ya llegaron a enviarse.
     """
-    partido = session.query(GestorSQL.ComunidadesPartido).get(int(partido_id))
+    partido = session.get(GestorSQL.ComunidadesPartido, int(partido_id))
     if partido is None or partido.estado not in {PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO}:
         return []
     avisos = []
@@ -5958,25 +6010,9 @@ async def publicar_resultado_partido_comunidades(
         clave_hilo, reserva_hilo, _ = _reservar_publicacion_comunidades(
             "hilo-foro", ronda_id
         )
-        hilo = await _buscar_hilo_resultados_comunidades(foro, titulo)
-        if hilo is None and reserva_hilo:
-            try:
-                creado = await foro.create_thread(
-                    name=titulo, content=f"Resultados de {titulo}"
-                )
-                hilo = creado.thread
-                _finalizar_publicacion_comunidades(
-                    clave_hilo, mensaje_id=getattr(hilo, "id", None)
-                )
-            except Exception:
-                _finalizar_publicacion_comunidades(clave_hilo, liberar=True)
-                raise
-        elif hilo is None:
-            raise RuntimeError("otro proceso está creando el hilo de resultados")
-        elif reserva_hilo:
-            _finalizar_publicacion_comunidades(
-                clave_hilo, mensaje_id=getattr(hilo, "id", None)
-            )
+        hilo = await _resolver_hilo_resultados_publicacion_comunidades(
+            ctx, foro, titulo, clave_hilo, reserva_hilo
+        )
         if getattr(hilo, "archived", False):
             await hilo.edit(archived=False)
         ruta = _crear_imagen_resultado_comunidades(session, partido, match)
