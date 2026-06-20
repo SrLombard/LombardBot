@@ -5133,6 +5133,18 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
                 )
                 session.commit()
                 encontrados += 1
+                avisos_resultado = await publicar_resultado_partido_comunidades(
+                    ctx,
+                    session,
+                    int(resultado.partido.id),
+                    match=match,
+                    id_foro=FORO_RESULTADOS_COMUNIDADES_ID,
+                )
+                if avisos_resultado:
+                    detalles.extend(
+                        f"publicación pendiente para reintento: {aviso}"
+                        for aviso in avisos_resultado
+                    )
                 if resultado.enfrentamiento_resuelto:
                     detalles.append(
                         f"{partido_bloodbowl_id}: cerrado partido {partido.id} y "
