@@ -28,3 +28,26 @@ def test_comunidades_actualizar_mantiene_reintento_con_foro_comunidades():
 
     assert "await _reintentar_publicaciones_ronda_comunidades(" in cuerpo
     assert "id_foro=FORO_RESULTADOS_COMUNIDADES_ID" in cuerpo
+
+
+def test_comunidades_admin_partido_publica_en_foro_comunidades():
+    fuente = Path("LombardBot.py").read_text(encoding="utf-8")
+    inicio = fuente.index('@bot.command(name="comunidades_admin_partido")')
+    fin = fuente.index('\n\n@bot.command', inicio)
+    cuerpo = fuente[inicio:fin]
+
+    assert "await publicar_resultado_partido_comunidades" in cuerpo
+    assert "id_foro=FORO_RESULTADOS_COMUNIDADES_ID" in cuerpo
+    assert "FORO_RESULTADOS_GENERAL_ID" not in cuerpo
+
+
+def test_crear_imagen_resultado_comunidades_usa_plantilla_y_campos_extra():
+    fuente = Path("LombardBot.py").read_text(encoding="utf-8")
+    inicio = fuente.index("def _crear_imagen_resultado_comunidades")
+    fin = fuente.index("\n\ndef _estado_con_emojis_comunidades", inicio)
+    cuerpo = fuente[inicio:fin]
+
+    assert 'Imagenes.crear_imagen(\n        "resultadoComunidades"' in cuerpo
+    assert "comunidad1={\"0\": comunidad_local}" in cuerpo
+    assert "comunidad2={\"0\": comunidad_visitante}" in cuerpo
+    assert "comunidadVS={\"0\": comunidad_vs}" in cuerpo
