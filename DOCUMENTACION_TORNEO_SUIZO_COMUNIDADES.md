@@ -977,10 +977,19 @@ del equipo y entre corchetes: `[COMUNIDAD] NOMBREEQUIPO`.
 
 ### 16.1. Foro de resultados
 
-Se conserva el foro hardcodeado usado por el suizo actual. Al importar o administrar cada partido individual:
+Al importar o administrar cada partido individual, la publicación de resultados debe usar foros diferenciados por tipo de competición:
 
+- el suizo normal, la liga regular y el playoff siguen publicando resultados en el foro `1223765590146158653`;
+- cualquier torneo suizo de comunidades publica resultados en el foro `1517927833966739567`;
+- ambos IDs deben existir como constantes en el código, con nombres explícitos que identifiquen el foro de resultados general y el foro de resultados del suizo de comunidades;
 - se genera y publica la imagen de resultado;
 - se informa en el canal individual correspondiente.
+
+Los resultados del suizo de comunidades deben usar la plantilla de imagen `resultadoComunidades.png`. Esta plantilla recibe los mismos datos que la plantilla del suizo normal y, además, los siguientes campos:
+
+- `comunidad1`: comunidad del jugador/equipo del lado 1;
+- `comunidad2`: comunidad del jugador/equipo del lado 2;
+- `comunidadVS`: concatenación exacta `"{comunidad1} Vs {comunidad2}"`, por ejemplo `"PdM Vs Butter"`.
 
 No se eliminan publicaciones del foro al cerrar o regenerar rondas.
 
@@ -1157,7 +1166,7 @@ Todas las reglas funcionales de este documento se consideran confirmadas, en par
 ### Detalles que la tarea de implementación deberá concretar sin cambiar reglas
 
 - nombres físicos definitivos de las demás tablas y constraints;
-- IDs hardcodeados existentes del foro y canal administrativo;
+- constantes explícitas para el foro de resultados general (`1223765590146158653`), el foro de resultados del suizo de comunidades (`1517927833966739567`) y el canal administrativo;
 - texto inicial de las plantillas configurables, sus marcadores admitidos y el diseño visual de embeds;
 - estrategia técnica para garantizar el rollback coordinado de base de datos y canales Discord exigido por las operaciones atómicas;
 - comportamiento exacto ya existente de PJ/PG/PE/PP y Buchholz para bye, que debe reutilizarse sin desviaciones;
