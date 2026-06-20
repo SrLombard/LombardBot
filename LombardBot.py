@@ -5002,13 +5002,7 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
             return
         ronda = rondas_abiertas[0]
 
-        avisos_previos = await _reintentar_publicaciones_ronda_comunidades(
-            ctx, session, ronda.id, id_foro=FORO_RESULTADOS_COMUNIDADES_ID
-        )
-        detalles.extend(
-            f"publicación pendiente para reintento: {aviso}"
-            for aviso in avisos_previos
-        )
+        partidos_publicacion_fallida = set()
 
         partidos_pendientes = (
             session.query(GestorSQL.ComunidadesPartido)
@@ -5039,10 +5033,10 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
             mensaje = f"ℹ️ No hay partidos individuales pendientes en la ronda {ronda.numero}."
             if cierre.get("cerrada"):
                 mensaje += " La ronda quedó consolidada."
-            if avisos_previos or avisos_cierre:
-                mensaje += "\n⚠️ " + "; ".join(avisos_previos + avisos_cierre) + "."
+            if avisos_cierre:
+                mensaje += "\n⚠️ " + "; ".join(avisos_cierre) + "."
             else:
-                mensaje += " Se comprobaron también las publicaciones consolidadas."
+                mensaje += " No se reintentaron publicaciones de partidos ya cerrados."
             await ctx.send(mensaje)
             return
 
@@ -5141,6 +5135,7 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
                     id_foro=FORO_RESULTADOS_COMUNIDADES_ID,
                 )
                 if avisos_resultado:
+                    partidos_publicacion_fallida.add(int(resultado.partido.id))
                     detalles.extend(
                         f"publicación pendiente para reintento: {aviso}"
                         for aviso in avisos_resultado
@@ -5172,14 +5167,19 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
                     f"{partido_bloodbowl_id}: error interno; administración avisada."
                 )
 
-        avisos_publicacion = await _reintentar_publicaciones_ronda_comunidades(
-            ctx, session, ronda.id, matches, id_foro=FORO_RESULTADOS_COMUNIDADES_ID
-        )
-        if avisos_publicacion:
-            detalles.extend(
-                f"publicación pendiente para reintento: {aviso}"
-                for aviso in avisos_publicacion
+        if partidos_publicacion_fallida:
+            avisos_publicacion = await _reintentar_publicaciones_partidos_comunidades(
+                ctx,
+                session,
+                partidos_publicacion_fallida,
+                matches,
+                id_foro=FORO_RESULTADOS_COMUNIDADES_ID,
             )
+            if avisos_publicacion:
+                detalles.extend(
+                    f"publicación pendiente para reintento: {aviso}"
+                    for aviso in avisos_publicacion
+                )
 
         cierre = _consolidar_cierre_ronda_comunidades(
             session, torneo_id, int(ronda.numero)
@@ -6019,6 +6019,47 @@ async def publicar_resultado_partido_comunidades(
         )
     except Exception as exc:
         avisos.append(f"hub del enfrentamiento {enfrentamiento.id}: {exc}")
+    return avisos
+
+
+async def _reintentar_publicaciones_partidos_comunidades(
+    ctx,
+    session,
+    partido_ids,
+    matches=(),
+    *,
+    id_foro=FORO_RESULTADOS_COMUNIDADES_ID,
+):
+    por_uuid = {
+        str(match.get("uuid")): match
+        for match in matches
+        if isinstance(match, dict) and match.get("uuid")
+    }
+    ids = sorted({int(partido_id) for partido_id in partido_ids})
+    if not ids:
+        return []
+    avisos = []
+    partidos = (
+        session.query(GestorSQL.ComunidadesPartido)
+        .filter(
+            GestorSQL.ComunidadesPartido.id.in_(ids),
+            GestorSQL.ComunidadesPartido.estado.in_(
+                (PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO)
+            ),
+        )
+        .order_by(GestorSQL.ComunidadesPartido.id)
+        .all()
+    )
+    for partido in partidos:
+        avisos.extend(
+            await publicar_resultado_partido_comunidades(
+                ctx,
+                session,
+                partido.id,
+                match=por_uuid.get(str(partido.partido_bloodbowl_id)),
+                id_foro=id_foro,
+            )
+        )
     return avisos
 
 

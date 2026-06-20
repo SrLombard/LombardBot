@@ -27,13 +27,16 @@ def test_comunidades_actualizar_publica_cada_resultado_api_antes_del_corte_una_p
     assert "id_foro=FORO_RESULTADOS_COMUNIDADES_ID" in bloque_publicacion
 
 
-def test_comunidades_actualizar_mantiene_reintento_con_foro_comunidades():
+def test_comunidades_actualizar_reintenta_solo_partidos_fallidos_con_foro_comunidades():
     fuente = Path("LombardBot.py").read_text(encoding="utf-8")
     inicio = fuente.index("@bot.command(name=\"comunidades_actualizar\")")
     fin = fuente.index("\n\nLOGGER_COMUNIDADES", inicio)
     cuerpo = fuente[inicio:fin]
 
-    assert "await _reintentar_publicaciones_ronda_comunidades(" in cuerpo
+    assert "partidos_publicacion_fallida = set()" in cuerpo
+    assert "partidos_publicacion_fallida.add(int(resultado.partido.id))" in cuerpo
+    assert "await _reintentar_publicaciones_partidos_comunidades(" in cuerpo
+    assert "await _reintentar_publicaciones_ronda_comunidades(" not in cuerpo
     assert "id_foro=FORO_RESULTADOS_COMUNIDADES_ID" in cuerpo
 
 
