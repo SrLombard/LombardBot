@@ -31,6 +31,10 @@ import UtilesDiscord
 import GestorSQL
 import Encuesta
 from UtilesDiscord import DiscordClientSingleton
+from DiscordConstantes import (
+    FORO_RESULTADOS_COMUNIDADES_ID,
+    FORO_RESULTADOS_GENERAL_ID,
+)
 from SpinConstantes import (
     AMBITO_SPIN_COMUNIDADES,
     AMBITO_SPIN_GENERAL,
@@ -777,7 +781,7 @@ async def actualiza_clasificacion(ctx, todos: int = 0):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
 
-    canal_id=1223765590146158653
+    canal_id = FORO_RESULTADOS_GENERAL_ID
 
     mensaje = await actualizar_clasificacion(ctx,session, lambda: APIBbowl.obtener_partido_ButterCup(bbowl_API_token), GestorSQL.Calendario, canal_id, todos)
     await ctx.send(mensaje)
@@ -789,7 +793,7 @@ async def actualiza_partido(ctx, uuid: str):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
 
-    canal_id = 1223765590146158653  
+    canal_id = FORO_RESULTADOS_GENERAL_ID
 
     match = APIBbowl.obtener_partido_por_uuid(bbowl_API_token, uuid)
     if match is None:
@@ -805,7 +809,7 @@ async def actualiza_Ticket(ctx, todos: int = 0):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
 
-    canal_id = 1223765590146158653
+    canal_id = FORO_RESULTADOS_GENERAL_ID
 
     mensaje = await actualizar_ticket(
         ctx,
@@ -2854,7 +2858,7 @@ async def actualiza_playoffsOro(ctx, todos: int = 0):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
 
-    canal_id = 1223765590146158653
+    canal_id = FORO_RESULTADOS_GENERAL_ID
 
     mensaje = await actualizar_playoffs(ctx, session, lambda: APIBbowl.obtener_partido_PlayOff(bbowl_API_token), canal_id, GestorSQL.PlayOffsOro, todos)
     await ctx.send(mensaje)
@@ -2870,7 +2874,7 @@ async def actualiza_playoffsPlata(ctx, todos: int = 0):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
 
-    canal_id = 1223765590146158653
+    canal_id = FORO_RESULTADOS_GENERAL_ID
 
     mensaje = await actualizar_playoffs(ctx, session, lambda: APIBbowl.obtener_partido_PlayOff(bbowl_API_token), canal_id, GestorSQL.PlayOffsPlata, todos)
     await ctx.send(mensaje)
@@ -2886,7 +2890,7 @@ async def actualiza_playoffsBronce(ctx, todos: int = 0):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
 
-    canal_id = 1223765590146158653
+    canal_id = FORO_RESULTADOS_GENERAL_ID
 
     mensaje = await actualizar_playoffs(ctx, session, lambda: APIBbowl.obtener_partido_PlayOff(bbowl_API_token), canal_id, GestorSQL.PlayOffsBronce, todos)
     await ctx.send(mensaje)
@@ -5217,8 +5221,6 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
 
 LOGGER_COMUNIDADES = logging.getLogger("lombardbot.comunidades")
 
-FORO_RESULTADOS_ID = 1223765590146158653
-
 
 def _contexto_publicacion_comunidades(session, tipo: str, registro_id: int):
     """Resuelve el contexto de una clave de publicación sin confiar en Discord."""
@@ -5878,9 +5880,9 @@ async def publicar_resultado_partido_comunidades(
 
     try:
         guild = getattr(ctx, "guild", None)
-        foro = discord.utils.get(getattr(guild, "channels", []), id=FORO_RESULTADOS_ID)
+        foro = discord.utils.get(getattr(guild, "channels", []), id=FORO_RESULTADOS_COMUNIDADES_ID)
         if foro is None and guild is not None:
-            foro = await _resolver_canal_notificacion_comunidades(ctx, FORO_RESULTADOS_ID)
+            foro = await _resolver_canal_notificacion_comunidades(ctx, FORO_RESULTADOS_COMUNIDADES_ID)
         if foro is None or not isinstance(foro, discord.ForumChannel):
             raise RuntimeError("foro de resultados no disponible")
         titulo = f"{partido.enfrentamiento.torneo.nombre} J{partido.enfrentamiento.ronda.numero}"
@@ -5991,7 +5993,7 @@ async def _eliminar_canales_ronda_comunidades(ctx, session, ronda_id: int):
     )
     avisos = []
     torneo = enfrentamientos[0].torneo if enfrentamientos else None
-    ids_protegidos = {FORO_RESULTADOS_ID}
+    ids_protegidos = {FORO_RESULTADOS_COMUNIDADES_ID}
     if torneo is not None and torneo.canal_hub_id is not None:
         ids_protegidos.add(int(torneo.canal_hub_id))
 
@@ -6479,7 +6481,7 @@ async def _eliminar_canales_para_regeneracion_comunidades(
     ctx, registros, *, canal_hub_id: int, ronda_numero: int
 ):
     """Elimina todos los canales de la ronda; aborta ante cualquier fallo real."""
-    protegidos = {FORO_RESULTADOS_ID, int(canal_hub_id)}
+    protegidos = {FORO_RESULTADOS_COMUNIDADES_ID, int(canal_hub_id)}
     eliminados = 0
     ausentes = 0
     for tipo, canal_id in registros:
@@ -8402,7 +8404,7 @@ async def publicar_resultado_suizo_en_foro(
     local_index: int,
     visitante_index: int,
 ):
-    foro_resultados_id = 1223765590146158653
+    foro_resultados_id = FORO_RESULTADOS_GENERAL_ID
     canal_foro = discord.utils.get(getattr(ctx.guild, "channels", []), id=foro_resultados_id)
     if not canal_foro or not isinstance(canal_foro, discord.ForumChannel):
         return

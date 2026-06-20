@@ -17,6 +17,7 @@ from sqlalchemy.orm import aliased, joinedload
 from sqlalchemy.sql import case,func
 
 import GestorSQL
+from DiscordConstantes import FORO_RESULTADOS_GENERAL_ID
 from ComunidadesConstantes import (
     PARTIDO_ADMINISTRADO,
     PARTIDO_EN_CURSO,
@@ -363,7 +364,7 @@ async def publicar(ctx, titulo, mensaje=None, embed=None,id_foro=None,idPartido=
     if id_foro:
         canal_foro = discord.utils.get(ctx.guild.channels, id=id_foro)
     else:
-        canal_foro = discord.utils.get(ctx.guild.channels, id=1223765590146158653)
+        canal_foro = discord.utils.get(ctx.guild.channels, id=FORO_RESULTADOS_GENERAL_ID)
     
     # Verificar que el canal existe y es un foro
     if not canal_foro or not isinstance(canal_foro, discord.ForumChannel):
