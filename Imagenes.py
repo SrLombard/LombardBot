@@ -236,6 +236,40 @@ def seleccionarTitulo(apellidos):
 
 
 
+def _comunidad_lado_partido_comunidades(partido_comunidades, usuario_id: int, equipo_id: int) -> str:
+    """Resuelve la comunidad del lado de plantilla desde el partido individual."""
+    enfrentamiento = getattr(partido_comunidades, "enfrentamiento", None)
+    equipos_enfrentamiento = (
+        getattr(enfrentamiento, "equipo_a", None),
+        getattr(enfrentamiento, "equipo_b", None),
+    )
+    for equipo in equipos_enfrentamiento:
+        if equipo is None or int(getattr(equipo, "id", 0) or 0) != int(equipo_id):
+            continue
+        miembros = getattr(equipo, "miembros", ()) or ()
+        if any(
+            int(getattr(miembro, "usuario_id", 0) or 0) == int(usuario_id)
+            for miembro in miembros
+        ):
+            return str(equipo.comunidad.nombre)
+        raise ValueError(
+            "El usuario del lado del partido no pertenece al equipo del enfrentamiento."
+        )
+    equipo_lado = None
+    if int(getattr(partido_comunidades, "equipo_local_id", 0) or 0) == int(equipo_id):
+        equipo_lado = getattr(partido_comunidades, "equipo_local", None)
+    elif int(getattr(partido_comunidades, "equipo_visitante_id", 0) or 0) == int(equipo_id):
+        equipo_lado = getattr(partido_comunidades, "equipo_visitante", None)
+    if equipo_lado is not None:
+        miembros = getattr(equipo_lado, "miembros", ()) or ()
+        if not miembros or any(
+            int(getattr(miembro, "usuario_id", 0) or 0) == int(usuario_id)
+            for miembro in miembros
+        ):
+            return str(equipo_lado.comunidad.nombre)
+    raise ValueError("No se pudo resolver la comunidad del lado del partido.")
+
+
 def _datos_comunidades_resultado(session, id_partido_bloodbowl):
     """Devuelve los campos extra esperados por resultadoComunidades.png."""
     partido_comunidades = (
@@ -246,8 +280,16 @@ def _datos_comunidades_resultado(session, id_partido_bloodbowl):
     if not partido_comunidades:
         return {"comunidad1": {}, "comunidad2": {}, "comunidadVS": {}}
 
-    comunidad_local = getattr(getattr(partido_comunidades.equipo_local, "comunidad", None), "nombre", "")
-    comunidad_visitante = getattr(getattr(partido_comunidades.equipo_visitante, "comunidad", None), "nombre", "")
+    comunidad_local = _comunidad_lado_partido_comunidades(
+        partido_comunidades,
+        partido_comunidades.usuario_local_id,
+        partido_comunidades.equipo_local_id,
+    )
+    comunidad_visitante = _comunidad_lado_partido_comunidades(
+        partido_comunidades,
+        partido_comunidades.usuario_visitante_id,
+        partido_comunidades.equipo_visitante_id,
+    )
     return {
         "comunidad1": {"0": comunidad_local},
         "comunidad2": {"0": comunidad_visitante},

@@ -5408,6 +5408,50 @@ def _datos_api_imagen_comunidades(partido, match):
     return teams[indice_local], teams[indice_visitante]
 
 
+def _comunidad_lado_partido_comunidades(partido, usuario_id: int, equipo_id: int) -> str:
+    """Obtiene la comunidad del lado indicado usando el cruce individual real."""
+    enfrentamiento = getattr(partido, "enfrentamiento", None)
+    equipos_enfrentamiento = (
+        getattr(enfrentamiento, "equipo_a", None),
+        getattr(enfrentamiento, "equipo_b", None),
+    )
+    for equipo in equipos_enfrentamiento:
+        if equipo is None or int(getattr(equipo, "id", 0) or 0) != int(equipo_id):
+            continue
+        miembros = getattr(equipo, "miembros", ()) or ()
+        if any(
+            int(getattr(miembro, "usuario_id", 0) or 0) == int(usuario_id)
+            for miembro in miembros
+        ):
+            return str(equipo.comunidad.nombre)
+        raise ValueError(
+            "El usuario del lado del partido no pertenece al equipo del enfrentamiento."
+        )
+    equipo_lado = None
+    if int(getattr(partido, "equipo_local_id", 0) or 0) == int(equipo_id):
+        equipo_lado = getattr(partido, "equipo_local", None)
+    elif int(getattr(partido, "equipo_visitante_id", 0) or 0) == int(equipo_id):
+        equipo_lado = getattr(partido, "equipo_visitante", None)
+    if equipo_lado is not None:
+        miembros = getattr(equipo_lado, "miembros", ()) or ()
+        if not miembros or any(
+            int(getattr(miembro, "usuario_id", 0) or 0) == int(usuario_id)
+            for miembro in miembros
+        ):
+            return str(equipo_lado.comunidad.nombre)
+    raise ValueError("No se pudo resolver la comunidad del lado del partido.")
+
+
+def _comunidades_lados_partido_comunidades(partido) -> tuple[str, str, str]:
+    comunidad1 = _comunidad_lado_partido_comunidades(
+        partido, partido.usuario_local_id, partido.equipo_local_id
+    )
+    comunidad2 = _comunidad_lado_partido_comunidades(
+        partido, partido.usuario_visitante_id, partido.equipo_visitante_id
+    )
+    return comunidad1, comunidad2, f"{comunidad1} Vs {comunidad2}"
+
+
 def _crear_imagen_resultado_comunidades(session, partido, match=None):
     raza_local = _raza_usuario_partido_comunidades(
         session, partido, partido.usuario_local_id
@@ -5434,8 +5478,9 @@ def _crear_imagen_resultado_comunidades(session, partido, match=None):
     else:
         ganador = {"ruta": "./plantillas/Empate.png", "x": 729, "y": 241}
 
-    comunidad_local = str(partido.equipo_local.comunidad.nombre)
-    comunidad_visitante = str(partido.equipo_visitante.comunidad.nombre)
+    comunidad_local, comunidad_visitante, comunidad_vs = (
+        _comunidades_lados_partido_comunidades(partido)
+    )
 
     return Imagenes.crear_imagen(
         "resultadoComunidades",
@@ -5468,7 +5513,7 @@ def _crear_imagen_resultado_comunidades(session, partido, match=None):
         lado={"izquierdo": "#5f8dd3", "derecho": "#c95f5f"},
         comunidad1={"0": comunidad_local},
         comunidad2={"0": comunidad_visitante},
-        comunidadVS={"0": f"{comunidad_local} Vs {comunidad_visitante}"},
+        comunidadVS={"0": comunidad_vs},
     )
 
 
