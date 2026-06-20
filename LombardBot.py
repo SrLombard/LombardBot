@@ -5231,6 +5231,172 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
         session.close()
 
 
+async def _resolver_hilo_resultados_comunidades_sin_bd(ctx, canal_foro, titulo: str):
+    """Localiza o crea el hilo de resultados sin tocar la BD."""
+    hilo = await _buscar_hilo_resultados_comunidades(canal_foro, titulo)
+    if hilo is None:
+        creado = await canal_foro.create_thread(
+            name=titulo, content=f"Resultados de {titulo}"
+        )
+        hilo = creado.thread
+    if getattr(hilo, "archived", False):
+        await hilo.edit(archived=False)
+    return hilo
+
+
+async def publicar_imagen_resultado_partido_comunidades_sin_bd(
+    ctx,
+    session,
+    partido,
+    *,
+    match=None,
+    id_foro=FORO_RESULTADOS_COMUNIDADES_ID,
+):
+    """Publica solo la imagen de un partido existente sin registrar idempotencia."""
+    guild = getattr(ctx, "guild", None)
+    foro = discord.utils.get(getattr(guild, "channels", []), id=id_foro)
+    if foro is None and guild is not None:
+        foro = await _resolver_canal_notificacion_comunidades(ctx, id_foro)
+    if foro is None or not isinstance(foro, discord.ForumChannel):
+        raise RuntimeError("foro de resultados no disponible")
+    titulo = f"{partido.enfrentamiento.torneo.nombre} J{partido.enfrentamiento.ronda.numero}"
+    hilo = await _resolver_hilo_resultados_comunidades_sin_bd(ctx, foro, titulo)
+    ruta = _crear_imagen_resultado_comunidades(session, partido, match)
+    if not ruta:
+        raise RuntimeError("no se pudo generar la imagen")
+    try:
+        with open(ruta, "rb") as imagen:
+            await hilo.send("", file=File(imagen))
+    finally:
+        Imagenes.eliminar_imagen(ruta)
+
+
+@bot.command(name="comunidades_publica_antiguos")
+async def comunidades_publica_antiguos(ctx, torneo_id: int):
+    """Publica imágenes de resultados ya guardados sin actualizar la BD."""
+    if not es_comisario(ctx):
+        await ctx.send("No tienes permiso. Este comando es exclusivo para Comisario.")
+        return
+
+    SessionComunidades = sessionmaker(bind=GestorSQL.conexionEngine())
+    session = SessionComunidades()
+    encontrados_api = 0
+    publicados = 0
+    ignorados_sin_bd = 0
+    no_publicables = 0
+    errores = 0
+    detalles = []
+    try:
+        torneo = session.get(GestorSQL.ComunidadesTorneo, int(torneo_id))
+        if torneo is None:
+            await ctx.send(f"❌ No existe un torneo de comunidades con ID `{torneo_id}`.")
+            return
+        if not torneo.id_competicion_bbowl:
+            await ctx.send(
+                f"❌ El torneo `{torneo_id}` no tiene configurado `idCompBbowl`."
+            )
+            return
+
+        matches = APIBbowl.obtener_partidos(
+            bbowl_API_token, torneo.id_competicion_bbowl
+        )
+        if matches is None:
+            await ctx.send("❌ La API de Blood Bowl no devolvió una respuesta válida.")
+            return
+        if not matches:
+            await ctx.send("ℹ️ La API no devolvió partidos para la competición configurada.")
+            return
+
+        for match in matches:
+            try:
+                partido_bloodbowl_id, _, _ = _extraer_resultado_api_comunidades(match)
+                encontrados_api += 1
+            except ValueError as exc:
+                errores += 1
+                detalles.append(f"API: {exc}")
+                continue
+
+            partido = (
+                session.query(GestorSQL.ComunidadesPartido)
+                .filter(
+                    GestorSQL.ComunidadesPartido.torneo_id == int(torneo_id),
+                    GestorSQL.ComunidadesPartido.partido_bloodbowl_id
+                    == partido_bloodbowl_id,
+                )
+                .one_or_none()
+            )
+            if partido is None:
+                ignorados_sin_bd += 1
+                continue
+            if partido.estado not in {PARTIDO_FINALIZADO, PARTIDO_ADMINISTRADO}:
+                no_publicables += 1
+                detalles.append(
+                    f"{partido_bloodbowl_id}: partido {partido.id} existe pero está `{partido.estado}`."
+                )
+                continue
+
+            try:
+                await publicar_imagen_resultado_partido_comunidades_sin_bd(
+                    ctx,
+                    session,
+                    partido,
+                    match=match,
+                    id_foro=FORO_RESULTADOS_COMUNIDADES_ID,
+                )
+                publicados += 1
+            except Exception as exc:
+                errores += 1
+                LOGGER_COMUNIDADES.exception(
+                    "Fallo al publicar resultado antiguo de comunidades",
+                    extra={
+                        "torneo_id": torneo_id,
+                        "ronda_numero": getattr(
+                            getattr(partido.enfrentamiento, "ronda", None),
+                            "numero",
+                            None,
+                        ),
+                        "enfrentamiento_id": int(partido.enfrentamiento_id),
+                        "partido_id": int(partido.id),
+                    },
+                )
+                detalles.append(f"{partido_bloodbowl_id}: partido {partido.id}: {exc}")
+
+        session.rollback()
+        resumen = (
+            f"🖼️ **Publicación de resultados antiguos — torneo {torneo_id}**\n"
+            f"- Partidos leídos de API: **{encontrados_api}**\n"
+            f"- Imágenes publicadas: **{publicados}**\n"
+            f"- Ignorados sin partido en BD: **{ignorados_sin_bd}**\n"
+            f"- Existentes no publicables: **{no_publicables}**\n"
+            f"- Errores: **{errores}**\n"
+            "- BD: **sin cambios intencionados**"
+        )
+        if detalles:
+            resumen += "\n\n**Detalle:**\n" + "\n".join(
+                f"- {_texto_discord_seguro(detalle)}" for detalle in detalles[:15]
+            )
+            if len(detalles) > 15:
+                resumen += f"\n- … y {len(detalles) - 15} incidencias más."
+        await UtilesDiscord.enviar_mensaje_largo(ctx, resumen)
+    except Exception:
+        session.rollback()
+        LOGGER_COMUNIDADES.exception(
+            "Fallo en publicación de resultados antiguos de comunidades",
+            extra={
+                "torneo_id": torneo_id,
+                "ronda_numero": None,
+                "enfrentamiento_id": None,
+                "partido_id": None,
+            },
+        )
+        await ctx.send(
+            "❌ No se pudo completar la publicación de resultados antiguos. "
+            "No se han guardado cambios en la BD desde este comando."
+        )
+    finally:
+        session.close()
+
+
 LOGGER_COMUNIDADES = logging.getLogger("lombardbot.comunidades")
 
 
