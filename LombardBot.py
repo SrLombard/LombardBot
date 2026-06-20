@@ -5003,7 +5003,7 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
         ronda = rondas_abiertas[0]
 
         avisos_previos = await _reintentar_publicaciones_ronda_comunidades(
-            ctx, session, ronda.id
+            ctx, session, ronda.id, id_foro=FORO_RESULTADOS_COMUNIDADES_ID
         )
         detalles.extend(
             f"publicación pendiente para reintento: {aviso}"
@@ -5161,7 +5161,7 @@ async def comunidades_actualizar(ctx, torneo_id: int, todos: Optional[str] = Non
                 )
 
         avisos_publicacion = await _reintentar_publicaciones_ronda_comunidades(
-            ctx, session, ronda.id, matches
+            ctx, session, ronda.id, matches, id_foro=FORO_RESULTADOS_COMUNIDADES_ID
         )
         if avisos_publicacion:
             detalles.extend(
@@ -5853,7 +5853,12 @@ async def comunidades_transferir_cazador(
 
 
 async def publicar_resultado_partido_comunidades(
-    ctx, session, partido_id: int, *, match=None
+    ctx,
+    session,
+    partido_id: int,
+    *,
+    match=None,
+    id_foro=FORO_RESULTADOS_COMUNIDADES_ID,
 ):
     """Publica un partido consolidado y, si es el segundo, todos sus efectos.
 
@@ -5880,9 +5885,9 @@ async def publicar_resultado_partido_comunidades(
 
     try:
         guild = getattr(ctx, "guild", None)
-        foro = discord.utils.get(getattr(guild, "channels", []), id=FORO_RESULTADOS_COMUNIDADES_ID)
+        foro = discord.utils.get(getattr(guild, "channels", []), id=id_foro)
         if foro is None and guild is not None:
-            foro = await _resolver_canal_notificacion_comunidades(ctx, FORO_RESULTADOS_COMUNIDADES_ID)
+            foro = await _resolver_canal_notificacion_comunidades(ctx, id_foro)
         if foro is None or not isinstance(foro, discord.ForumChannel):
             raise RuntimeError("foro de resultados no disponible")
         titulo = f"{partido.enfrentamiento.torneo.nombre} J{partido.enfrentamiento.ronda.numero}"
@@ -5954,7 +5959,14 @@ async def publicar_resultado_partido_comunidades(
     return avisos
 
 
-async def _reintentar_publicaciones_ronda_comunidades(ctx, session, ronda_id: int, matches=()):
+async def _reintentar_publicaciones_ronda_comunidades(
+    ctx,
+    session,
+    ronda_id: int,
+    matches=(),
+    *,
+    id_foro=FORO_RESULTADOS_COMUNIDADES_ID,
+):
     por_uuid = {
         str(match.get("uuid")): match
         for match in matches
@@ -5978,6 +5990,7 @@ async def _reintentar_publicaciones_ronda_comunidades(ctx, session, ronda_id: in
                 session,
                 partido.id,
                 match=por_uuid.get(str(partido.partido_bloodbowl_id)),
+                id_foro=id_foro,
             )
         )
     return avisos
@@ -6235,7 +6248,7 @@ async def comunidades_admin_partido(
             return
 
         avisos = await publicar_resultado_partido_comunidades(
-            ctx, session, resultado.partido.id
+            ctx, session, resultado.partido.id, id_foro=FORO_RESULTADOS_COMUNIDADES_ID
         )
         cierre = _consolidar_cierre_ronda_comunidades(
             session, torneo_id, ronda_numero
