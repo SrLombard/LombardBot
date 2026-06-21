@@ -1,5 +1,5 @@
 {
-  "jornada": [	
+  "jornada": [
     {
       "nombre_diccionario": "jornadas",
       "clave": "0",
@@ -8,12 +8,12 @@
       "efecto": "contorno",
       "alineacion": "centrado",
       "fuente": "zuumerough-bold.ttf",
-	  "funcionColor":"si",
-	  "color": "#FEFEFF",
-	  "ancho_contorno":3,
+      "funcionColor": "si",
+      "color": "#FEFEFF",
+      "ancho_contorno": 3,
       "size": 100
-    },      
-	{
+    },
+    {
       "nombre_diccionario": "resultados",
       "clave": "0",
       "posicion_x": 450,
@@ -21,10 +21,10 @@
       "efecto": "ninguno",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
-	  "color": "#000000",
+      "color": "#000000",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "resultados",
       "clave": "1",
       "posicion_x": 665,
@@ -32,10 +32,10 @@
       "efecto": "ninguno",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
-	  "color": "#000000",
+      "color": "#000000",
       "size": 35
-    },	
-	{
+    },
+    {
       "nombre_diccionario": "resultados",
       "clave": "2",
       "posicion_x": 450,
@@ -43,10 +43,10 @@
       "efecto": "ninguno",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
-	  "color": "#000000",
+      "color": "#000000",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "resultados",
       "clave": "3",
       "posicion_x": 665,
@@ -54,10 +54,10 @@
       "efecto": "ninguno",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
-	  "color": "#000000",
+      "color": "#000000",
       "size": 35
-    },	
-	{
+    },
+    {
       "nombre_diccionario": "resultados",
       "clave": "4",
       "posicion_x": 450,
@@ -65,10 +65,10 @@
       "efecto": "ninguno",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
-	  "color": "#000000",
+      "color": "#000000",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "resultados",
       "clave": "5",
       "posicion_x": 665,
@@ -76,7 +76,7 @@
       "efecto": "ninguno",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
-	  "color": "#000000",
+      "color": "#000000",
       "size": 35
     },
     {
@@ -98,8 +98,8 @@
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 30
-    }, 
-	{
+    },
+    {
       "nombre_diccionario": "entrenadores",
       "clave": "2",
       "posicion_x": 310,
@@ -108,8 +108,8 @@
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 30
-    }, 
-	{
+    },
+    {
       "nombre_diccionario": "entrenadores",
       "clave": "3",
       "posicion_x": 800,
@@ -118,8 +118,8 @@
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 30
-    }, 
-	{
+    },
+    {
       "nombre_diccionario": "entrenadores",
       "clave": "4",
       "posicion_x": 310,
@@ -128,8 +128,8 @@
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 30
-    }, 
-	{
+    },
+    {
       "nombre_diccionario": "entrenadores",
       "clave": "5",
       "posicion_x": 800,
@@ -139,75 +139,75 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 30
     },
-	{
-	  "icono": "si",  
+    {
+      "icono": "si",
       "nombre_diccionario": "razas",
       "clave": "0",
       "posicion_x": 310,
       "posicion_y": 325,
       "efecto": "ninguno",
       "alineacion": "centrado",
-	  "ancho_icono": 180,
-	  "alto_icono": 130
+      "ancho_icono": 180,
+      "alto_icono": 130
     },
-	{
-	  "icono": "si",  
+    {
+      "icono": "si",
       "nombre_diccionario": "razas",
       "clave": "1",
       "posicion_x": 800,
       "posicion_y": 325,
       "efecto": "ninguno",
       "alineacion": "centrado",
-	  "ancho_icono": 180,
-	  "alto_icono": 130
+      "ancho_icono": 180,
+      "alto_icono": 130
     },
-	{
-	  "icono": "si",  
+    {
+      "icono": "si",
       "nombre_diccionario": "razas",
       "clave": "2",
       "posicion_x": 310,
       "posicion_y": 505,
       "efecto": "ninguno",
       "alineacion": "centrado",
-	  "ancho_icono": 170,
-	  "alto_icono": 130
+      "ancho_icono": 170,
+      "alto_icono": 130
     },
-	{
-	  "icono": "si",  
+    {
+      "icono": "si",
       "nombre_diccionario": "razas",
       "clave": "3",
       "posicion_x": 800,
       "posicion_y": 505,
       "efecto": "ninguno",
       "alineacion": "centrado",
-	  "ancho_icono": 170,
-	  "alto_icono": 130
+      "ancho_icono": 170,
+      "alto_icono": 130
     },
-	{
-	  "icono": "si",  
+    {
+      "icono": "si",
       "nombre_diccionario": "razas",
       "clave": "4",
       "posicion_x": 310,
       "posicion_y": 682,
       "efecto": "ninguno",
       "alineacion": "centrado",
-	  "ancho_icono": 170,
-	  "alto_icono": 130
+      "ancho_icono": 170,
+      "alto_icono": 130
     },
-	{
-	  "icono": "si",  
+    {
+      "icono": "si",
       "nombre_diccionario": "razas",
       "clave": "5",
       "posicion_x": 800,
       "posicion_y": 682,
       "efecto": "ninguno",
       "alineacion": "centrado",
-	  "ancho_icono": 170,
-	  "alto_icono": 130
+      "ancho_icono": 170,
+      "alto_icono": 130
     }
   ],
   "clasificacion": [
-  {
+    {
       "nombre_diccionario": "entrenadores",
       "clave": "0",
       "posicion_x": 155,
@@ -217,7 +217,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "pj",
       "clave": "0",
       "posicion_x": 453.2,
@@ -227,7 +227,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "pg",
       "clave": "0",
       "posicion_x": 515.1,
@@ -237,7 +237,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "pe",
       "clave": "0",
       "posicion_x": 578,
@@ -247,7 +247,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "pp",
       "clave": "0",
       "posicion_x": 640.4,
@@ -257,7 +257,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "dtd",
       "clave": "0",
       "posicion_x": 717.9,
@@ -267,7 +267,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "pts",
       "clave": "0",
       "posicion_x": 810.1,
@@ -277,7 +277,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "lesiones",
       "clave": "0",
       "posicion_x": 885.9,
@@ -287,7 +287,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "muertos",
       "clave": "0",
       "posicion_x": 965,
@@ -297,7 +297,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "entrenadores",
       "clave": "1",
       "posicion_x": 155,
@@ -307,7 +307,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "pj",
       "clave": "1",
       "posicion_x": 453,
@@ -317,723 +317,558 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
-      "nombre_diccionario": "pg",
-      "clave": "1",
-      "posicion_x": 515.1,
-      "posicion_y": 435,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pe",
-      "clave": "1",
-      "posicion_x": 578,
-      "posicion_y": 435,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pp",
-      "clave": "1",
-      "posicion_x": 640.4,
-      "posicion_y": 435,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "dtd",
-      "clave": "1",
-      "posicion_x": 717.9,
-      "posicion_y": 435,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pts",
-      "clave": "1",
-      "posicion_x": 810.1,
-      "posicion_y": 435,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "lesiones",
-      "clave": "1",
-      "posicion_x": 885.9,
-      "posicion_y": 435,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "muertos",
-      "clave": "1",
-      "posicion_x": 965,
-      "posicion_y": 435,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "entrenadores",
-      "clave": "2",
-      "posicion_x": 155,
-      "posicion_y": 485,
-      "efecto": "ninguno",
-      "alineacion": "izquierda",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pj",
-      "clave": "2",
-      "posicion_x": 453.2,
-      "posicion_y": 485,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pg",
-      "clave": "2",
-      "posicion_x": 515.1,
-      "posicion_y": 485,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pe",
-      "clave": "2",
-      "posicion_x": 578,
-      "posicion_y": 485,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pp",
-      "clave": "2",
-      "posicion_x": 640.4,
-      "posicion_y": 485,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "dtd",
-      "clave": "2",
-      "posicion_x": 717.9,
-      "posicion_y": 485,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pts",
-      "clave": "2",
-      "posicion_x": 810.1,
-      "posicion_y": 485,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "lesiones",
-      "clave": "2",
-      "posicion_x": 885.9,
-      "posicion_y": 485,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "muertos",
-      "clave": "2",
-      "posicion_x": 965,
-      "posicion_y": 485,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "entrenadores",
-      "clave": "3",
-      "posicion_x": 155,
-      "posicion_y": 535,
-      "efecto": "ninguno",
-      "alineacion": "izquierda",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pj",
-      "clave": "3",
-      "posicion_x": 453.2,
-      "posicion_y": 535,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pg",
-      "clave": "3",
-      "posicion_x": 515.1,
-      "posicion_y": 535,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pe",
-      "clave": "3",
-      "posicion_x": 578,
-      "posicion_y": 535,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pp",
-      "clave": "3",
-      "posicion_x": 640.4,
-      "posicion_y": 535,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "dtd",
-      "clave": "3",
-      "posicion_x": 717.9,
-      "posicion_y": 535,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pts",
-      "clave": "3",
-      "posicion_x": 810.1,
-      "posicion_y": 535,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "lesiones",
-      "clave": "3",
-      "posicion_x": 885.9,
-      "posicion_y": 535,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "muertos",
-      "clave": "3",
-      "posicion_x": 965,
-      "posicion_y": 535,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "entrenadores",
-      "clave": "4",
-      "posicion_x": 155,
-      "posicion_y": 585,
-      "efecto": "ninguno",
-      "alineacion": "izquierda",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pj",
-      "clave": "4",
-      "posicion_x": 453.2,
-      "posicion_y": 585,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pg",
-      "clave": "4",
-      "posicion_x": 515.1,
-      "posicion_y": 585,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pe",
-      "clave": "4",
-      "posicion_x": 578,
-      "posicion_y": 585,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pp",
-      "clave": "4",
-      "posicion_x": 640.4,
-      "posicion_y": 585,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "dtd",
-      "clave": "4",
-      "posicion_x": 717.9,
-      "posicion_y": 585,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pts",
-      "clave": "4",
-      "posicion_x": 810.1,
-      "posicion_y": 585,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "lesiones",
-      "clave": "4",
-      "posicion_x": 885.9,
-      "posicion_y": 585,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "muertos",
-      "clave": "4",
-      "posicion_x": 965,
-      "posicion_y": 585,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "entrenadores",
-      "clave": "5",
-      "posicion_x": 155,
-      "posicion_y": 635,
-      "efecto": "ninguno",
-      "alineacion": "izquierda",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pj",
-      "clave": "5",
-      "posicion_x": 453.2,
-      "posicion_y": 635,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pg",
-      "clave": "5",
-      "posicion_x": 515.1,
-      "posicion_y": 635,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pe",
-      "clave": "5",
-      "posicion_x": 578,
-      "posicion_y": 635,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pp",
-      "clave": "5",
-      "posicion_x": 640.4,
-      "posicion_y": 635,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "dtd",
-      "clave": "5",
-      "posicion_x": 717.9,
-      "posicion_y": 635,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "pts",
-      "clave": "5",
-      "posicion_x": 810.1,
-      "posicion_y": 635,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "lesiones",
-      "clave": "5",
-      "posicion_x": 885.9,
-      "posicion_y": 635,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "muertos",
-      "clave": "5",
-      "posicion_x": 965,
-      "posicion_y": 635,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    }
-],
-  "resultado": [
-  {
-      "nombre_diccionario": "entrenadores",
-      "clave": "0",
-      "posicion_x": 340,
-      "posicion_y": 360,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "nombre_equipos",
-      "clave": "0",
-      "posicion_x": 340,
-      "posicion_y": 270,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 55
-    },
-	{
-	  "logo": "si",  
-      "nombre_diccionario": "escudos",
-      "clave": "0",
-      "posicion_x": 670,
-      "posicion_y": 150,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-	  "ancho_icono": 160,
-	  "alto_icono": 200
-    },
-	{
-      "nombre_diccionario": "resultados",
-      "clave": "0",
-      "posicion_x": 880,
-      "posicion_y": 210,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-	  "color": "#000000",
-      "size": 105
-    },
-	{
-	  "icono": "si",  
-      "nombre_diccionario": "razas",
-      "clave": "0",
-      "posicion_x": 270,
-      "posicion_y": 605,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-	  "ancho_icono": 520,
-	  "alto_icono": 385
-    },
-	{
-      "nombre_diccionario": "kos",
-      "clave": "0",
-      "posicion_x": 907,
-      "posicion_y": 553,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 25
-    },
-	{
-      "nombre_diccionario": "heridos",
-      "clave": "0",
-      "posicion_x": 907,
-      "posicion_y": 700,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 25
-    },
-	{
-      "nombre_diccionario": "muertos",
-      "clave": "0",
-      "posicion_x": 907,
-      "posicion_y": 840,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 25
-    },
-	{
-      "nombre_diccionario": "entrenadores",
-      "clave": "1",
-      "posicion_x": 1420,
-      "posicion_y": 360,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 35
-    },
-	{
-      "nombre_diccionario": "nombre_equipos",
-      "clave": "1",
-      "posicion_x": 1420,
-      "posicion_y": 270,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 55
-    },
-	{
-	  "logo": "si",  
-      "nombre_diccionario": "escudos",
-      "clave": "1",
-      "posicion_x": 1115,
-      "posicion_y": 150,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-	  "ancho_icono": 160,
-	  "alto_icono": 200
-    },
-	{
-      "nombre_diccionario": "resultados",
-      "clave": "1",
-      "posicion_x": 975,
-      "posicion_y": 210,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-	  "color": "#000000",
-      "size": 105
-    },
-	{
-	  "icono": "si",  
-      "nombre_diccionario": "razas",
-      "clave": "1",
-      "posicion_x": 1110,
-      "posicion_y": 605,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-	  "ancho_icono": 520,
-	  "alto_icono": 385
-    },
-	{
-      "nombre_diccionario": "kos",
-      "clave": "1",
-      "posicion_x": 1325,
-      "posicion_y": 553,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 25
-    },
-	{
-      "nombre_diccionario": "heridos",
-      "clave": "1",
-      "posicion_x": 1325,
-      "posicion_y": 700,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 25
-    },
-	{
-      "nombre_diccionario": "muertos",
-      "clave": "1",
-      "posicion_x": 1325,
-      "posicion_y": 840,
-      "efecto": "ninguno",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "size": 25
-    }
-],
-  "resultadoComunidades": [
     {
-    "posicion_x": 50,
-    "posicion_y": 275,
-    "color": "#1d4ccc",
-    "ancho": 800,
-    "alto": 150,
-    "banner": true,
-	"alineacion" : "centrado",
-	"transparencia" : 20,
-	"lado" : "izquierdo"
-	},
-	{
-    "posicion_x": 1100,
-    "posicion_y": 275,
-    "color": "#1dcc4b",
-    "ancho": 800,
-    "alto": 150,
-    "banner": true,
-	"alineacion" : "centrado",
-	"transparencia" : 20,
-	"lado" : "derecho"
-	},
-	{
-      "nombre_diccionario": "comunidadVS",
-      "clave": "0",
+      "nombre_diccionario": "pg",
+      "clave": "1",
+      "posicion_x": 515.1,
+      "posicion_y": 435,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pe",
+      "clave": "1",
+      "posicion_x": 578,
+      "posicion_y": 435,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pp",
+      "clave": "1",
+      "posicion_x": 640.4,
+      "posicion_y": 435,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "dtd",
+      "clave": "1",
+      "posicion_x": 717.9,
+      "posicion_y": 435,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pts",
+      "clave": "1",
+      "posicion_x": 810.1,
+      "posicion_y": 435,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "lesiones",
+      "clave": "1",
+      "posicion_x": 885.9,
+      "posicion_y": 435,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "muertos",
+      "clave": "1",
+      "posicion_x": 965,
+      "posicion_y": 435,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "entrenadores",
+      "clave": "2",
+      "posicion_x": 155,
+      "posicion_y": 485,
+      "efecto": "ninguno",
+      "alineacion": "izquierda",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pj",
+      "clave": "2",
+      "posicion_x": 453.2,
+      "posicion_y": 485,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pg",
+      "clave": "2",
+      "posicion_x": 515.1,
+      "posicion_y": 485,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pe",
+      "clave": "2",
+      "posicion_x": 578,
+      "posicion_y": 485,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pp",
+      "clave": "2",
+      "posicion_x": 640.4,
+      "posicion_y": 485,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "dtd",
+      "clave": "2",
+      "posicion_x": 717.9,
+      "posicion_y": 485,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pts",
+      "clave": "2",
+      "posicion_x": 810.1,
+      "posicion_y": 485,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "lesiones",
+      "clave": "2",
+      "posicion_x": 885.9,
+      "posicion_y": 485,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "muertos",
+      "clave": "2",
+      "posicion_x": 965,
+      "posicion_y": 485,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "entrenadores",
+      "clave": "3",
+      "posicion_x": 155,
+      "posicion_y": 535,
+      "efecto": "ninguno",
+      "alineacion": "izquierda",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pj",
+      "clave": "3",
+      "posicion_x": 453.2,
+      "posicion_y": 535,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pg",
+      "clave": "3",
+      "posicion_x": 515.1,
+      "posicion_y": 535,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pe",
+      "clave": "3",
+      "posicion_x": 578,
+      "posicion_y": 535,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pp",
+      "clave": "3",
+      "posicion_x": 640.4,
+      "posicion_y": 535,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "dtd",
+      "clave": "3",
+      "posicion_x": 717.9,
+      "posicion_y": 535,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pts",
+      "clave": "3",
+      "posicion_x": 810.1,
+      "posicion_y": 535,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "lesiones",
+      "clave": "3",
+      "posicion_x": 885.9,
+      "posicion_y": 535,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "muertos",
+      "clave": "3",
+      "posicion_x": 965,
+      "posicion_y": 535,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "entrenadores",
+      "clave": "4",
+      "posicion_x": 155,
+      "posicion_y": 585,
+      "efecto": "ninguno",
+      "alineacion": "izquierda",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pj",
+      "clave": "4",
+      "posicion_x": 453.2,
+      "posicion_y": 585,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pg",
+      "clave": "4",
+      "posicion_x": 515.1,
+      "posicion_y": 585,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pe",
+      "clave": "4",
+      "posicion_x": 578,
+      "posicion_y": 585,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pp",
+      "clave": "4",
+      "posicion_x": 640.4,
+      "posicion_y": 585,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "dtd",
+      "clave": "4",
+      "posicion_x": 717.9,
+      "posicion_y": 585,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pts",
+      "clave": "4",
+      "posicion_x": 810.1,
+      "posicion_y": 585,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "lesiones",
+      "clave": "4",
+      "posicion_x": 885.9,
+      "posicion_y": 585,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "muertos",
+      "clave": "4",
+      "posicion_x": 965,
+      "posicion_y": 585,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "entrenadores",
+      "clave": "5",
+      "posicion_x": 155,
+      "posicion_y": 635,
+      "efecto": "ninguno",
+      "alineacion": "izquierda",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pj",
+      "clave": "5",
+      "posicion_x": 453.2,
+      "posicion_y": 635,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pg",
+      "clave": "5",
+      "posicion_x": 515.1,
+      "posicion_y": 635,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pe",
+      "clave": "5",
+      "posicion_x": 578,
+      "posicion_y": 635,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pp",
+      "clave": "5",
+      "posicion_x": 640.4,
+      "posicion_y": 635,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "dtd",
+      "clave": "5",
+      "posicion_x": 717.9,
+      "posicion_y": 635,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "pts",
+      "clave": "5",
+      "posicion_x": 810.1,
+      "posicion_y": 635,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "lesiones",
+      "clave": "5",
+      "posicion_x": 885.9,
+      "posicion_y": 635,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "muertos",
+      "clave": "5",
+      "posicion_x": 965,
+      "posicion_y": 635,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    }
+  ],
+  "resultado": [
+    {
+      "posicion_x": 50,
+      "posicion_y": 270,
+      "color": "#1d4ccc",
+      "ancho": 800,
+      "alto": 145,
+      "banner": true,
+      "alineacion": "centrado",
+      "transparencia": 20,
+      "lado": "izquierdo"
+    },
+    {
+      "posicion_x": 1100,
+      "posicion_y": 270,
+      "color": "#1dcc4b",
+      "ancho": 800,
+      "alto": 145,
+      "banner": true,
+      "alineacion": "centrado",
+      "transparencia": 20,
+      "lado": "derecho"
+    },
+    {
       "posicion_x": 745,
       "posicion_y": 69,
       "efecto": "contorno",
-	  "outlineColor": "#FEFEFF",
+      "outlineColor": "#ffffff",
       "alineacion": "centrado",
       "fuente": "zuumerough-bold.ttf",
-	  "color": "#FFFFFF",
-	  "ancho_contorno":3,
-      "size": 100
-	},
-	{
-      "posicion_x": 1200,
-      "posicion_y": 690,
-      "alineacion": "centrado",
-      "fuente": "zuumerough-bold.ttf",
-	  "funcionColor":"si",
-	  "color": "#FFFFFF",
-	  "ancho_contorno":3,
+      "funcionColor": "si",
+      "color": "#b69200",
+      "ancho_contorno": 3,
       "size": 100,
-	  "mitexto": true,
-	  "texto":"patata voladora"
-	},
-	{
-    "posicion_x": 800,
-    "posicion_y": 275,
-    "color": "#000000",
-    "ancho": 200,
-    "alto": 150,
-    "piramide": true,
-	"alineacion" : "centrado",
-	"inclinacion" : "60"
-	},
-	{
-	"ganador":true,
-	"posicion_x": 0,
-    "posicion_y": 0,
-	"alineacion" : "centrado"
-	},
+      "titulo": true
+    },
+    {
+      "posicion_x": 800,
+      "posicion_y": 270,
+      "color": "#000000",
+      "ancho": 250,
+      "alto": 145,
+      "piramide": true,
+      "alineacion": "centrado",
+      "inclinacion": "60"
+    },
+    {
+      "ganador": true,
+      "posicion_x": 0,
+      "posicion_y": 0,
+      "alineacion": "centrado"
+    },
+    {
+      "posicion_x": 965,
+      "posicion_y": 260,
+      "alineacion": "centrado",
+      "fuente": "zuumerough-bold.ttf",
+      "funcionColor": "si",
+      "color": "#FFFFFF",
+      "ancho_contorno": 3,
+      "size": 130,
+      "mitexto": true,
+      "texto": "-"
+    },
     {
       "nombre_diccionario": "entrenadores",
       "clave": "0",
       "posicion_x": 340,
       "posicion_y": 370,
-      "efecto": "ninguno",
+      "efecto": "contorno",
+      "outlineColor": "#000000",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "nombre_equipos",
       "clave": "0",
       "posicion_x": 340,
       "posicion_y": 295,
-      "efecto": "ninguno",
+      "efecto": "contorno",
+      "outlineColor": "#000000",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 45
     },
-	{
-	  "icono": "si",
+    {
+      "icono": "si",
       "nombre_diccionario": "escudos",
       "clave": "0",
       "posicion_x": 700,
-      "posicion_y": 290,
+      "posicion_y": 250,
       "efecto": "ninguno",
       "alineacion": "centrado",
-	  "ancho_icono": 160,
-	  "alto_icono": 200
+      "ancho_icono": 180,
+      "alto_icono": 220
     },
-	{
+    {
       "nombre_diccionario": "resultados",
       "clave": "0",
       "posicion_x": 880,
-      "posicion_y": 290,
-      "efecto": "ninguno",
+      "posicion_y": 260,
+      "efecto": "contorno",
+      "outlineColor": "#000000",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
-	  "color": "#FFF7FA",
-      "size": 110
+      "color": "#FFF7FA",
+      "size": 130
     },
-	{
-	  "icono": "si",
+    {
+      "icono": "si",
       "nombre_diccionario": "razas",
       "clave": "0",
       "posicion_x": 270,
       "posicion_y": 605,
       "efecto": "ninguno",
       "alineacion": "centrado",
-	  "ancho_icono": 520,
-	  "alto_icono": 385
+      "ancho_icono": 520,
+      "alto_icono": 385
     },
-	{
+    {
       "nombre_diccionario": "kos",
       "clave": "0",
       "posicion_x": 910,
@@ -1043,7 +878,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 25
     },
-	{
+    {
       "nombre_diccionario": "heridos",
       "clave": "0",
       "posicion_x": 910,
@@ -1053,7 +888,7 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 25
     },
-	{
+    {
       "nombre_diccionario": "muertos",
       "clave": "0",
       "posicion_x": 907,
@@ -1063,90 +898,377 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 25
     },
-	{
+    {
       "nombre_diccionario": "entrenadores",
       "clave": "1",
       "posicion_x": 1580,
       "posicion_y": 370,
-      "efecto": "ninguno",
+      "efecto": "contorno",
+      "outlineColor": "#000000",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 35
     },
-	{
+    {
       "nombre_diccionario": "nombre_equipos",
       "clave": "1",
       "posicion_x": 1580,
       "posicion_y": 295,
-      "efecto": "ninguno",
+      "efecto": "contorno",
+      "outlineColor": "#000000",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 45
     },
-	{
-	  "icono": "si",
+    {
+      "icono": "si",
       "nombre_diccionario": "escudos",
       "clave": "1",
       "posicion_x": 1200,
-      "posicion_y": 290,
+      "posicion_y": 250,
       "efecto": "ninguno",
       "alineacion": "centrado",
-	  "ancho_icono": 160,
-	  "alto_icono": 200
+      "ancho_icono": 180,
+      "alto_icono": 220
     },
-	{
+    {
       "nombre_diccionario": "resultados",
       "clave": "1",
       "posicion_x": 1050,
-      "posicion_y": 290,
-      "efecto": "ninguno",
+      "posicion_y": 260,
+      "efecto": "contorno",
+      "outlineColor": "#000000",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
-	  "color": "#FFF7FA",
-      "size": 110
+      "color": "#FFF7FA",
+      "size": 130
     },
-	{
-	  "icono": "si",
+    {
+      "icono": "si",
       "nombre_diccionario": "razas",
       "clave": "1",
       "posicion_x": 1650,
       "posicion_y": 605,
       "efecto": "ninguno",
       "alineacion": "centrado",
-	  "ancho_icono": 520,
-	  "alto_icono": 385
+      "ancho_icono": 520,
+      "alto_icono": 385
     },
-	{
+    {
       "nombre_diccionario": "kos",
       "clave": "1",
-      "posicion_x": 1335,
-      "posicion_y": 560,
+      "posicion_x": 1340,
+      "posicion_y": 566,
       "efecto": "ninguno",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 25
     },
-	{
+    {
       "nombre_diccionario": "heridos",
       "clave": "1",
-      "posicion_x": 1335,
+      "posicion_x": 1340,
+      "posicion_y": 712,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    },
+    {
+      "nombre_diccionario": "muertos",
+      "clave": "1",
+      "posicion_x": 1340,
+      "posicion_y": 855,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    },
+    {
+      "posicion_x": 100,
+      "posicion_y": 50,
+      "color": "#00FF00",
+      "ancho": 300,
+      "alto": 100,
+      "inclinacion": 20,
+      "banner": true,
+      "alineacion": "centrado",
+      "transparencia": 20,
+      "lado": "izquierdo"
+    },
+    {
+      "posicion_x": 600,
+      "posicion_y": 100,
+      "color": "#00FF33",
+      "ancho": 600,
+      "alto": 200,
+      "inclinacion": 80,
+      "banner": true,
+      "alineacion": "centrado",
+      "transparencia": 60,
+      "lado": "derecho"
+    }
+  ],
+  "resultadoComunidades": [
+    {
+      "posicion_x": 50,
+      "posicion_y": 270,
+      "color": "#1d4ccc",
+      "ancho": 800,
+      "alto": 145,
+      "banner": true,
+      "alineacion": "centrado",
+      "transparencia": 20,
+      "lado": "izquierdo"
+    },
+    {
+      "posicion_x": 1100,
+      "posicion_y": 270,
+      "color": "#1dcc4b",
+      "ancho": 800,
+      "alto": 145,
+      "banner": true,
+      "alineacion": "centrado",
+      "transparencia": 20,
+      "lado": "derecho"
+    },
+    {
+      "nombre_diccionario": "comunidadVS",
+      "clave": "0",
+      "posicion_x": 745,
+      "posicion_y": 69,
+      "efecto": "contorno",
+      "outlineColor": "#ffffff",
+      "alineacion": "centrado",
+      "fuente": "zuumerough-bold.ttf",
+      "funcionColor": "si",
+      "color": "#b69200",
+      "ancho_contorno": 3,
+      "size": 100
+    },
+    {
+      "posicion_x": 800,
+      "posicion_y": 270,
+      "color": "#000000",
+      "ancho": 250,
+      "alto": 145,
+      "piramide": true,
+      "alineacion": "centrado",
+      "inclinacion": "60"
+    },
+    {
+      "ganador": true,
+      "posicion_x": 0,
+      "posicion_y": 0,
+      "alineacion": "centrado"
+    },
+    {
+      "posicion_x": 965,
+      "posicion_y": 260,
+      "alineacion": "centrado",
+      "fuente": "zuumerough-bold.ttf",
+      "funcionColor": "si",
+      "color": "#FFFFFF",
+      "ancho_contorno": 3,
+      "size": 130,
+      "mitexto": true,
+      "texto": "-"
+    },
+    {
+      "nombre_diccionario": "entrenadores",
+      "clave": "0",
+      "posicion_x": 340,
+      "posicion_y": 370,
+      "efecto": "contorno",
+      "outlineColor": "#000000",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "nombre_equipos",
+      "clave": "0",
+      "posicion_x": 340,
+      "posicion_y": 295,
+      "efecto": "contorno",
+      "outlineColor": "#000000",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 45
+    },
+    {
+      "icono": "si",
+      "nombre_diccionario": "escudos",
+      "clave": "0",
+      "posicion_x": 700,
+      "posicion_y": 250,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "ancho_icono": 180,
+      "alto_icono": 220
+    },
+    {
+      "nombre_diccionario": "resultados",
+      "clave": "0",
+      "posicion_x": 880,
+      "posicion_y": 260,
+      "efecto": "contorno",
+      "outlineColor": "#000000",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "color": "#FFF7FA",
+      "size": 130
+    },
+    {
+      "icono": "si",
+      "nombre_diccionario": "razas",
+      "clave": "0",
+      "posicion_x": 270,
+      "posicion_y": 605,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "ancho_icono": 520,
+      "alto_icono": 385
+    },
+    {
+      "nombre_diccionario": "kos",
+      "clave": "0",
+      "posicion_x": 910,
+      "posicion_y": 565,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    },
+    {
+      "nombre_diccionario": "heridos",
+      "clave": "0",
+      "posicion_x": 910,
       "posicion_y": 710,
       "efecto": "ninguno",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 25
     },
-	{
+    {
       "nombre_diccionario": "muertos",
-      "clave": "1",
-      "posicion_x": 1335,
+      "clave": "0",
+      "posicion_x": 907,
       "posicion_y": 850,
       "efecto": "ninguno",
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 25
+    },
+    {
+      "nombre_diccionario": "entrenadores",
+      "clave": "1",
+      "posicion_x": 1580,
+      "posicion_y": 370,
+      "efecto": "contorno",
+      "outlineColor": "#000000",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+    {
+      "nombre_diccionario": "nombre_equipos",
+      "clave": "1",
+      "posicion_x": 1580,
+      "posicion_y": 295,
+      "efecto": "contorno",
+      "outlineColor": "#000000",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 45
+    },
+    {
+      "icono": "si",
+      "nombre_diccionario": "escudos",
+      "clave": "1",
+      "posicion_x": 1200,
+      "posicion_y": 250,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "ancho_icono": 180,
+      "alto_icono": 220
+    },
+    {
+      "nombre_diccionario": "resultados",
+      "clave": "1",
+      "posicion_x": 1050,
+      "posicion_y": 260,
+      "efecto": "contorno",
+      "outlineColor": "#000000",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "color": "#FFF7FA",
+      "size": 130
+    },
+    {
+      "icono": "si",
+      "nombre_diccionario": "razas",
+      "clave": "1",
+      "posicion_x": 1650,
+      "posicion_y": 605,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "ancho_icono": 520,
+      "alto_icono": 385
+    },
+    {
+      "nombre_diccionario": "kos",
+      "clave": "1",
+      "posicion_x": 1340,
+      "posicion_y": 566,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    },
+    {
+      "nombre_diccionario": "heridos",
+      "clave": "1",
+      "posicion_x": 1340,
+      "posicion_y": 712,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    },
+    {
+      "nombre_diccionario": "muertos",
+      "clave": "1",
+      "posicion_x": 1340,
+      "posicion_y": 855,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    },
+    {
+      "posicion_x": 100,
+      "posicion_y": 50,
+      "color": "#00FF00",
+      "ancho": 300,
+      "alto": 100,
+      "inclinacion": 20,
+      "banner": true,
+      "alineacion": "centrado",
+      "transparencia": 20,
+      "lado": "izquierdo"
+    },
+    {
+      "posicion_x": 600,
+      "posicion_y": 100,
+      "color": "#00FF33",
+      "ancho": 600,
+      "alto": 200,
+      "inclinacion": 80,
+      "banner": true,
+      "alineacion": "centrado",
+      "transparencia": 60,
+      "lado": "derecho"
     }
-]
+  ]
 }
-
-
