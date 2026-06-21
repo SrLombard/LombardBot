@@ -772,8 +772,8 @@
       "lado": "derecho"
     },
     {
-      "posicion_x": 745,
-      "posicion_y": 69,
+      "posicion_x": 965,
+      "posicion_y": 180,
       "efecto": "contorno",
       "outlineColor": "#ffffff",
       "alineacion": "centrado",
@@ -781,7 +781,7 @@
       "funcionColor": "si",
       "color": "#b69200",
       "ancho_contorno": 3,
-      "size": 100,
+      "size": 70,
       "titulo": true
     },
     {
@@ -983,30 +983,6 @@
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 25
-    },
-    {
-      "posicion_x": 100,
-      "posicion_y": 50,
-      "color": "#00FF00",
-      "ancho": 300,
-      "alto": 100,
-      "inclinacion": 20,
-      "banner": true,
-      "alineacion": "centrado",
-      "transparencia": 20,
-      "lado": "izquierdo"
-    },
-    {
-      "posicion_x": 600,
-      "posicion_y": 100,
-      "color": "#00FF33",
-      "ancho": 600,
-      "alto": 200,
-      "inclinacion": 80,
-      "banner": true,
-      "alineacion": "centrado",
-      "transparencia": 60,
-      "lado": "derecho"
     }
   ],
   "resultadoComunidades": [
@@ -1035,16 +1011,15 @@
     {
       "nombre_diccionario": "comunidadVS",
       "clave": "0",
-      "posicion_x": 745,
-      "posicion_y": 69,
+      "posicion_x": 965,
+      "posicion_y": 180,
       "efecto": "contorno",
-      "outlineColor": "#ffffff",
+      "outlineColor": "#FEFEFF",
       "alineacion": "centrado",
       "fuente": "zuumerough-bold.ttf",
-      "funcionColor": "si",
-      "color": "#b69200",
+      "color": "#FFFFFF",
       "ancho_contorno": 3,
-      "size": 100
+      "size": 70
     },
     {
       "posicion_x": 800,
@@ -1245,30 +1220,6 @@
       "alineacion": "centrado",
       "fuente": "Poppins-Bold.ttf",
       "size": 25
-    },
-    {
-      "posicion_x": 100,
-      "posicion_y": 50,
-      "color": "#00FF00",
-      "ancho": 300,
-      "alto": 100,
-      "inclinacion": 20,
-      "banner": true,
-      "alineacion": "centrado",
-      "transparencia": 20,
-      "lado": "izquierdo"
-    },
-    {
-      "posicion_x": 600,
-      "posicion_y": 100,
-      "color": "#00FF33",
-      "ancho": 600,
-      "alto": 200,
-      "inclinacion": 80,
-      "banner": true,
-      "alineacion": "centrado",
-      "transparencia": 60,
-      "lado": "derecho"
     }
   ]
 }
