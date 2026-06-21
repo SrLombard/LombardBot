@@ -978,7 +978,238 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 25
     }
+],
+  "resultadoComunidades": [
+    {
+    "posicion_x": 50,
+    "posicion_y": 275,
+    "color": "#1d4ccc",
+    "ancho": 800,
+    "alto": 150,
+    "banner": true,
+	"alineacion" : "centrado",
+	"transparencia" : 20,
+	"lado" : "izquierdo"
+	},
+	{
+    "posicion_x": 1100,
+    "posicion_y": 275,
+    "color": "#1dcc4b",
+    "ancho": 800,
+    "alto": 150,
+    "banner": true,
+	"alineacion" : "centrado",
+	"transparencia" : 20,
+	"lado" : "derecho"
+	},
+	{
+      "nombre_diccionario": "comunidadVS",
+      "clave": "0",
+      "posicion_x": 745,
+      "posicion_y": 69,
+      "efecto": "contorno",
+	  "outlineColor": "#FEFEFF",
+      "alineacion": "centrado",
+      "fuente": "zuumerough-bold.ttf",
+	  "color": "#FFFFFF",
+	  "ancho_contorno":3,
+      "size": 100
+	},
+	{
+      "posicion_x": 1200,
+      "posicion_y": 690,
+      "alineacion": "centrado",
+      "fuente": "zuumerough-bold.ttf",
+	  "funcionColor":"si",
+	  "color": "#FFFFFF",
+	  "ancho_contorno":3,
+      "size": 100,
+	  "mitexto": true,
+	  "texto":"patata voladora"
+	},
+	{
+    "posicion_x": 800,
+    "posicion_y": 275,
+    "color": "#000000",
+    "ancho": 200,
+    "alto": 150,
+    "piramide": true,
+	"alineacion" : "centrado",
+	"inclinacion" : "60"
+	},
+	{
+	"ganador":true,
+	"posicion_x": 0,
+    "posicion_y": 0,
+	"alineacion" : "centrado"
+	},
+    {
+      "nombre_diccionario": "entrenadores",
+      "clave": "0",
+      "posicion_x": 340,
+      "posicion_y": 370,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+	{
+      "nombre_diccionario": "nombre_equipos",
+      "clave": "0",
+      "posicion_x": 340,
+      "posicion_y": 295,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 45
+    },
+	{
+	  "icono": "si",
+      "nombre_diccionario": "escudos",
+      "clave": "0",
+      "posicion_x": 700,
+      "posicion_y": 290,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+	  "ancho_icono": 160,
+	  "alto_icono": 200
+    },
+	{
+      "nombre_diccionario": "resultados",
+      "clave": "0",
+      "posicion_x": 880,
+      "posicion_y": 290,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+	  "color": "#FFF7FA",
+      "size": 110
+    },
+	{
+	  "icono": "si",
+      "nombre_diccionario": "razas",
+      "clave": "0",
+      "posicion_x": 270,
+      "posicion_y": 605,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+	  "ancho_icono": 520,
+	  "alto_icono": 385
+    },
+	{
+      "nombre_diccionario": "kos",
+      "clave": "0",
+      "posicion_x": 910,
+      "posicion_y": 565,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    },
+	{
+      "nombre_diccionario": "heridos",
+      "clave": "0",
+      "posicion_x": 910,
+      "posicion_y": 710,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    },
+	{
+      "nombre_diccionario": "muertos",
+      "clave": "0",
+      "posicion_x": 907,
+      "posicion_y": 850,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    },
+	{
+      "nombre_diccionario": "entrenadores",
+      "clave": "1",
+      "posicion_x": 1580,
+      "posicion_y": 370,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 35
+    },
+	{
+      "nombre_diccionario": "nombre_equipos",
+      "clave": "1",
+      "posicion_x": 1580,
+      "posicion_y": 295,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 45
+    },
+	{
+	  "icono": "si",
+      "nombre_diccionario": "escudos",
+      "clave": "1",
+      "posicion_x": 1200,
+      "posicion_y": 290,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+	  "ancho_icono": 160,
+	  "alto_icono": 200
+    },
+	{
+      "nombre_diccionario": "resultados",
+      "clave": "1",
+      "posicion_x": 1050,
+      "posicion_y": 290,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+	  "color": "#FFF7FA",
+      "size": 110
+    },
+	{
+	  "icono": "si",
+      "nombre_diccionario": "razas",
+      "clave": "1",
+      "posicion_x": 1650,
+      "posicion_y": 605,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+	  "ancho_icono": 520,
+	  "alto_icono": 385
+    },
+	{
+      "nombre_diccionario": "kos",
+      "clave": "1",
+      "posicion_x": 1335,
+      "posicion_y": 560,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    },
+	{
+      "nombre_diccionario": "heridos",
+      "clave": "1",
+      "posicion_x": 1335,
+      "posicion_y": 710,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    },
+	{
+      "nombre_diccionario": "muertos",
+      "clave": "1",
+      "posicion_x": 1335,
+      "posicion_y": 850,
+      "efecto": "ninguno",
+      "alineacion": "centrado",
+      "fuente": "Poppins-Bold.ttf",
+      "size": 25
+    }
 ]
 }
 
-	
+
