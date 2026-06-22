@@ -1012,7 +1012,7 @@
 	  "nombre_diccionario": "comunidadVS",
       "clave": "0",
       "posicion_x": 965,
-      "posicion_y": 180,
+      "posicion_y": 175,
       "efecto": "contorno",
       "outlineColor": "#ffffff",
       "alineacion": "centrado",
@@ -1023,14 +1023,14 @@
       "size": 100
     },
 {
-      "posicion_x": 910,
+      "posicion_x": 819,
       "posicion_y": 281,
       "color": "#004aad",
-      "ancho": 300,
+      "ancho": 285,
       "alto": 155,
       "piramide": true,
       "alineacion": "centrado",
-      "inclinacion": "60"
+      "inclinacion": "65"
     },
     {
       "ganador": true,
@@ -1124,19 +1124,19 @@
       "fuente": "Poppins-Bold.ttf",
       "size": 25
     },
-{
-      "posicion_x": 965,
-      "posicion_y": 310,
-      "alineacion": "centrado",
-      "fuente": "zuumerough-bold.ttf",
+	{
+	  "posicion_x": 965,
+	  "posicion_y": 295,
+	  "alineacion": "centrado",
+	  "efecto": "contorno",
 	  "outlineColor": "#000000",
-      "alineacion": "centrado",
-      "fuente": "Poppins-Bold.ttf",
-      "color": "#FFF7FA",
-      "size": 90,
-      "mitexto": true,
-      "texto": "-"
-    },
+	  "ancho_contorno": 3,
+	  "fuente": "Poppins-Bold.ttf",
+	  "color": "#FFF7FA",
+	  "size": 75,
+	  "mitexto": true,
+	  "texto": "-"
+	},
     {
       "nombre_diccionario": "entrenadores",
       "clave": "1",
