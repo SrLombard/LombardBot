@@ -9863,7 +9863,7 @@ aviso_suizo_comunidades = (
 
 tareas_programadas = {
     dia: {
-        "09": [aviso_playoffs, aviso_suizo_comunidades],
+        "09": [aviso_suizo_comunidades],  #aviso_playoffs, 
         "10": [aviso_suizo, actualizacion_peticiones],
         "22": [actualizacion_peticiones],
     }
