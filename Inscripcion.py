@@ -57,14 +57,56 @@ tipoPreferenciaOptions = [
     ("Existente", "Existente")
 ]
 
+MENSAJE_FLEXIBILIDAD = """A continuación te explicamos rápidamente, cómo se organizarán los equipos y los grupos:
+
+1️⃣ EQUIPOS NUEVOS
+Tras el sorteo de los equipos para quienes hayan elegido la opción \"nuevo\" (todos en esta edición), los grupos se crearán automáticamente.
+
+2️⃣ EVITAR MIRRORS
+Se intentará, siempre que sea posible, que no haya dos equipos iguales dentro del mismo grupo.
+
+3️⃣ BALANCE DE GRUPOS
+Buscaremos grupos equilibrados, con una composición aproximada de:
+- 2 equipos de fuerza
+- 2 equipos equilibrados
+- 2 equipos de agilidad
+(Este equilibrio se aplicará en la medida de lo posible)."""
+
+MENSAJE_INSCRIPCION_CONFIRMADA = "Gracias por inscribirte en el Suizo entre comunidades, {nombre_bloodbowl}!"
+MENSAJE_INSCRIPCION_EXISTENTE = "Ya tiene un registro comenzado {nombre_bloodbowl}, si continua sus datos se sobreescribirán"
+MENSAJE_BIENVENIDA = (
+    "Bienvenido al Suizo entre comunidades.\n                        \n"
+    "Estamos emocionados por contar contigo. Vamos a empezar tu inscripción.\n\n"
+    "                                                \n"
+    "Primero necesitamos saber tu nombre EXACTO en blood bowl, pulsa EMPEZAR y escribelo "
+    "(¡importan las mayúsculas!)"
+)
+MENSAJE_SELECCIONAR_PREFERENCIA = "Elija su preferencia de equipo:"
+MENSAJE_ERROR_PREFERENCIA = "Error al registrar la preferencia."
+MENSAJE_EQUIPO_NUEVO = (
+    "Para crear un nuevo equipo en Suizo entre comunidades primero te tenemos que adjudicar "
+    "una raza por __**sorteo**__.\n                    \n"
+    " El sorteo se realizará en directo aproximadamente el 1 de mayo en canal de twitch de "
+    "SrLombard.\n                    \n"
+    "Para que te podamos asignar una raza deberás elegir __5 favoritas__ y __banear otras 5__.\n"
+    "Intentaremos asignarte una de tus razas favoritas, pero hay un número limitado de plazas "
+    "por raza. Si no se pudiera se te asignaría cualquier otra raza pero nunca una de las "
+    "baneadas asi que... ¡elige sabiamente!"
+)
+MENSAJE_SELECCIONAR_EQUIPO = "Selecciona uno de tus equipos existentes:"
+MENSAJE_SIN_EQUIPOS = "No tiene equipos creados, continuaremos con un equipo nuevo."
+MENSAJE_SELECCIONAR_RAZAS = "Seleccione sus razas favoritas en orden de preferencia:"
+MENSAJE_SELECCIONAR_DIVISION = "Como aún no te conocemos no sabemos cuales son tus habilidades como entrenador. ¡Elige una división para tu bautismo de sangre!:"
+MENSAJE_INSCRIPCION_TERMINADA = "Ha terminado la inscripción para la Séptima edición de Suizo entre comunidades. ¡Nos vemos el 4 de mayo!. Te avisaré de todo por mp 😉"
+MENSAJE_ERROR_EQUIPO = "Error al registrar el equipo."
+MENSAJE_PREFERENCIAS = "Sus preferencias son: {razas}"
+MENSAJE_SELECCIONAR_BANS = "Ahora debe banear 5 razas con las que no quiere jugar:"
+MENSAJE_BANS = "Sus bans son: {razas}"
+MENSAJE_ERROR_DIVISION = "Error al guardar la división."
+
 
 async def enviar_mensaje_flexibilidad(user):
-#     await user.send(
-# "A continuación te explicamos, de forma clara y rápida, cómo se organizarán los equipos y los grupos:\n\n1️⃣ EQUIPOS NUEVOS\nTras el sorteo de los equipos para quienes hayan elegido la opción \"nuevo\", los grupos se crearán automáticamente.\n\n2️⃣ EVITAR MIRRORS\nSe intentará, siempre que sea posible, que no haya dos equipos iguales dentro del mismo grupo.\n\n3️⃣ BALANCE DE GRUPOS\nBuscaremos grupos equilibrados, con una composición aproximada de:\n- 2 equipos de fuerza\n- 2 equipos equilibrados\n- 2 equipos de agilidad\n(Este equilibrio se aplicará en la medida de lo posible).\n\n4️⃣ SI NO SON MÚLTIPLOS DE 6\nSi el número de equipos nuevos no es múltiplo de 6, se intentará que los equipos nuevos se enfrenten a los equipos de menor valoración disponible.\n\n5️⃣ __FLEXIBILIDAD NUEVO / EXISTENTE__\nSi alguien puede darnos flexibilidad para usar nuevo o existente, se lo agradeceremos mucho.\nNuestro objetivo es que los equipos nuevos sean múltiplos de 6 dentro de su división.\n👉 Para ofrecer esta flexibilidad, envía un MP a Pikoleto.\n\n"
-#     )
-        await user.send(
-"A continuación te explicamos rápidamente, cómo se organizarán los equipos y los grupos:\n\n1️⃣ EQUIPOS NUEVOS\nTras el sorteo de los equipos para quienes hayan elegido la opción \"nuevo\" (todos en esta edición), los grupos se crearán automáticamente.\n\n2️⃣ EVITAR MIRRORS\nSe intentará, siempre que sea posible, que no haya dos equipos iguales dentro del mismo grupo.\n\n3️⃣ BALANCE DE GRUPOS\nBuscaremos grupos equilibrados, con una composición aproximada de:\n- 2 equipos de fuerza\n- 2 equipos equilibrados\n- 2 equipos de agilidad\n(Este equilibrio se aplicará en la medida de lo posible)."
-    )
+    await user.send(MENSAJE_FLEXIBILIDAD)
 
 async def handle_registration(user):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
@@ -76,24 +118,19 @@ async def handle_registration(user):
             nueva_inscripcion = GestorSQL.Inscripcion(id_usuario_discord=user.id, nombre_bloodbowl=usuario.nombre_bloodbowl)
             session.add(nueva_inscripcion)
             session.commit()
-            await user.send(f"Gracias por inscribirte en el Suizo entre comunidades, {usuario.nombre_bloodbowl}!")
+            await user.send(MENSAJE_INSCRIPCION_CONFIRMADA.format(nombre_bloodbowl=usuario.nombre_bloodbowl))
             await seleccionar_tipo_preferencia(user)
         else:
-            await user.send(f"Ya tiene un registro comenzado {usuario.nombre_bloodbowl}, si continua sus datos se sobreescribirán")
+            await user.send(MENSAJE_INSCRIPCION_EXISTENTE.format(nombre_bloodbowl=usuario.nombre_bloodbowl))
             await seleccionar_tipo_preferencia(user)
     else:
         view = WelcomeView(user.id)
-        await user.send("""Bienvenido al Suizo entre comunidades.
-                        
-Estamos emocionados por contar contigo. Vamos a empezar tu inscripción.
-
-                                                
-Primero necesitamos saber tu nombre EXACTO en blood bowl, pulsa EMPEZAR y escribelo (¡importan las mayúsculas!)""", view=view)
+        await user.send(MENSAJE_BIENVENIDA, view=view)
     session.close()
     
 async def seleccionar_tipo_preferencia(user):
     view = TipoPreferenciaView(user.id)
-    await user.send("Elija su preferencia de equipo:", view=view)
+    await user.send(MENSAJE_SELECCIONAR_PREFERENCIA, view=view)
 
 
 class TipoPreferenciaView(discord.ui.View):
@@ -135,17 +172,12 @@ class TipoPreferenciaView(discord.ui.View):
                 await registroEquipoExistente(interaction.user)
         except Exception as e:
             session.rollback()
-            await interaction.followup.send("Error al registrar la preferencia.", ephemeral=True)
+            await interaction.followup.send(MENSAJE_ERROR_PREFERENCIA, ephemeral=True)
         finally:
             session.close()
 
 async def registroEquipoNuevo(user):
-    await user.send("""Para crear un nuevo equipo en Suizo entre comunidades primero te tenemos que adjudicar una raza por __**sorteo**__.
-                    
- El sorteo se realizará en directo aproximadamente el 1 de mayo en canal de twitch de SrLombard.
-                    
-Para que te podamos asignar una raza deberás elegir __5 favoritas__ y __banear otras 5__.
-Intentaremos asignarte una de tus razas favoritas, pero hay un número limitado de plazas por raza. Si no se pudiera se te asignaría cualquier otra raza pero nunca una de las baneadas asi que... ¡elige sabiamente!""")
+    await user.send(MENSAJE_EQUIPO_NUEVO)
     await registroPreferencias(user)
     
 async def registroEquipoExistente(user, next_step=None):
@@ -156,15 +188,15 @@ async def registroEquipoExistente(user, next_step=None):
         equipos = session.query(GestorSQL.equiposReformados).filter_by(id_usuario=usuario.idUsuarios).all()
         if equipos:
             view = EquiposView(user.id, equipos, next_step)
-            await user.send("Selecciona uno de tus equipos existentes:", view=view)
+            await user.send(MENSAJE_SELECCIONAR_EQUIPO, view=view)
         else:
-            await user.send("No tiene equipos creados, continuaremos con un equipo nuevo.")
+            await user.send(MENSAJE_SIN_EQUIPOS)
             await registroEquipoNuevo(user)
     session.close()
 
 async def registroPreferencias(user):
     view = RazasView(racesIniciales, racesConEmojiIniciales, user.id, tipo='preferencias')
-    await user.send("Seleccione sus razas favoritas en orden de preferencia:", view=view)
+    await user.send(MENSAJE_SELECCIONAR_RAZAS, view=view)
     
 class WelcomeView(discord.ui.View):
     def __init__(self, user_id):
@@ -198,7 +230,7 @@ class ModalNuevoUsuario(discord.ui.Modal, title="Registro de Usuario"):
         session.commit()
         session.close()
         division_view = DivisionView(self.usuario_id)
-        await interaction.followup.send("Como aún no te conocemos no sabemos cuales son tus habilidades como entrenador. ¡Elige una división para tu bautismo de sangre!:", view=division_view)
+        await interaction.followup.send(MENSAJE_SELECCIONAR_DIVISION, view=division_view)
 
 
 class EquiposView(discord.ui.View):
@@ -228,12 +260,11 @@ class EquiposView(discord.ui.View):
                 if self.next_step == 'preferencias':
                     await registroPreferencias(interaction.user)
                 else:
-                    await interaction.followup.send("Ha terminado la inscripción para la Séptima edición de Suizo entre comunidades. ¡Nos vemos el 4 de mayo!. Te avisaré de todo por mp 😉")
+                    await interaction.followup.send(MENSAJE_INSCRIPCION_TERMINADA)
                     await asyncio.sleep(60)
-                    # await interaction.followup.send("¡Se me olvidaba! Suizo entre comunidades tiene premios y sorteos alucinantes, Es totalmente opcional y sirve para financiar los premios físicos. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo!")
         except Exception as e:
             session.rollback()
-            await interaction.followup.send("Error al registrar el equipo.", ephemeral=True)
+            await interaction.followup.send(MENSAJE_ERROR_EQUIPO, ephemeral=True)
         finally:
             session.close()
 
@@ -274,19 +305,18 @@ class RazasView(discord.ui.View):
             await interaction.response.edit_message(view=self)
 
             if self.tipo == 'preferencias':
-                mensaje = f"Sus preferencias son: {', '.join(self.seleccionados)}"
+                mensaje = MENSAJE_PREFERENCIAS.format(razas=', '.join(self.seleccionados))
                 await interaction.followup.send(mensaje)
                 new_races = [r for r in self.races if r not in self.seleccionados]
                 new_racesConEmoji = [emoji for r, emoji in zip(self.races, self.racesConEmoji) if r not in self.seleccionados]
                 new_view = RazasView(new_races, new_racesConEmoji, self.usuario_id, 'bans',preferencias=self.seleccionados)
-                await interaction.followup.send("Ahora debe banear 5 razas con las que no quiere jugar:", view=new_view)
+                await interaction.followup.send(MENSAJE_SELECCIONAR_BANS, view=new_view)
             else:
-                mensaje = f"Sus bans son: {', '.join(self.seleccionados)}"
+                mensaje = MENSAJE_BANS.format(razas=', '.join(self.seleccionados))
                 guardar_preferencias_bans(self.usuario_id,self.preferencias,self.seleccionados)
                 await interaction.followup.send(mensaje)
-                await interaction.followup.send("Ha terminado la inscripción para la Séptima edición de Suizo entre comunidades. ¡Nos vemos el 4 de mayo!. Te avisaré de todo por mp 😉")
+                await interaction.followup.send(MENSAJE_INSCRIPCION_TERMINADA)
                 await asyncio.sleep(60)
-                # await interaction.followup.send("¡Se me olvidaba! Suizo entre comunidades tiene premios y sorteos alucinantes, Es totalmente opcional y sirve para financiar los premios físicos. ¡Pásate por el canal <#1218155443252105258> para echarles un ojo!")
         
 def guardar_preferencias_bans(usuario_id, preferencias, bans):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
@@ -341,9 +371,7 @@ class DivisionView(discord.ui.View):
             await seleccionar_tipo_preferencia(interaction.user)
         except Exception as e:
             session.rollback()
-            await interaction.followup.send_message("Error al guardar la división.", ephemeral=True)
+            await interaction.followup.send_message(MENSAJE_ERROR_DIVISION, ephemeral=True)
         finally:
             session.close()
-
-
 
