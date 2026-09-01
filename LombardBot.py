@@ -3904,22 +3904,22 @@ async def recordar_inscripciones(ctx, solo_objetivo: Optional[int] = None):
         try:
             await member.send(
 """
-🏆 **BUTTER CUP VII**   
-Última temporada hacia los **tickets del Mundial 2026**: de las **3 ediciones** (invierno 2025, primavera 2026 y verano 2026) y todo culminará en un **playoff veraniego**.
+🏆 **BUTTER CUP VIII**   
+Primera temporada hacia los **tickets del Mundial 2027**: de las **3 ediciones** (invierno 2026, primavera 2027 y verano 2027) y todo culminará en un **playoff veraniego**.
 
 ⚙️ **Formato**  
 • **3 divisiones**: Oro, Plata y Bronce.  
 • Los mejores **ascienden de división** cada edición.  
 • Los grupos se crean en **packs de 6**.
 
-📅 **Cierre de inscripciones: viernes 24 de Abril**  
+📅 **Cierre de inscripciones: viernes 11 de septiembre**  
 No te quedes sin plaza: apúntate en <#1280102673059680316>, **consulta las reglas** y pregunta lo que necesites.
 
 Si solo tienes el rol para estar atento de la copa, no necesitas hacer nada.
 
 Si no quieres recibir más notificaciones mías, escribe a **SrLombard** para que no te moleste más, Pero solo escribiré una vez más antes de ese sábado ;).
 
-¡Te esperamos en la **BUTTER CUP VII**! 🏉✨"""
+¡Te esperamos en la **BUTTER CUP VIII**! 🏉✨"""
             )
             await ctx.send(f"Recordatorio enviado a {member.name}")
         except discord.Forbidden:

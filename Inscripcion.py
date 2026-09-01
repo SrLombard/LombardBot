@@ -14,7 +14,6 @@ from pathlib import Path
 
 
 def _leer_configuracion_inscripcion():
-    """Lee configuracionInscripcion.txt una sola vez al iniciar el bot."""
     ruta = Path(__file__).with_name("configuracionInscripcion.txt")
     valor_por_defecto = False
 
@@ -59,23 +58,23 @@ tipoPreferenciaOptions = [
 
 MENSAJE_FLEXIBILIDAD = """A continuación te explicamos rápidamente, cómo se organizarán los equipos y los grupos:
 
-1️⃣ EQUIPOS NUEVOS
+1️- EQUIPOS NUEVOS
 Tras el sorteo de los equipos para quienes hayan elegido la opción \"nuevo\" (todos en esta edición), los grupos se crearán automáticamente.
 
-2️⃣ EVITAR MIRRORS
+2️- EVITAR MIRRORS
 Se intentará, siempre que sea posible, que no haya dos equipos iguales dentro del mismo grupo.
 
-3️⃣ BALANCE DE GRUPOS
+3️- BALANCE DE GRUPOS
 Buscaremos grupos equilibrados, con una composición aproximada de:
 - 2 equipos de fuerza
 - 2 equipos equilibrados
 - 2 equipos de agilidad
 (Este equilibrio se aplicará en la medida de lo posible)."""
 
-MENSAJE_INSCRIPCION_CONFIRMADA = "Gracias por inscribirte en el Suizo entre comunidades, {nombre_bloodbowl}!"
+MENSAJE_INSCRIPCION_CONFIRMADA = "Gracias por inscribirte en la VIII Butter Cup, {nombre_bloodbowl}!"
 MENSAJE_INSCRIPCION_EXISTENTE = "Ya tiene un registro comenzado {nombre_bloodbowl}, si continua sus datos se sobreescribirán"
 MENSAJE_BIENVENIDA = (
-    "Bienvenido al Suizo entre comunidades.\n                        \n"
+    "Bienvenido a la VIII Butter Cup.\n                        \n"
     "Estamos emocionados por contar contigo. Vamos a empezar tu inscripción.\n\n"
     "                                                \n"
     "Primero necesitamos saber tu nombre EXACTO en blood bowl, pulsa EMPEZAR y escribelo "
@@ -84,9 +83,9 @@ MENSAJE_BIENVENIDA = (
 MENSAJE_SELECCIONAR_PREFERENCIA = "Elija su preferencia de equipo:"
 MENSAJE_ERROR_PREFERENCIA = "Error al registrar la preferencia."
 MENSAJE_EQUIPO_NUEVO = (
-    "Para crear un nuevo equipo en Suizo entre comunidades primero te tenemos que adjudicar "
+    "Para crear un nuevo equipo en la Butter Cup primero te tenemos que adjudicar "
     "una raza por __**sorteo**__.\n                    \n"
-    " El sorteo se realizará en directo aproximadamente el 1 de mayo en canal de twitch de "
+    " El sorteo se realizará en directo aproximadamente el 13 de septiembre en canal de twitch de "
     "SrLombard.\n                    \n"
     "Para que te podamos asignar una raza deberás elegir __5 favoritas__ y __banear otras 5__.\n"
     "Intentaremos asignarte una de tus razas favoritas, pero hay un número limitado de plazas "
@@ -97,7 +96,7 @@ MENSAJE_SELECCIONAR_EQUIPO = "Selecciona uno de tus equipos existentes:"
 MENSAJE_SIN_EQUIPOS = "No tiene equipos creados, continuaremos con un equipo nuevo."
 MENSAJE_SELECCIONAR_RAZAS = "Seleccione sus razas favoritas en orden de preferencia:"
 MENSAJE_SELECCIONAR_DIVISION = "Como aún no te conocemos no sabemos cuales son tus habilidades como entrenador. ¡Elige una división para tu bautismo de sangre!:"
-MENSAJE_INSCRIPCION_TERMINADA = "Ha terminado la inscripción para la Séptima edición de Suizo entre comunidades. ¡Nos vemos el 4 de mayo!. Te avisaré de todo por mp 😉"
+MENSAJE_INSCRIPCION_TERMINADA = "Ha terminado la inscripción para la VIII Butter Cup. ¡Nos vemos el 14 de septiembre!. Te avisaré de todo por mp 😉"
 MENSAJE_ERROR_EQUIPO = "Error al registrar el equipo."
 MENSAJE_PREFERENCIAS = "Sus preferencias son: {razas}"
 MENSAJE_SELECCIONAR_BANS = "Ahora debe banear 5 razas con las que no quiere jugar:"
