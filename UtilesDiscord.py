@@ -431,15 +431,23 @@ async def gestionar_canal_discord(ctx, accion, nombre_canal=None, coach1_id_disc
 
     if mensaje == "":
         if bbname1 and bbname2:
-            mensaje = """Bienvenidos, {mention1}({raza1}) [{bbname1}] y {mention2}({raza2}) [{bbname2}]! 
-                     
+            mensaje = """🏆 **¡Bienvenidos a vuestro primer partido!**
+{mention1} ({raza1}) [{bbname1}] vs {mention2} ({raza2}) [{bbname2}]
+
 Por favor, acuerden una fecha para jugar el primer partido.""" + mensajePreferencias1 + mensajePreferencias2 + """
 
-Cuando acordéis una fecha **usad** el comando `/fecha` para que el bot pueda registrar vuestro partido con el horario de España. Esto es **OBLIGATORIO** y para la administración será clave a la hora de tomar decisiones en caso de que alguien no se presente. {fecha}
+**1️⃣ Equipo**
+Cread un equipo de **1.000.000** con las reglas básicas y escribid en este canal **@comisario + nombre exacto del equipo** para recibir la invitación. Aseguraos de no tener dos equipos con el mismo nombre.
 
-Justo antes de jugar el partido tendréis que **USAR EL CANAL**  <#{CANAL_SPIN_GENERAL_ID}> y **LIBERARLO** al encontrar partido. De esta manera no os emparejará con otra persona.
+**2️⃣ Quedada**
+Acordad día y hora y usad **obligatoriamente `/fecha`**. Para la administración, si no se ha usado `/fecha`, el partido **no constará como acordado**. {fecha}
 
-Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
+**3️⃣ Para jugar**
+Entrad en <#{CANAL_SPIN_GENERAL_ID}> y esperad a que esté libre. Uno pulsa **SPIN** y espera a que el bot confirme que podéis buscar. Entonces ambos buscáis en el juego. Al emparejaros, **la misma persona que pulsó SPIN debe pulsar ENCONTRADO**.
+
+⚠️ No busquéis sin pasar por SPIN: si se produce una colisión, podrán ser sancionados quienes no lo hayan usado.
+
+Si tenéis cualquier problema, mencionad a **@comisario**.
 """
         else:
             mensaje = """Bienvenidos, {mention1}({raza1}) y {mention2}({raza2})! 

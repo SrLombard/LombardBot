@@ -1964,7 +1964,7 @@ async def enviarInvitacion(ctx):
             else:
                 nombres_compañeros = "No tienes compañeros en este grupo."
             
-            mensaje = f"""¡Bienvenido a la Sexta Edición de la Butter Cup!
+            mensaje = f"""¡Bienvenido a la Octava Edición de la Butter Cup!
 
 Se te han asignado {finalFraseRaza(usuario.raza)}
 
@@ -1983,7 +1983,7 @@ Se creará un canal automáticamente durante la próxima hora donde podrás qued
                 print(f"No se pudo enviar el mensaje a {usuario.id_discord}: {e}")
             
             # Pausa breve para no spamear
-            await asyncio.sleep(10)
+            await asyncio.sleep(1)
 
 @bot.command(name="informarResultados")
 @commands.has_any_role('Moderadores', 'Administrador', 'Comisario')
@@ -2453,7 +2453,7 @@ async def crear_grupos(ctx):
 
             for i, jornada in enumerate(jornadas):
                 for partido in jornada:
-                    fecha_final = datetime(2026, 1, 4, 23, 59) + timedelta(weeks=i)
+                    fecha_final = datetime(2026, 9, 20, 23, 59) + timedelta(weeks=i)
                     nuevo_partido = GestorSQL.Calendario(
                         jornada=i+1,
                         canalAsociado=0,  # Asume un valor por defecto o ajusta según necesidad
@@ -3905,19 +3905,17 @@ async def recordar_inscripciones(ctx, solo_objetivo: Optional[int] = None):
             await member.send(
 """
 🏆 **BUTTER CUP VIII**   
+
+__**SI LEES ESTO ES QUE NO ESTAS INSCRITO AÚN**__
+
 Primera temporada hacia los **tickets del Mundial 2027**: de las **3 ediciones** (invierno 2026, primavera 2027 y verano 2027) y todo culminará en un **playoff veraniego**.
 
-⚙️ **Formato**  
-• **3 divisiones**: Oro, Plata y Bronce.  
-• Los mejores **ascienden de división** cada edición.  
-• Los grupos se crean en **packs de 6**.
-
-📅 **Cierre de inscripciones: viernes 11 de septiembre**  
+📅 **Cierre de inscripciones: viernes 11 de septiembre**  Si quieres apuntarte, ¡no lo dejes! Dentro de poco empezaremos a cerrar grupos y puedes quedarte sin plaza
 No te quedes sin plaza: apúntate en <#1280102673059680316>, **consulta las reglas** y pregunta lo que necesites.
 
 Si solo tienes el rol para estar atento de la copa, no necesitas hacer nada.
 
-Si no quieres recibir más notificaciones mías, escribe a **SrLombard** para que no te moleste más, Pero solo escribiré una vez más antes de ese sábado ;).
+Si no quieres recibir más notificaciones mías, escribe a **SrLombard** para que no te moleste más, Pero ya no escribiré más hasta la próxima liga!.
 
 ¡Te esperamos en la **BUTTER CUP VIII**! 🏉✨"""
             )
