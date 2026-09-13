@@ -479,8 +479,14 @@ Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
         }
         try:
             canal = await guild.create_text_channel(name=nombre_canal_formato_discord, overwrites=overwrites, category=categoria)
-            print(f"Canal {nombre_canal_formato_discord} creado exitosamente en la categoría {categoria.name}.")
+        except Exception as e:
+            print(f"No se pudo crear el canal {nombre_canal_formato_discord}: {e}")
+            return None
 
+        nombre_categoria = getattr(categoria, "name", "sin categoría")
+        print(f"Canal {nombre_canal_formato_discord} creado exitosamente en la categoría {nombre_categoria}.")
+
+        try:
             # Buscar los entrenadores y ajustar permisos
             coach1 = guild.get_member(coach1_id_discord)
             coach2 = guild.get_member(coach2_id_discord)
@@ -492,13 +498,26 @@ Si hubiera cualquier problema mencionad a los comisarios que están para ayudar.
             # Preparar y enviar mensaje de bienvenida
             mention1 = coach1.mention if coach1 else ""
             mention2 = coach2.mention if coach2 else ""
-            mensaje_formateado = mensaje.format(mention1=mention1, mention2=mention2,raza1=raza1,raza2=raza2,fecha=fecha,bbname1=bbname1,bbname2=bbname2)
+            mensaje_formateado = mensaje.format(
+                mention1=mention1,
+                mention2=mention2,
+                raza1=raza1,
+                raza2=raza2,
+                fecha=fecha,
+                bbname1=bbname1,
+                bbname2=bbname2,
+                CANAL_SPIN_GENERAL_ID=CANAL_SPIN_GENERAL_ID,
+            )
             await canal.send(mensaje_formateado)
-                
-            return canal.id
-
         except Exception as e:
-            print(f"No se pudo crear el canal {nombre_canal_formato_discord}: {e}")
+            # El canal ya existe: devolver su ID permite que el llamador lo
+            # vincule aunque Discord rechace un permiso o el mensaje inicial.
+            print(
+                f"Canal {nombre_canal_formato_discord} creado con ID {canal.id}, "
+                f"pero no se pudo completar su configuración: {e}"
+            )
+
+        return canal.id
 
     elif accion == "eliminar":
         print(f"[INFO] Llamada a gestionar_canal_discord con acción 'eliminar'. Canal ID: {canal_id}")
