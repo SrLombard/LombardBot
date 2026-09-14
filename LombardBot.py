@@ -9868,14 +9868,15 @@ tareas_programadas = {
     for dia in dias_semana
 }
 
-# tareas_programadas["Wednesday"]["15"] = [
-#     (
-#         func_comprueba_quedadas,
-#         {
-#             "enviar_mensaje": 1
-#         }
-#     )
-# ]
+tareas_programadas["Wednesday"]["15"] = [
+    (
+        func_comprueba_quedadas,
+        {
+            "enviar_mensaje": 1
+        }
+    )
+]
+
 async def func_proximos_partidos_suizo_emparejamiento(bot, usuario, torneo_id, canal_destino_id=None, respuesta_privada=True):
     Session = sessionmaker(bind=GestorSQL.conexionEngine())
     session = Session()
