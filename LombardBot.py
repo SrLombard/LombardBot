@@ -2498,126 +2498,128 @@ async def func_proximos_eventos(bot, usuario, canal_destino_id=None, respuesta_p
     fin = (ahora + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
     session = Session()
 
-    # Determinar canal destino
-    canal_destino = bot.get_channel(int(canal_destino_id)) if canal_destino_id else None
-    
-    if respuesta_privada:
-        # Intentar enviar un mensaje directo al usuario
-        try:
-            canal_destino = await usuario.create_dm()  # Crear o usar un DM con el usuario
-        except Exception as e:
-            print(f"No se pudo crear un DM con el usuario: {e}")
-            return
-    else:
-        if not canal_destino:       
-            # Si es un comando slash, usar el canal del `interaction` si es posible
-            if hasattr(usuario, 'channel'):
-                canal_destino = usuario.channel
-            else:
-                print("No se encontró un canal válido para enviar el mensaje.")
-                return
-
-    # Consultar eventos
-    UsuarioCoach1 = aliased(GestorSQL.Usuario)
-    UsuarioCoach2 = aliased(GestorSQL.Usuario)
-    GrupoCoach1 = aliased(GestorSQL.Grupo)
-    eventos = session.query(
-        GestorSQL.Calendario,
-        UsuarioCoach1.nombre_discord.label("nombre_discord1"),
-        UsuarioCoach1.raza.label("raza1"),
-        UsuarioCoach1.id_discord.label("id_discord1"),
-        UsuarioCoach2.nombre_discord.label("nombre_discord2"),
-        UsuarioCoach2.id_discord.label("id_discord2"),
-        UsuarioCoach2.raza.label("raza2"),
-        GrupoCoach1.nombre_grupo.label("nombre_grupo"),
-    ).join(
-        UsuarioCoach1, GestorSQL.Calendario.coach1 == UsuarioCoach1.idUsuarios
-    ).join(
-        UsuarioCoach2, GestorSQL.Calendario.coach2 == UsuarioCoach2.idUsuarios
-    ).outerjoin(
-        GrupoCoach1, UsuarioCoach1.grupo == GrupoCoach1.id_grupo
-    ).filter(
-        GestorSQL.Calendario.fecha >= ahora,
-        GestorSQL.Calendario.fecha <= fin
-    ).order_by(
-        GestorSQL.Calendario.fecha
-    ).all()
-
-    UsuarioCoach1_T = aliased(GestorSQL.Usuario)
-    UsuarioCoach2_T = aliased(GestorSQL.Usuario)
-    eventos_ticket = session.query(
-        GestorSQL.Ticket,
-        UsuarioCoach1_T.nombre_discord.label("nombre_discord1"),
-        UsuarioCoach1_T.raza.label("raza1"),
-        UsuarioCoach1_T.id_discord.label("id_discord1"),
-        UsuarioCoach2_T.nombre_discord.label("nombre_discord2"),
-        UsuarioCoach2_T.id_discord.label("id_discord2"),
-        UsuarioCoach2_T.raza.label("raza2"),
-    ).join(
-        UsuarioCoach1_T, GestorSQL.Ticket.coach1 == UsuarioCoach1_T.idUsuarios
-    ).join(
-        UsuarioCoach2_T, GestorSQL.Ticket.coach2 == UsuarioCoach2_T.idUsuarios
-    ).filter(
-        GestorSQL.Ticket.fecha >= ahora,
-        GestorSQL.Ticket.fecha <= fin
-    ).order_by(
-        GestorSQL.Ticket.fecha
-    ).all()
-
-    # Construir mensaje
-    hay_eventos = bool(eventos or eventos_ticket)
-    mensaje = (
-        "Próximos partidos del calendario:\n\n"
-        if hay_eventos else "No hay eventos programados en el intervalo dado."
-    )
-
-    if hay_eventos:
-        ids_discord = []
-        if eventos:
-            for evento in eventos:
-                calendario, nd1, raza1, id1, nd2, id2, raza2, nombre_grupo = evento
-                grupo_icono = obtener_icono_grupo(nombre_grupo)
-                menciones = []
-                if id1:
-                    menciones.append(f"<@{id1}>")
-                    ids_discord.append(id1)
-                if id2:
-                    menciones.append(f"<@{id2}>")
-                    ids_discord.append(id2)
-                nombres = " VS ".join(menciones) if menciones else f"**{nd1}** VS **{nd2}**"
-                prefijo = f"{grupo_icono} " if grupo_icono else ""
-                mensaje += (
-                    f"{prefijo}{nombres} ({raza1} vs {raza2}), "
-                    f"<t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
-                )
-        if eventos_ticket:
-            mensaje += "🎟Ticket🎟\n"
-            for evento in eventos_ticket:
-                calendario, nd1, raza1, id1, nd2, id2, raza2 = evento
-                menciones = []
-                if id1:
-                    menciones.append(f"<@{id1}>")
-                    ids_discord.append(id1)
-                if id2:
-                    menciones.append(f"<@{id2}>")
-                    ids_discord.append(id2)
-                nombres = " VS ".join(menciones) if menciones else f"**{nd1}** VS **{nd2}**"
-                mensaje += (
-                    f"{nombres} ({raza1} vs {raza2}), "
-                    f"<t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
-                )
-        menciones_unicas = list({f"<@{i}>" for i in ids_discord if i})
-        if menciones_unicas:
-            mensaje += "\n\n" + mensaje_gracioso(menciones_unicas)
-
-    # Enviar el mensaje
     try:
-        await canal_destino.send(mensaje)
-    except Exception as e:
-        print(f"No se pudo enviar el mensaje: {e}")
+        # Determinar canal destino
+        canal_destino = bot.get_channel(int(canal_destino_id)) if canal_destino_id else None
     
-        
-        
+        if respuesta_privada:
+            # Intentar enviar un mensaje directo al usuario
+            try:
+                canal_destino = await usuario.create_dm()  # Crear o usar un DM con el usuario
+            except Exception as e:
+                print(f"No se pudo crear un DM con el usuario: {e}")
+                return
+        else:
+            if not canal_destino:
+                # Si es un comando slash, usar el canal del `interaction` si es posible
+                if hasattr(usuario, 'channel'):
+                    canal_destino = usuario.channel
+                else:
+                    print("No se encontró un canal válido para enviar el mensaje.")
+                    return
+
+        # Consultar eventos
+        UsuarioCoach1 = aliased(GestorSQL.Usuario)
+        UsuarioCoach2 = aliased(GestorSQL.Usuario)
+        GrupoCoach1 = aliased(GestorSQL.Grupo)
+        eventos = session.query(
+            GestorSQL.Calendario,
+            UsuarioCoach1.nombre_discord.label("nombre_discord1"),
+            UsuarioCoach1.raza.label("raza1"),
+            UsuarioCoach1.id_discord.label("id_discord1"),
+            UsuarioCoach2.nombre_discord.label("nombre_discord2"),
+            UsuarioCoach2.id_discord.label("id_discord2"),
+            UsuarioCoach2.raza.label("raza2"),
+            GrupoCoach1.nombre_grupo.label("nombre_grupo"),
+        ).join(
+            UsuarioCoach1, GestorSQL.Calendario.coach1 == UsuarioCoach1.idUsuarios
+        ).join(
+            UsuarioCoach2, GestorSQL.Calendario.coach2 == UsuarioCoach2.idUsuarios
+        ).outerjoin(
+            GrupoCoach1, UsuarioCoach1.grupo == GrupoCoach1.id_grupo
+        ).filter(
+            GestorSQL.Calendario.fecha >= ahora,
+            GestorSQL.Calendario.fecha <= fin
+        ).order_by(
+            GestorSQL.Calendario.fecha
+        ).all()
+
+        UsuarioCoach1_T = aliased(GestorSQL.Usuario)
+        UsuarioCoach2_T = aliased(GestorSQL.Usuario)
+        eventos_ticket = session.query(
+            GestorSQL.Ticket,
+            UsuarioCoach1_T.nombre_discord.label("nombre_discord1"),
+            UsuarioCoach1_T.raza.label("raza1"),
+            UsuarioCoach1_T.id_discord.label("id_discord1"),
+            UsuarioCoach2_T.nombre_discord.label("nombre_discord2"),
+            UsuarioCoach2_T.id_discord.label("id_discord2"),
+            UsuarioCoach2_T.raza.label("raza2"),
+        ).join(
+            UsuarioCoach1_T, GestorSQL.Ticket.coach1 == UsuarioCoach1_T.idUsuarios
+        ).join(
+            UsuarioCoach2_T, GestorSQL.Ticket.coach2 == UsuarioCoach2_T.idUsuarios
+        ).filter(
+            GestorSQL.Ticket.fecha >= ahora,
+            GestorSQL.Ticket.fecha <= fin
+        ).order_by(
+            GestorSQL.Ticket.fecha
+        ).all()
+
+        # Construir mensaje
+        hay_eventos = bool(eventos or eventos_ticket)
+        mensaje = (
+            "Próximos partidos del calendario:\n\n"
+            if hay_eventos else "No hay eventos programados en el intervalo dado."
+        )
+
+        if hay_eventos:
+            ids_discord = []
+            if eventos:
+                for evento in eventos:
+                    calendario, nd1, raza1, id1, nd2, id2, raza2, nombre_grupo = evento
+                    grupo_icono = obtener_icono_grupo(nombre_grupo)
+                    menciones = []
+                    if id1:
+                        menciones.append(f"<@{id1}>")
+                        ids_discord.append(id1)
+                    if id2:
+                        menciones.append(f"<@{id2}>")
+                        ids_discord.append(id2)
+                    nombres = " VS ".join(menciones) if menciones else f"**{nd1}** VS **{nd2}**"
+                    prefijo = f"{grupo_icono} " if grupo_icono else ""
+                    mensaje += (
+                        f"{prefijo}{nombres} ({raza1} vs {raza2}), "
+                        f"<t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
+                    )
+            if eventos_ticket:
+                mensaje += "🎟Ticket🎟\n"
+                for evento in eventos_ticket:
+                    calendario, nd1, raza1, id1, nd2, id2, raza2 = evento
+                    menciones = []
+                    if id1:
+                        menciones.append(f"<@{id1}>")
+                        ids_discord.append(id1)
+                    if id2:
+                        menciones.append(f"<@{id2}>")
+                        ids_discord.append(id2)
+                    nombres = " VS ".join(menciones) if menciones else f"**{nd1}** VS **{nd2}**"
+                    mensaje += (
+                        f"{nombres} ({raza1} vs {raza2}), "
+                        f"<t:{int(calendario.fecha.timestamp())}:f>, Jornada: {calendario.jornada}\n"
+                    )
+            menciones_unicas = list({f"<@{i}>" for i in ids_discord if i})
+            if menciones_unicas:
+                mensaje += "\n\n" + mensaje_gracioso(menciones_unicas)
+
+        # Enviar el mensaje
+        try:
+            await canal_destino.send(mensaje)
+        except Exception as e:
+            print(f"No se pudo enviar el mensaje: {e}")
+    finally:
+        session.close()
+
+
 def mensaje_gracioso(ids_discord):
     mensajes = [
         "A mi me huele que no le va a quedar nadie en el campo al pobre {}",
