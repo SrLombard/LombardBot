@@ -9874,9 +9874,9 @@ aviso_suizo_comunidades = (
 tareas_programadas = {
     dia: {
         # Cuando vuelvan las demás competiciones, añadir aquí
-        # aviso_playoffs y aviso_suizo_comunidades junto a aviso_calendario.
+        # aviso_playoffs y aviso_suizo_comunidades o aviso_suizo junto a aviso_calendario.
         "09": [aviso_calendario],
-        "10": [aviso_suizo, actualizacion_peticiones],
+        "10": [actualizacion_peticiones],
         "22": [actualizacion_peticiones],
     }
     for dia in dias_semana
