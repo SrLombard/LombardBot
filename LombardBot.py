@@ -9831,6 +9831,16 @@ aviso_playoffs = (
     }
 )
 
+aviso_calendario = (
+    func_proximos_eventos,
+    {
+        "bot": bot,
+        "usuario": maestros[0],
+        "canal_destino_id": 1224689043032506429,
+        "respuesta_privada": False
+    }
+)
+
 aviso_suizo = (
     func_proximos_partidos_suizo_emparejamiento,
     {
@@ -9861,7 +9871,9 @@ aviso_suizo_comunidades = (
 
 tareas_programadas = {
     dia: {
-        "09": [aviso_suizo_comunidades],  #aviso_playoffs, 
+        # Cuando vuelvan las demás competiciones, añadir aquí
+        # aviso_playoffs y aviso_suizo_comunidades junto a aviso_calendario.
+        "09": [aviso_calendario],
         "10": [aviso_suizo, actualizacion_peticiones],
         "22": [actualizacion_peticiones],
     }
