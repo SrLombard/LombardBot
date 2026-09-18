@@ -436,13 +436,10 @@ async def gestionar_canal_discord(ctx, accion, nombre_canal=None, coach1_id_disc
 
 Por favor, acuerden una fecha para jugar el primer partido.""" + mensajePreferencias1 + mensajePreferencias2 + """
 
-**1️⃣ Equipo**
-Cread un equipo de **1.000.000** con las reglas básicas y escribid en este canal **@comisario + nombre exacto del equipo** para recibir la invitación. Aseguraos de no tener dos equipos con el mismo nombre.
-
-**2️⃣ Quedada**
+**1️⃣ Quedada**
 Acordad día y hora y usad **obligatoriamente `/fecha`**. Para la administración, si no se ha usado `/fecha`, el partido **no constará como acordado**. {fecha}
 
-**3️⃣ Para jugar**
+**2️⃣ Para jugar**
 Entrad en <#{CANAL_SPIN_GENERAL_ID}> y esperad a que esté libre. Uno pulsa **SPIN** y espera a que el bot confirme que podéis buscar. Entonces ambos buscáis en el juego. Al emparejaros, **la misma persona que pulsó SPIN debe pulsar ENCONTRADO**.
 
 ⚠️ No busquéis sin pasar por SPIN: si se produce una colisión, podrán ser sancionados quienes no lo hayan usado.
