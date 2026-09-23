@@ -431,7 +431,7 @@ async def gestionar_canal_discord(ctx, accion, nombre_canal=None, coach1_id_disc
 
     if mensaje == "":
         if bbname1 and bbname2:
-            mensaje = """🏆 **¡Bienvenidos a vuestro primer partido!**
+            mensaje = """🏆 **¡Bienvenidos!**
 {mention1} ({raza1}) [{bbname1}] vs {mention2} ({raza2}) [{bbname2}]
 
 Por favor, acuerden una fecha para jugar el primer partido.""" + mensajePreferencias1 + mensajePreferencias2 + """
