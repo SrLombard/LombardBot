@@ -434,7 +434,7 @@ async def gestionar_canal_discord(ctx, accion, nombre_canal=None, coach1_id_disc
             mensaje = """🏆 **¡Bienvenidos!**
 {mention1} ({raza1}) [{bbname1}] vs {mention2} ({raza2}) [{bbname2}]
 
-Por favor, acuerden una fecha para jugar el primer partido.""" + mensajePreferencias1 + mensajePreferencias2 + """
+Por favor, acuerden una fecha para jugar el partido.""" + mensajePreferencias1 + mensajePreferencias2 + """
 
 **1️⃣ Quedada**
 Acordad día y hora y usad **obligatoriamente `/fecha`**. Para la administración, si no se ha usado `/fecha`, el partido **no constará como acordado**. {fecha}
