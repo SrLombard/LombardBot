@@ -1,0 +1,74 @@
+{
+  "matches": [
+    {
+      "uuid": "partido-prueba",
+      "id": "partido-prueba",
+      "coaches": [
+        {
+          "idcoach": "coach-0",
+          "coachname": "Coach 0"
+        },
+        {
+          "idcoach": "coach-1",
+          "coachname": "Coach 1"
+        }
+      ],
+      "teams": [
+        {
+          "idteamlisting": "equipo-0",
+          "idcoach": "coach-0",
+          "idraces": "13",
+          "teamname": "Equipo 0",
+          "teamlogo": "Logo_Vampire_06",
+          "value": 1300,
+          "score": "2",
+          "nbsupporters": "6.0",
+          "inflictedpasses": "0",
+          "inflictedcatches": "1",
+          "inflictedinterceptions": "0",
+          "inflictedtouchdowns": "2",
+          "inflictedcasualties": "1",
+          "inflictedtackles": "0",
+          "inflictedko": "1",
+          "inflictedinjuries": "2",
+          "inflicteddead": "0",
+          "inflictedmetersrunning": "44",
+          "inflictedmeterspassing": "0",
+          "inflictedpushouts": "0",
+          "sustainedexpulsions": "0",
+          "sustainedcasualties": "5",
+          "sustainedko": "4",
+          "sustainedinjuries": "18",
+          "sustaineddead": "1"
+        },
+        {
+          "idteamlisting": "equipo-1",
+          "idcoach": "coach-1",
+          "idraces": "4",
+          "teamname": "Equipo 1",
+          "teamlogo": "Logo_Orc_14",
+          "value": 1290,
+          "score": "1",
+          "nbsupporters": "6.0",
+          "inflictedpasses": "1",
+          "inflictedcatches": "3",
+          "inflictedinterceptions": "0",
+          "inflictedtouchdowns": "1",
+          "inflictedcasualties": "4",
+          "inflictedtackles": "0",
+          "inflictedko": "4",
+          "inflictedinjuries": "18",
+          "inflicteddead": "1",
+          "inflictedmetersrunning": "25",
+          "inflictedmeterspassing": "5",
+          "inflictedpushouts": "0",
+          "sustainedexpulsions": "0",
+          "sustainedcasualties": "1",
+          "sustainedko": "1",
+          "sustainedinjuries": "2",
+          "sustaineddead": "0"
+        }
+      ]
+    }
+  ]
+}
