@@ -1,11 +1,42 @@
 ﻿import requests
 
 
+_CAMPOS_ENTEROS_EQUIPO = (
+    'value', 'score',
+    'inflictedpasses', 'inflictedcatches', 'inflictedinterceptions',
+    'inflictedtouchdowns', 'inflictedcasualties', 'inflictedtackles',
+    'inflictedko', 'inflictedinjuries', 'inflicteddead',
+    'inflictedmetersrunning', 'inflictedmeterspassing', 'inflictedpushouts',
+    'sustainedexpulsions', 'sustainedcasualties', 'sustainedko',
+    'sustainedinjuries', 'sustaineddead',
+)
+
+
+def _normalizar_partido(match):
+    """Acepta estadísticas enteras tanto numéricas como enviadas en texto."""
+    partido = match.copy()
+    if 'teams' in partido:
+        partido['teams'] = [equipo.copy() for equipo in partido['teams']]
+        for indice, equipo in enumerate(partido['teams']):
+            for campo in _CAMPOS_ENTEROS_EQUIPO:
+                valor = equipo.get(campo)
+                if isinstance(valor, str):
+                    try:
+                        equipo[campo] = int(valor)
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"Estadística no entera en el partido "
+                            f"{partido.get('uuid') or partido.get('id')}: "
+                            f"teams[{indice}].{campo}"
+                        ) from exc
+    return partido
+
+
 def obtener_partidos(api_token, competition_id):
     url = f"https://web.cyanide-studio.com/ws/bb3/matches/?key={api_token}&competition_id={competition_id}&sort=LastMatchDate"
     response = requests.get(url)
     if response.status_code == 200:
-        return response.json()['matches']
+        return [_normalizar_partido(match) for match in response.json()['matches']]
     else:
         # Manejo de errores o devolver algo que indique que la solicitud falló
         return None
@@ -58,7 +89,7 @@ def obtener_partido_por_uuid(api_token, uuid):
         match = data.get('match', {})
         match['coaches_info'] = data.get('coaches', [])
         match['teams_info'] = data.get('teams', [])
-        return match
+        return _normalizar_partido(match)
     else:
         # Manejo de errores o devolver algo que indique que la solicitud falló
         return None
